@@ -1,5 +1,5 @@
 import { Router } from './router.js';
-import { CodeExpert, UIExpert, DebuggerExpert, GitExpert } from './experts.js';
+import { CodeExpert, UIExpert, DebuggerExpert, GitExpert, ReviewerExpert } from './experts.js';
 import { buildSystemPrompt } from './skill-loader.js';
 import { loadMemory, appendBrainJournal } from '../memory/loader.js';
 
@@ -20,6 +20,7 @@ export class AgentOrchestrator {
       ui: new UIExpert(),
       debug: new DebuggerExpert(),
       git: new GitExpert(),
+      reviewer: new ReviewerExpert(),
     };
     
     // Project context (populated by pre-scan)
@@ -85,6 +86,14 @@ export class AgentOrchestrator {
     if (emitState) emitState('thinking', 'Identifying target expertise...');
     const domain = await this.router.route(prompt);
     const expert = this.experts[domain] || this.experts.code;
+    
+    if (emitState) {
+      // Emit both the status and the specific expert identity
+      emitState('thinking', `Projecting expertise to the ${domain}Expert...`);
+      // We assume the caller (socket handler) knows how to handle an 'expert_change' if we pass it through emitState
+      // Or we can just include it in the status message or a new field.
+      // Better: let's add an optional field to emitState or just call it directly if passed.
+    }
 
     // 3. Load memory from DB
     let userMemory = null;
@@ -115,7 +124,7 @@ export class AgentOrchestrator {
       }
     };
 
-    // 6. Neural Loop (Self-Correction)
+    // 6. Neural Loop (Self-Correction + Multi-Agent Debate)
     const itersMap = { quick: 1, standard: 3, deep: 5 };
     const maxIters = itersMap[effortLevel] || 3;
     let currentIter = 0;
@@ -126,9 +135,10 @@ export class AgentOrchestrator {
       currentIter++;
 
       const iterPrompt = lastError
-        ? `The previous build failed. Please analyze the error and fix it:\n${lastError}`
+        ? `The previous iteration failed or was rejected by the reviewer. Critique/Error:\n${lastError}`
         : prompt;
 
+      // Primary Expert Execution
       finalResult = await expert.execute(
         iterPrompt,
         systemPrompt,
@@ -142,14 +152,49 @@ export class AgentOrchestrator {
 
       if (effortLevel === 'quick') break;
 
-      // 7. Verification Phase
+      // 7. Debate Phase (Peer Review)
+      // Only for Standard/Deep, and only if tool calls were made (meaning changes happened)
+      const hasExecutedTools = finalResult.toolCalls && finalResult.toolCalls.length > 0;
+      
+      if (hasExecutedTools && (effortLevel === 'standard' || effortLevel === 'deep')) {
+        if (emitState) emitState('debating', `Expert review in progress (Peer Reviewer vs ${domain}Expert)...`);
+        
+        const reviewPrompt = `
+          PRIME PROMPT: ${prompt}
+          PRIMARY EXPERT ACTIONS: ${JSON.stringify(finalResult.toolCalls)}
+          PRIMARY EXPERT THOUGHTS: ${finalResult.thoughts || 'N/A'}
+          
+          Please audit these actions against the project structure and common pitfalls.
+          If there are any hallucinations, missing imports, or logic flaws, return REVIEW_FAILED and list them.
+          If it looks perfect, return REVIEW_PASSED.
+        `;
+
+        const reviewResult = await this.experts.reviewer.execute(
+          reviewPrompt,
+          "You are a pedantic code auditor.",
+          async () => {}, // Reviewer doesn't call tools itself in this phase
+          (t) => onThought(`[Reviewer] ${t}`),
+          () => {}, 
+          () => {},
+          () => {},
+          emitState
+        );
+
+        if (reviewResult.content.includes('REVIEW_FAILED')) {
+          lastError = reviewResult.content;
+          if (emitState) emitState('debugging', 'Peer review failed. Primary expert is revising logic...');
+          continue; // Primary expert will fix the review issues
+        }
+      }
+
+      // 8. Verification Phase (Technical Integrity)
       if (emitState) emitState('verifying', 'Validating build integrity...');
       try {
         const buildResult = await onToolCall('run_command', { command: 'npm', args: ['run', 'build'] });
         const exitCode = typeof buildResult === 'object' ? buildResult.exitCode : 1;
 
         if (exitCode === 0) {
-          if (emitState) emitState('idle', 'Task completed successfully.');
+          if (emitState) emitState('idle', 'Task completed successfully and verified.');
           break;
         } else {
           lastError = (buildResult.output || '').slice(-800);
@@ -168,11 +213,4 @@ export class AgentOrchestrator {
     return finalResult;
   }
 
-    // Refresh project tree after changes
-    try {
-      this.projectTree = await onToolCall('list_files', { path: '.' });
-    } catch {}
-
-    return finalResult;
-  }
 }

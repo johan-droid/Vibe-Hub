@@ -8,7 +8,7 @@ import Terminal from '../components/Terminal';
 import SettingsModal from '../components/SettingsModal';
 import Titlebar from '../components/Titlebar';
 import StatusBar from '../components/StatusBar';
-import ActivityFeed from '../components/ActivityFeed';
+import IntelligenceDashboard from '../components/IntelligenceDashboard';
 import AgentNeuralStatus from '../components/AgentNeuralStatus';
 import { useAgent } from '../hooks/useAgent';
 import { useStore } from '../store/useStore';
@@ -48,8 +48,8 @@ export default function Workspace() {
               <div className="flex-1 overflow-hidden">
                 <FileTree />
               </div>
-              <div className="h-2/5 min-h-[180px]">
-                <ActivityFeed />
+              <div className="h-1/2 min-h-[250px]">
+                <IntelligenceDashboard />
               </div>
             </motion.div>
           )}

@@ -1,13 +1,14 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../store/useStore';
-import { Brain, Search, PenTool, Terminal, ShieldCheck, Loader2 } from 'lucide-react';
+import { Brain, Search, PenTool, Terminal, ShieldCheck, Loader2, MessageSquare } from 'lucide-react';
 
 const STATE_CONFIG = {
   idle: { icon: ShieldCheck, color: 'text-emerald-400', label: 'Idle' },
   thinking: { icon: Brain, color: 'text-blue-400', label: 'Thinking' },
   reading: { icon: Search, color: 'text-cyan-400', label: 'Reading' },
   writing: { icon: PenTool, color: 'text-purple-400', label: 'Writing' },
+  debating: { icon: MessageSquare, color: 'text-indigo-400', label: 'Debating' },
   debugging: { icon: Terminal, color: 'text-amber-400', label: 'Debugging' },
   verifying: { icon: Loader2, color: 'text-emerald-400', label: 'Verifying' },
 };
