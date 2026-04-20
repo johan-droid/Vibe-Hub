@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build Output
+dist/
+build/
+output/
+.next/
+out/
+
+# Environment / Secret Files
+.env
+.env.local
+.env.*.local
+*.env
+.env-secrets
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# IDE / System
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Testing
+coverage/
+.nyc_output
+
+# Temporary
+.tmp/
+.temp/
+.cache/
+.npm
+.webcontainer/
+virtual-os/
+
+# Git
+.git/
+.gitignore.swp

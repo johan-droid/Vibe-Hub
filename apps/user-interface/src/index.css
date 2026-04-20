@@ -1,0 +1,100 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Google-Inspired Tonal Palette */
+    --surface-dim: 222 47% 5%;
+    --surface: 222 47% 7%;
+    --surface-bright: 222 30% 11%;
+    --surface-container: 222 30% 9%;
+    --surface-container-high: 222 25% 13%;
+    --surface-container-highest: 222 20% 17%;
+    
+    --on-surface: 222 10% 93%;
+    --on-surface-variant: 222 10% 65%;
+    --outline: 222 10% 25%;
+    --outline-variant: 222 8% 18%;
+    
+    --primary: 210 100% 56%;
+    --primary-container: 210 80% 20%;
+    --on-primary: 0 0% 100%;
+    
+    --secondary: 165 80% 45%;
+    --tertiary: 280 60% 60%;
+    --error: 0 75% 55%;
+    --warning: 40 95% 55%;
+  }
+
+  * {
+    border-color: hsl(var(--outline-variant));
+  }
+
+  body {
+    @apply bg-[hsl(222,47%,5%)] text-[hsl(222,10%,93%)] font-sans antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  ::selection {
+    background: hsl(210 100% 56% / 0.2);
+    color: hsl(210 100% 76%);
+  }
+
+  ::-webkit-scrollbar { @apply w-1.5 h-1.5; }
+  ::-webkit-scrollbar-track { @apply bg-transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-white/10 rounded-full hover:bg-white/20; }
+}
+
+@layer components {
+  /* Material You inspired surfaces */
+  .surface { background: hsl(var(--surface)); }
+  .surface-dim { background: hsl(var(--surface-dim)); }
+  .surface-bright { background: hsl(var(--surface-bright)); }
+  .surface-container { background: hsl(var(--surface-container)); }
+  .surface-container-high { background: hsl(var(--surface-container-high)); }
+  
+  /* Glass morphism */
+  .glass {
+    @apply bg-white/[0.04] backdrop-blur-xl border border-white/[0.06] shadow-2xl;
+  }
+  
+  /* Bento card */
+  .bento-card {
+    @apply glass rounded-3xl p-6 transition-all duration-300 hover:bg-white/[0.07] hover:border-white/[0.12] hover:shadow-xl hover:-translate-y-0.5;
+  }
+  
+  /* Google-style pill button */
+  .btn-primary {
+    @apply px-8 py-3 bg-[hsl(210,100%,56%)] text-white rounded-full font-semibold 
+           transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/25 
+           hover:brightness-110 active:scale-95;
+  }
+  
+  .btn-outline {
+    @apply px-8 py-3 bg-transparent border border-white/20 text-white/80 rounded-full font-semibold 
+           transition-all duration-200 hover:bg-white/5 hover:border-white/30 active:scale-95;
+  }
+  
+  .btn-google {
+    @apply px-6 py-3 bg-white text-zinc-800 rounded-full font-semibold flex items-center gap-3
+           transition-all duration-200 hover:shadow-lg active:scale-95 w-full justify-center;
+  }
+  
+  .btn-github {
+    @apply px-6 py-3 bg-zinc-800 text-white rounded-full font-semibold flex items-center gap-3 border border-white/10
+           transition-all duration-200 hover:bg-zinc-700 active:scale-95 w-full justify-center;
+  }
+
+  .code-font {
+    @apply font-mono font-medium;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-cyan-300 to-emerald-400;
+  }
+}

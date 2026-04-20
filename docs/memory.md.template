@@ -1,0 +1,39 @@
+# 🧠 Vibe Neural Memory — [Project Name]
+
+> **BRAIN DIRECTIVE**: This file is the primary context for the Neural Swarm.
+> It defines the boundary of the agent's autonomy and the project's logic-DNA.
+
+## 1. Neural Identity
+<!-- How should the agents behave in this project? -->
+- [ ] Strict technical precision
+- [ ] Creative/Casual experimentation
+- [ ] Documentation-first approach
+
+## 2. Neural Context (Tech Stack)
+<!-- Define the exact versions and core libraries -->
+- **Core**: React 19, Tailwind CSS
+- **State**: Zustand
+- **Storage**: PostgreSQL
+
+## 3. The DNA (Coding Standards)
+<!-- Patterns that the Brain must NEVER violate -->
+- Always use **Surgical Edits** (`edit_file`) for existing components.
+- Preference for functional components with `useAgent` hooks.
+- All styles must be defined via Tailwind classes, never raw CSS.
+
+## 4. Logical Boundaries (Conventions)
+<!-- Where does things live? -->
+- Logic layer: `src/services/`
+- Perspective layer: `src/pages/`
+- Component layer: `src/components/`
+
+## 5. Neural Guardrails (Gotchas)
+<!-- Known issues that cause hallucinations -->
+- "React 19 unwrap error": `params` must be awaited or handled via `use()`.
+- "VFS Latency": Large files (>2000 lines) require tiered reading.
+
+## 6. Expert Specifics
+<!-- Domain-specific hints -->
+- **UIExpert**: Use the Glassmorphism tokens in `src/index.css`.
+- **DebugExpert**: Check `server-bridge` logs for auth failures.
+- **GitExpert**: Conventional Commit messages are mandatory.

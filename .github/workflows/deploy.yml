@@ -1,0 +1,54 @@
+name: Vibe_Brain_Deploy
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Validate Server Syntax
+        run: |
+          node --check apps/server-bridge/index.js
+          node --check apps/server-bridge/orchestrator/index.js
+          node --check apps/server-bridge/orchestrator/skill-loader.js
+          node --check apps/server-bridge/orchestrator/expert-base.js
+          echo "✅ Server syntax OK"
+
+      - name: Build Frontend
+        run: npm run build:ui
+
+  deploy:
+    needs: validate
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy Brain (Server Bridge)
+        uses: JorgeLNJunior/render-deploy@v1.4.1
+        with:
+          service_id: ${{ secrets.RENDER_BRIDGE_SERVICE_ID }}
+          api_key: ${{ secrets.RENDER_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy UI (Static Site)
+        uses: JorgeLNJunior/render-deploy@v1.4.1
+        with:
+          service_id: ${{ secrets.RENDER_UI_SERVICE_ID }}
+          api_key: ${{ secrets.RENDER_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}

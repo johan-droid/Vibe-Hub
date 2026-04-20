@@ -1,0 +1,21 @@
+{
+  "name": "vibe-hub",
+  "version": "3.0.0",
+  "private": true,
+  "description": "Autonomous IDE powered by a multi-agent AI swarm",
+  "workspaces": [
+    "apps/user-interface",
+    "apps/server-bridge"
+  ],
+  "scripts": {
+    "dev:ui": "npm run dev --workspace=apps/user-interface",
+    "dev:server": "npm run dev --workspace=apps/server-bridge",
+    "dev": "npx concurrently -n UI,BRAIN -c cyan,magenta \"npm run dev:ui\" \"npm run dev:server\"",
+    "build:ui": "npm run build --workspace=apps/user-interface",
+    "start:server": "npm run start --workspace=apps/server-bridge",
+    "validate": "node --check apps/server-bridge/index.js && node --check apps/server-bridge/orchestrator/index.js && node --check apps/server-bridge/orchestrator/skill-loader.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
