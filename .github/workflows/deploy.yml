@@ -39,6 +39,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate Render secrets
+        run: |
+          if [ -z "${{ secrets.RENDER_API_KEY }}" ]; then
+            echo "ERROR: Missing secret RENDER_API_KEY"
+            exit 1
+          fi
+          if [ -z "${{ secrets.RENDER_BRIDGE_SERVICE_ID }}" ]; then
+            echo "ERROR: Missing secret RENDER_BRIDGE_SERVICE_ID"
+            exit 1
+          fi
+          if [ -z "${{ secrets.RENDER_UI_SERVICE_ID }}" ]; then
+            echo "ERROR: Missing secret RENDER_UI_SERVICE_ID"
+            exit 1
+          fi
+
       - name: Deploy Brain (Server Bridge)
         uses: JorgeLNJunior/render-deploy@v1.4.1
         with:
