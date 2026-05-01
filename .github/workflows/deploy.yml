@@ -1,4 +1,4 @@
-name: Vibe_Brain_Deploy
+name: Vibe_Brain_CI
 
 on:
   push:
@@ -32,38 +32,5 @@ jobs:
       - name: Build Frontend
         run: npm run build:ui
 
-  deploy:
-    needs: validate
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Validate Render secrets
-        run: |
-          if [ -z "${{ secrets.RENDER_API_KEY }}" ]; then
-            echo "ERROR: Missing secret RENDER_API_KEY"
-            exit 1
-          fi
-          if [ -z "${{ secrets.RENDER_BRIDGE_SERVICE_ID }}" ]; then
-            echo "ERROR: Missing secret RENDER_BRIDGE_SERVICE_ID"
-            exit 1
-          fi
-          if [ -z "${{ secrets.RENDER_UI_SERVICE_ID }}" ]; then
-            echo "ERROR: Missing secret RENDER_UI_SERVICE_ID"
-            exit 1
-          fi
-
-      - name: Deploy Brain (Server Bridge)
-        uses: JorgeLNJunior/render-deploy@v1.4.1
-        with:
-          service_id: ${{ secrets.RENDER_BRIDGE_SERVICE_ID }}
-          api_key: ${{ secrets.RENDER_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Deploy UI (Static Site)
-        uses: JorgeLNJunior/render-deploy@v1.4.1
-        with:
-          service_id: ${{ secrets.RENDER_UI_SERVICE_ID }}
-          api_key: ${{ secrets.RENDER_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+  # Deployment is now handled directly by Render Blueprints (auto-deploy on push)
+  # This bypasses the need for GitHub Actions secrets like RENDER_API_KEY.
