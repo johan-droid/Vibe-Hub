@@ -54,6 +54,10 @@ export default function AgentNeuralStatus() {
           <span className={`text-[10px] font-bold uppercase tracking-widest ${config.color}`}>
             {config.label}
           </span>
+          <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[8px] text-emerald-400 font-bold uppercase tracking-tighter">
+            <ShieldCheck size={8} />
+            Safe
+          </div>
           {isThinking && (
             <div className="flex gap-1">
               {[0, 1, 2].map((i) => (

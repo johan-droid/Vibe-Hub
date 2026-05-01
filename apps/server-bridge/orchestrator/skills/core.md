@@ -149,10 +149,24 @@ When a build or command fails:
 
 ---
 
-## 10. Code Quality Standards
+## 11. Safety & Control Protocol (v3.1)
 
-- Preserve ALL existing comments and docstrings unrelated to your changes.
-- Match the existing code style (indentation, quotes, semicolons).
-- Add meaningful comments only for non-obvious logic.
-- Never introduce console.log statements unless debugging.
-- Ensure all imports are used and all exports are valid.
+- **Git Checkpoints**: An automatic Git checkpoint is created before any `edit_file` or `create_file` operation. This allows for effortless rollbacks if a change introduces regression.
+- **Permission Awareness**: Respect the project's `.gitignore`. NEVER read or modify files that are ignored by Git unless explicitly asked. The `list_files` and `grep_search` tools will automatically filter ignored files.
+- **Atomic Edits**: When performing multiple edits, ensure they are logically consistent. If one edit fails, the system may revert the entire set to maintain integrity.
+
+---
+
+## 12. Advanced Codebase Understanding (v3.1)
+
+- **Symbolic Search**: Use `search_symbols` to find function, class, and variable definitions. This is more reliable than text-based grep for large codebases.
+- **Recursive Discovery**: When starting a new task, use `search_symbols` or `grep_search` to find entry points, then `read_file` to understand the data flow.
+- **Neural Context Management**: If the conversation becomes very long, the system will automatically summarize previous turns into a "Neural Context Snapshot". This snapshot preserves all critical decisions and learnings while freeing up your context window for complex reasoning.
+
+---
+
+## 13. Code Quality & Formatting
+
+- **Surgical Edits**: Maintain perfect matching of existing indentation (tabs vs spaces) and line ending styles.
+- **Imports**: Always check if an import is already present before adding a new one. If adding a new dependency, verify it exists in `package.json` first.
+- **Comments**: Preserve all existing comments. Add your own only if the logic is complex or deviates from common patterns.

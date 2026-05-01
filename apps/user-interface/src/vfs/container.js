@@ -30,17 +30,23 @@ export class VFSContainer {
         return await this.readFileWithLines(args.path, args.start_line, args.end_line);
 
       case 'create_file':
+        await this.checkpoint(`AI Checkpoint: Creating ${args.path}`);
         return await this.createFile(args.path, args.content);
 
       // Legacy support — redirect write_file to create_file
       case 'write_file':
+        await this.checkpoint(`AI Checkpoint: Writing ${args.path}`);
         return await this.createFile(args.path, args.content);
 
       case 'edit_file':
+        await this.checkpoint(`AI Checkpoint: Before editing ${args.path}`);
         return await this.editFile(args.path, args.edits);
 
       case 'grep_search':
         return await this.grepSearch(args.pattern, args.file_pattern);
+
+      case 'search_symbols':
+        return await this.searchSymbols(args.query, args.kind);
 
       case 'run_command': {
         let output = '';
@@ -69,17 +75,73 @@ export class VFSContainer {
   }
 
   /**
-   * List files recursively (1 level deep).
+   * Create a Git checkpoint (commit) before risky operations.
+   */
+  async checkpoint(message) {
+    try {
+      const dir = '/';
+      // Stage all changes first
+      await git.add({ fs: this.instance.fs, dir, filepath: '.' });
+      
+      // Commit
+      const sha = await git.commit({
+        fs: this.instance.fs,
+        dir,
+        author: { name: 'Vibe AI', email: 'ai@vibe-hub.internal' },
+        message: message || 'AI Safety Checkpoint',
+      });
+      console.log(`[VFS] Checkpoint created: ${sha.slice(0, 7)}`);
+      return sha;
+    } catch (err) {
+      console.warn('[VFS] Checkpoint failed (repo might not be initialized):', err.message);
+      return null;
+    }
+  }
+
+  /**
+   * List files recursively (1 level deep), respecting .gitignore.
    */
   async listFiles(path) {
     try {
       const entries = await this.instance.fs.readdir(path, { withFileTypes: true });
-      return entries.map(e => ({
-        name: e.name,
-        type: e.isDirectory() ? 'directory' : 'file',
-      }));
+      const results = [];
+      
+      for (const e of entries) {
+        const fullPath = path === '.' ? e.name : `${path}/${e.name}`;
+        
+        // Basic .gitignore awareness
+        const ignored = await this.isPathIgnored(fullPath);
+        if (ignored) continue;
+
+        results.push({
+          name: e.name,
+          type: e.isDirectory() ? 'directory' : 'file',
+        });
+      }
+      return results;
     } catch {
       return [];
+    }
+  }
+
+  /**
+   * Check if a path is ignored by Git.
+   */
+  async isPathIgnored(filepath) {
+    try {
+      // Hardcoded defaults for WebContainer speed
+      if (['node_modules', '.git', 'dist', '.next', 'out', 'build'].some(p => filepath.includes(p))) {
+        return true;
+      }
+      
+      // Check .gitignore if repository exists
+      return await git.isIgnored({
+        fs: this.instance.fs,
+        dir: '/',
+        filepath,
+      });
+    } catch {
+      return false;
     }
   }
 
@@ -151,7 +213,7 @@ export class VFSContainer {
   }
 
   /**
-   * Grep: Search for a pattern across all files recursively.
+   * Grep: Search for a pattern across all files recursively, respecting .gitignore.
    */
   async grepSearch(pattern, filePattern) {
     const matches = [];
@@ -164,8 +226,8 @@ export class VFSContainer {
         for (const entry of entries) {
           const fullPath = dir === '.' ? entry.name : `${dir}/${entry.name}`;
 
-          // Skip node_modules, .git, dist
-          if (['node_modules', '.git', 'dist', '.next'].includes(entry.name)) continue;
+          const ignored = await this.isPathIgnored(fullPath);
+          if (ignored) continue;
 
           if (entry.isDirectory()) {
             await walk(fullPath);
@@ -200,6 +262,66 @@ export class VFSContainer {
     return matches.length > 0
       ? matches
       : `No matches found for "${pattern}"`;
+  }
+
+  /**
+   * Semantic search: find function/class definitions.
+   * Simple regex-based approach for common languages (JS, TS, Python).
+   */
+  async searchSymbols(query, kind) {
+    const symbols = [];
+    const patterns = {
+      function: [
+        /function\s+([a-zA-Z0-9_$]+)/g,
+        /const\s+([a-zA-Z0-9_$]+)\s*=\s*(async\s+)?\(/g,
+        /def\s+([a-zA-Z0-9_$]+)/g, // Python
+      ],
+      class: [
+        /class\s+([a-zA-Z0-9_$]+)/g,
+      ],
+      variable: [
+        /(const|let|var)\s+([a-zA-Z0-9_$]+)/g,
+      ]
+    };
+
+    const targetPatterns = kind ? patterns[kind] : [...patterns.function, ...patterns.class];
+    const queryRegex = new RegExp(query, 'i');
+
+    const walk = async (dir) => {
+      const entries = await this.instance.fs.readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = dir === '.' ? entry.name : `${dir}/${entry.name}`;
+        if (await this.isPathIgnored(fullPath)) continue;
+
+        if (entry.isDirectory()) {
+          await walk(fullPath);
+        } else if (fullPath.match(/\.(js|jsx|ts|tsx|py|go|rs|c|cpp|h)$/)) {
+          const content = await this.instance.fs.readFile(fullPath, 'utf-8');
+          const lines = content.split('\n');
+          
+          for (let i = 0; i < lines.length; i++) {
+            for (const p of targetPatterns) {
+              let match;
+              while ((match = p.exec(lines[i])) !== null) {
+                const name = match[1];
+                if (queryRegex.test(name)) {
+                  symbols.push({
+                    name,
+                    file: fullPath,
+                    line: i + 1,
+                    kind: kind || (p === patterns.class[0] ? 'class' : 'function'),
+                  });
+                }
+              }
+              p.lastIndex = 0;
+            }
+          }
+        }
+      }
+    };
+
+    await walk('.');
+    return symbols.length > 0 ? symbols : `No symbols found matching "${query}"`;
   }
 
   async getTree(path = '.') {

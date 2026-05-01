@@ -21,8 +21,10 @@ export class EmployeeBase {
    * Execute the full ReAct loop.
    */
   async execute(prompt, systemPrompt, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState) {
+    // Neural Context Management (v3.1)
     if (this.history.length > this.historyLimit * 2) {
-      this.history.splice(0, 2);
+      if (emitState) emitState('thinking', 'Compressing neural context...');
+      await this.summarizeHistory(systemPrompt);
     }
 
     const fullSystemPrompt = systemPrompt + '\n\n---\n\n' + this.domainInstruction;
@@ -60,6 +62,8 @@ export class EmployeeBase {
           if (emitState) emitState('writing', `Surgically editing ${call.path || 'file'}...`);
         } else if (call.name === 'run_command') {
           if (emitState) emitState('debugging', `Executing ${call.args.command || 'terminal command'}...`);
+        } else if (call.name === 'search_symbols') {
+          if (emitState) emitState('reading', `Searching for symbol "${call.args.query}"...`);
         }
 
         console.log(`[${this.constructor.name}] Tool: ${call.name}`, JSON.stringify(call.args).slice(0, 200));
@@ -110,5 +114,37 @@ export class EmployeeBase {
     this.history.push({ role: 'model', parts: [{ text: finalText }] });
 
     return finalText;
+  }
+
+  /**
+   * Summarize history to stay within token limits while preserving state.
+   */
+  async summarizeHistory(systemPrompt) {
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const summarizer = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    
+    const messagesToSummarize = this.history.slice(0, -4); // Keep last 2 turns
+    const summaryPrompt = `
+      You are a context manager for a coding agent.
+      Summarize the following conversation history into a concise "Neural Context Snapshot".
+      Preserve:
+      - Decisions made by the user.
+      - Learnings about the codebase.
+      - Progress on current tasks.
+      - Pending actions.
+      
+      HISTORY:
+      ${JSON.stringify(messagesToSummarize)}
+    `;
+
+    const result = await summarizer.generateContent(summaryPrompt);
+    const snapshot = result.response.text();
+
+    this.history = [
+      { role: 'user', parts: [{ text: `Neural Context Snapshot:\n${snapshot}` }] },
+      { role: 'model', parts: [{ text: 'Acknowledged. I have absorbed the context snapshot and am ready to continue.' }] },
+      ...this.history.slice(-4)
+    ];
+    console.log('[Orchestrator] History summarized into context snapshot.');
   }
 }

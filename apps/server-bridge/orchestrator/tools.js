@@ -42,7 +42,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: 'edit_file',
-    description: 'Makes SURGICAL edits to an existing file using search/replace blocks. Each search string must be an exact unique substring of the file. ALWAYS read the file first before using this tool.',
+    description: 'Makes SURGICAL edits to an existing file using search/replace blocks. Each search string must be an exact unique substring of the file. ALWAYS read the file first before using this tool. NOTE: An automatic Git checkpoint will be created before applying changes.',
     parameters: {
       type: 'OBJECT',
       properties: {
@@ -75,6 +75,18 @@ export const AGENT_TOOLS = [
         file_pattern: { type: 'STRING', description: 'Optional glob filter, e.g., "*.js", "*.jsx".' },
       },
       required: ['pattern'],
+    },
+  },
+  {
+    name: 'search_symbols',
+    description: 'Finds semantic symbols (functions, classes, variables) across the codebase. More precise than grep for finding definitions.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        query: { type: 'STRING', description: 'Symbol name or partial name.' },
+        kind: { type: 'STRING', description: 'Optional filter: "function", "class", or "variable".' },
+      },
+      required: ['query'],
     },
   },
 
