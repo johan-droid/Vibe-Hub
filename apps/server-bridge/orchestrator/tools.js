@@ -224,11 +224,61 @@ export const AGENT_TOOLS = [
     parameters: {
       type: 'OBJECT',
       properties: {
-        expert: { type: 'STRING', description: 'The expert to call: "code", "ui", "git", or "debug".' },
+        expert: { type: 'STRING', description: 'The expert to call: "code", "ui", "git", "debug", or "security".' },
         task: { type: 'STRING', description: 'The specific task for the expert to perform.' },
         context: { type: 'STRING', description: 'Any relevant file paths or background info.' },
       },
       required: ['expert', 'task'],
+    },
+  },
+  {
+    name: 'security_sandbox',
+    description: 'Provisions an ephemeral sandbox with security tools (Semgrep, OWASP ZAP, etc.) or executes commands inside it.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        action: { type: 'STRING', enum: ['create', 'exec', 'destroy'], description: 'The action to perform.' },
+        sandboxId: { type: 'STRING', description: 'The ID of the existing sandbox (required for exec/destroy).' },
+        command: { type: 'STRING', description: 'The command to execute (required for exec).' },
+        profile: { type: 'STRING', description: 'Tool profile: "standard", "web", or "full".' },
+      },
+      required: ['action'],
+    },
+  },
+  {
+    name: 'design_research',
+    description: 'Fetch design inspiration, patterns, and moodboard references from specialized repositories.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        query: { type: 'STRING', description: 'The visual concept or component type to research.' },
+        source: { type: 'STRING', enum: ['mobbin', 'behance', 'dribbble'], description: 'The inspiration source.' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'generate_image',
+    description: 'Generates a custom visual asset (illustration, icon, background) based on a creative description.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        prompt: { type: 'STRING', description: 'The detailed visual prompt for the generator.' },
+        style: { type: 'STRING', description: 'The artistic style (e.g., "minimalist", "3D render").' },
+      },
+      required: ['prompt'],
+    },
+  },
+  {
+    name: 'generate_ui_variant',
+    description: 'Requests alternative visual interpretations of a specific UI component.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        componentId: { type: 'STRING', description: 'The component to redesign.' },
+        vibe: { type: 'STRING', description: 'The desired aesthetic shift (e.g., "more brutalist").' },
+      },
+      required: ['componentId', 'vibe'],
     },
   },
 ];

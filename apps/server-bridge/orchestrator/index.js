@@ -1,10 +1,13 @@
 import { Router } from './router.js';
-import { CodeExpert, UIExpert, DebuggerExpert, GitExpert, ReviewerExpert, ManagerExpert } from './experts.js';
+import { 
+  CodeExpert, UIExpert, DebuggerExpert, GitExpert, ReviewerExpert, ManagerExpert, SecurityAuditorExpert,
+  CreativeDirectorExpert, DesignSystemArchitect, MotionDesignerExpert, VisualAssetGenerator
+} from './experts.js';
 import { buildSystemPrompt } from './skill-loader.js';
 import { loadMemory, appendBrainJournal } from '../memory/loader.js';
 
 /**
- * AgentOrchestrator — Brain v4.1 (Phase 3 Upgrade)
+ * AgentOrchestrator — Brain v4.3 (Creative Swarm Upgrade)
  */
 export class AgentOrchestrator {
   constructor() {
@@ -16,6 +19,11 @@ export class AgentOrchestrator {
       git: new GitExpert(),
       reviewer: new ReviewerExpert(),
       manager: new ManagerExpert(),
+      security: new SecurityAuditorExpert(),
+      creative: new CreativeDirectorExpert(),
+      architect: new DesignSystemArchitect(),
+      motion: new MotionDesignerExpert(),
+      artist: new VisualAssetGenerator(),
     };
     
     // Project context (populated by pre-scan)

@@ -1,0 +1,23 @@
+FROM ubuntu:22.04
+
+# Avoid prompts from apt
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    git \
+    semgrep \
+    default-jre \
+    npm \
+    sqlmap \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install OWASP ZAP (simplified via curl for this demo)
+# In production, use the official ZAP docker image or a more robust install method
+RUN curl -s https://raw.githubusercontent.com/zaproxy/zap-admin/master/scripts/install-linux.sh | bash || true
+
+WORKDIR /workspace
+
+CMD ["bash"]

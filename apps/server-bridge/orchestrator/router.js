@@ -13,6 +13,8 @@ export class Router {
       ui: [/navbar/i, /css/i, /tailwind/i, /look/i, /component/i, /color/i, /design/i, /style/i],
       code: [/function/i, /refactor/i, /implement/i, /create/i, /add/i, /write/i, /build/i],
       manager: [/plan/i, /architecture/i, /overview/i, /manage/i, /coordinate/i, /multi-step/i, /large-scale/i],
+      security: [/audit/i, /security/i, /vulnerability/i, /exploit/i, /scan/i, /hardening/i, /pentest/i, /owasp/i],
+      creative: [/creative/i, /aesthetic/i, /vision/i, /brand/i, /mood/i, /style/i, /concept/i],
     };
   }
 
@@ -31,8 +33,10 @@ export class Router {
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
       const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
       const result = await model.generateContent(
-        `Classify this prompt into exactly one domain: git, debug, ui, code, manager.
-        - manager: use for high-level planning, architectural overviews, or complex multi-step requests.
+        `Classify this prompt into exactly one domain: git, debug, ui, code, manager, security, creative.
+        - manager: high-level planning or complex multi-step requests.
+        - security: vulnerability scanning, code hardening, or audit requests.
+        - creative: aesthetic vision, brand direction, or concept design.
         Prompt: "${prompt}"\nRespond with only the domain name.`
       );
       return result.response.text().trim().toLowerCase();

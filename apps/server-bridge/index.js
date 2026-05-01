@@ -11,6 +11,9 @@ import googleAuth from './auth/google.js';
 import githubAuth from './auth/github.js';
 import { AgentOrchestrator } from './orchestrator/index.js';
 import { githubService } from './github/index.js';
+import { securitySandboxService } from './sandbox/security-sandbox.js';
+import { creativeService } from './creative/index.js';
+import { uiVariantService } from './creative/generate-ui-variant.js';
 import { modelService } from './orchestrator/models.js';
 
 dotenv.config();
@@ -140,7 +143,35 @@ wss.on('connection', (ws, req) => {
               }
             }
 
-            // 2. Agent HQ: Delegation Tool
+            // 2. Security Sandbox Tools
+            if (name === 'security_sandbox') {
+              console.log(`[Tool] Security Sandbox operation: ${args.action}`);
+              const installationId = msg.githubInstallationId || 'default-installation';
+              
+              switch (args.action) {
+                case 'create':
+                  return await securitySandboxService.create(installationId, args);
+                case 'exec':
+                  return await securitySandboxService.exec(args.sandboxId, args.command);
+                case 'destroy':
+                  return await securitySandboxService.destroy(args.sandboxId);
+                default:
+                  throw new Error(`Security sandbox action ${args.action} not supported.`);
+              }
+            }
+
+            // 3. Creative Swarm Tools
+            if (name === 'design_research') {
+              return await creativeService.searchInspiration(args.query, args.source);
+            }
+            if (name === 'generate_image') {
+              return await creativeService.generateAsset(args.prompt, args.style);
+            }
+            if (name === 'generate_ui_variant') {
+              return await uiVariantService.generateVariants(args);
+            }
+
+            // 4. Agent HQ: Delegation Tool
             if (name === 'delegate_task') {
               console.log(`[Tool] Agent HQ delegation: ${args.expert} -> ${args.task}`);
               onThought(`Delegating sub-task to ${args.expert}Expert: ${args.task}`);

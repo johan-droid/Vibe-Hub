@@ -1,68 +1,78 @@
-# 🧠 Vibe Hub — Autonomous Neural Swarm Platform (v4.0)
+# 🧠 Vibe Hub aka Salina — The Autonomous Neural Swarm (v4.2)
 
-> A production-grade, browser-native IDE powered by a server-side Mixture-of-Experts (MoE) Neural Swarm.
-> The Brain thinks. The Swarm executes. The IDE visualizes.
+> **Salina** is not just an IDE—it's a cloud-native, reasoning-first engineering swarm that lives in your browser and executes in the cloud. 
+> The Brain thinks. The Swarm executes. The Security audits.
 
-[![Deploy](https://img.shields.io/badge/Render-Deploy-blue)](https://render.com)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-4.0--Neural-indigo)](CHANGELOG.md)
+[![Vibe Hub](https://img.shields.io/badge/Project-Vibe%20Hub%20aka%20Salina-indigo?style=for-the-badge&logo=github)](https://github.com/vibe-platform/vibe-hub)
+[![Deploy to Render](https://img.shields.io/badge/Deploy%20to-Render-46E3B7?style=for-the-badge&logo=render)](https://render.com)
+[![Version](https://img.shields.io/badge/Version-4.2--Cyber--Swarm-red?style=for-the-badge)](CHANGELOG.md)
 
 ---
 
-## 🏛️ Vibe Neural Architecture
+## 🏛️ The Salina Architecture: "The Distributed Brain"
 
-Vibe Hub uses a high-fidelity **Distributed Bridge Pattern** to ensure absolute security and world-class performance.
+Salina utilizes a high-fidelity **Neural Bridge** to connect a browser-native workspace with a server-side Mixture-of-Experts (MoE) swarm and cloud-native GitHub infrastructure.
 
 ```mermaid
 graph TD
-    User((User)) --> UI[apps/user-interface]
-    UI -- "WebSocket (Neural State Protocol)" --> Bridge[apps/server-bridge]
+    User((User)) --> Cockpit[apps/user-interface]
+    Cockpit -- "Neural State Protocol (WSS)" --> Brain[apps/server-bridge]
     
-    subgraph "The Neural Brain (v4.0)"
-    Bridge --> Router{MoE Router}
-    Router -- "GitExpert" --> GE[Git Ops]
-    Router -- "UIExpert" --> UE[UI/UX Ops]
-    Router -- "CodeExpert" --> CE[Core Logic]
-    Router -- "DebugExpert" --> DE[Triage Ops]
-    Router --> Skills[Neural Skills Engine]
-    Router --> Memory[(PostgreSQL Persistent Memory)]
+    subgraph "Salina Neural Swarm (v4.2)"
+        Brain --> Manager{ManagerExpert}
+        Manager --> Experts[Expert Pool]
+        Experts --> CE[CodeExpert]
+        Experts --> UE[UIExpert]
+        Experts --> DE[DebuggerExpert]
+        Experts --> GE[GitExpert]
+        Experts --> SE[SecurityAuditor]
+        
+        Brain --> Memory[(Persistent Memory)]
+        Brain --> Skills[Neural Skills Engine]
     end
     
-    UI --> WC[WebContainer Virtual OS]
-    Skills -- "Instructional JSON" --> UI
-    UI -- "Tool Execution Output" --> Bridge
+    subgraph "Cloud Ecosystem"
+        Brain -- "App Integration" --> GH[GitHub API]
+        Brain -- "Ephemeral Compute" --> CS[Codespaces / Docker]
+        Brain -- "Heavy Lifting" --> GHM[GitHub Models]
+    end
+    
+    Cockpit --> WC[WebContainer Virtual OS]
 ```
 
-### 🧠 Neural Swarm Features
-- **Mixture of Experts**: Hybrid routing using L1 (Regex) and L2 (LLM) to dispatch tasks to specialized agent personas.
-- **Neural State Protocol**: Real-time streaming of agent mental states: `thinking`, `analyzing`, `writing`, `verifying`.
-- **Anti-Hallucination Protocol**: Enforced "Panic Protocol" that prevents agents from guessing file paths or function signatures.
-- **Surgical Edit Engine**: 100% precision with `search/replace` blocks, avoiding full file overwrites.
-- **Recursive Self-Correction**: Deep 5-pass loops for `npm run build` verification in the browser.
-- **GitHub Foundation (v4.1)**: Deep integration with GitHub Apps, Actions, and Codespaces for cloud-native orchestration.
+---
+
+## 🚀 Key Evolutionary Features
+
+### 🐙 GitHub-Native Intelligence
+Salina is deeply integrated into the GitHub lifecycle, transforming your repository into an active development partner:
+- **GitHub App Foundation**: Secure, installation-level authentication for all repository operations.
+- **Automated PR Management**: Salina can autonomously branch, commit, push, and open Pull Requests with detailed implementation reports.
+- **GitHub Models Integration**: Access to premium LLMs (GPT-4o, Llama 3) for "Heavy Brain" tasks via the GitHub Models API—at zero extra cost.
+- **Codespaces Orchestration**: Offload intensive builds or integration tests to ephemeral cloud sandboxes (Cloud Sandboxing Protocol).
+
+### 🤖 The Multi-Agent Swarm
+Unlike simple chatbots, Salina uses a **Mixture of Experts**:
+- **ManagerExpert**: The "Project Lead" that decomposes complex goals into sub-tasks.
+- **SecurityAuditor (Red Team)**: A dedicated security expert that probes your code for vulnerabilities using real tools (Semgrep, ZAP).
+- **ReviewerExpert**: An adversarial auditor that verifies every AI-generated line before it reaches your VFS.
+
+### 🔌 Model Context Protocol (MCP)
+Salina exposes its internal tools to the world. You can connect external assistants (like Claude Desktop) to Salina’s brain to perform symbolic code searches or request cloud builds via a standardized protocol.
+
+### 🛡️ Cyber-Security Swarm (v4.2)
+Salina now features a **Cyber-Security Sandbox**. It can spin up ephemeral Docker containers to run SAST/DAST scans against your project, identify vulnerabilities, and autonomously implement hardening patches.
 
 ---
 
 ## 💡 How to Unlock Highest Value
 
-To get the most out of the Vibe Hub Neural Swarm, treat it as a **delegated engineering partner**, not just a simple chatbot.
+Treat Salina as a **delegated engineering partner**, not a snippet generator.
 
-### 1. Give Complex, Multi-File Goals
-The **ManagerExpert** can decompose high-level requests (e.g., *"Add authentication with JWT and role-based access"*) into subtasks and dispatch them to the right specialists. Provide clear acceptance criteria and integration points.
-
-### 2. Let it Self-Correct
-Thanks to the **ReAct loop**, Vibe Hub handles errors autonomously. Don’t interrupt after one failure—let the loop run. It will often recover from broken builds or hallucinated imports without help.
-
-### 3. Teach it Once, Remember Forever
-Use the **Brain Journal** for persistent memory. Explicitly tell the swarm about project-specific patterns (e.g., *"All API routes must validate with Zod"*), and it will inject those learnings into future sessions.
-
-### 4. Lean on Git Safety & Atomic Edits
-Every change is a surgical edit with an automatic **Git Checkpoint**. Safely perform risky refactors or experiment with new patterns—there’s always a rollback point.
-
-### 5. Leverage the GitHub Ecosystem
-- **Cloud Sandboxing**: Use `github_create_codespace` to offload heavy builds or integration tests to the cloud.
-- **MCP Integration**: Connect external AI assistants to Vibe Hub via the **Model Context Protocol** to use its specialized tools.
-- **GitHub Models**: Utilize the free high-end LLMs provided by GitHub for deep code reviews and brainstorming.
+1.  **Give Complex, Multi-File Goals**: The ManagerExpert thrives on "Add auth with JWT" style requests.
+2.  **Let it Self-Correct**: The ReAct loop allows Salina to recover from build errors and failed tests without your help.
+3.  **Teach it Once, Remember Forever**: Use the **Brain Journal** to teach Salina your project's specific coding standards.
+4.  **Lean on Git Safety**: Every edit is an atomic search/replace block with an automatic **Git Checkpoint** for instant rollback.
 
 ---
 
@@ -71,69 +81,24 @@ Every change is a surgical edit with an automatic **Git Checkpoint**. Safely per
 ```
 vibe-hub/
 ├── apps/
-│   ├── server-bridge/       ← THE BRAIN (System-Critical)
-│   │   ├── orchestrator/    ← MoE & Neural Logic
-│   │   ├── auth/           ← Google & GitHub OAuth
-│   │   ├── db/             ← PostgreSQL / Prisma
-│   │   └── memory/         ← Neural Journal persistence
-│   └── user-interface/      ← THE COCKPIT (PWA)
-│       ├── src/
-│       │   ├── pages/       ← Workspace & Landing v4.1
-│       │   ├── components/  ← AgentStatus & Terminal Mockup
-│       │   ├── vfs/         ← WebContainer Orchestration
-│       │   └── hooks/       ← Neural State Listening
-├── docs/
-│   ├── SRS.md               ← Software Requirements
-│   ├── TECHNICAL_DOC.md     ← Architectural Deep Dive
-│   └── memory.md.template   ← Human-Brain Instruction Template
-├── .github/                 ← CI/CD (Swarm Deployment)
+│   ├── server-bridge/       ← THE BRAIN (MoE Swarm & GitHub Bridge)
+│   │   ├── orchestrator/    ← Neural Logic & Expert pool
+│   │   ├── github/          ← App & Codespaces integration
+│   │   └── sandbox/         ← Ephemeral Security Containers
+│   └── user-interface/      ← THE COCKPIT (Next.js IDE)
+│       ├── src/vfs/         ← WebContainer Orchestration
+│       └── src/hooks/       ← Neural State Bridge
+├── Dockerfile.security      ← Cyber-Range image
 └── render.yaml              ← Infrastructure as Code
 ```
 
 ---
 
-## 🚀 Quick Start (Development)
-
-### 1. Prerequisite
-- Node.js 20+
-- PostgreSQL instance (local or Cloud)
-- Gemini API Key
-
-### 2. Installation
-```bash
-git clone https://github.com/vibe-platform/vibe-hub.git
-cd vibe-hub
-npm install
-```
-
-### 3. Environment Set-up
-Create `apps/server-bridge/.env` based on `.env.example`:
-```env
-DATABASE_URL="postgresql://..."
-GEMINI_API_KEY="...-..."
-JWT_SECRET="...-..."
-```
-
-### 4. Launch
-```bash
-npm run dev
-```
-The Neural Brain starts at `:3001` and the IDE Cockpit at `:5173`.
-
----
-
-## 🛡️ Security
-- **Credential Isolation**: API keys NEVER touch the client browser.
-- **Sandbox Execution**: All code runs in a secure, isolated WebContainer.
-- **JWT Auth**: Every neural state change is authenticated via server-side middleware.
-
----
-
 ## 📄 Documentation
-- [Software Requirements (SRS)](docs/SRS.md)
-- [Technical Deep Dive](docs/TECHNICAL_DOC.md)
 - [Neural Memory Guide](docs/memory.md.template)
+- [Architectural Deep Dive](docs/TECHNICAL_DOC.md)
+- [Cyber-Security Protocol](docs/security.md)
 
 ---
 
-MIT © 2026 Vibe Hub Engineering
+MIT © 2026 **Vibe Hub Engineering** | *Salina is watching your back.*

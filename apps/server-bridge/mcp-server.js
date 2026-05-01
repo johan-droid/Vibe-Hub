@@ -48,8 +48,35 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             repo: { type: 'STRING', description: 'The repository name.' },
             branch: { type: 'STRING', description: 'The branch to use.' },
+            profile: { type: 'STRING', description: 'Tool profile: "standard" or "security".' },
           },
           required: ['repo', 'branch'],
+        },
+      },
+      {
+        name: 'vibe_security_test',
+        description: 'Run an automated security scan (SAST/DAST) against a repository.',
+        inputSchema: {
+          type: 'OBJECT',
+          properties: {
+            repo: { type: 'STRING', description: 'The repository to scan.' },
+            action: { type: 'STRING', enum: ['scan', 'report'], description: 'The scan action.' },
+          },
+          required: ['repo', 'action'],
+        },
+      },
+      {
+        name: 'vibe_generate_ui_variant',
+        description: 'Generate multiple alternative UI design variants for a component.',
+        inputSchema: {
+          type: 'OBJECT',
+          properties: {
+            componentType: { type: 'STRING', description: "e.g., 'Navbar', 'Hero section'" },
+            description: { type: 'STRING', description: 'Detailed creative description' },
+            designTokens: { type: 'OBJECT', description: 'Optional design system tokens (colors, fonts)' },
+            count: { type: 'NUMBER', description: 'Number of variants (1-5)' },
+          },
+          required: ['componentType', 'description'],
         },
       },
     ],
@@ -73,7 +100,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       case 'vibe_cloud_sandbox':
         return {
-          content: [{ type: 'text', text: `Spawning cloud sandbox for ${args.repo}/${args.branch}...` }],
+          content: [{ type: 'text', text: `Spawning cloud sandbox for ${args.repo}/${args.branch} with profile "${args.profile || 'standard'}"...` }],
+        };
+      case 'vibe_security_test':
+        return {
+          content: [{ type: 'text', text: `Initiating security scan for ${args.repo}. Action: ${args.action}` }],
+        };
+      case 'vibe_generate_ui_variant':
+        return {
+          content: [{ type: 'text', text: `Generated ${args.count || 3} variants for "${args.componentType}".` }],
         };
       default:
         throw new Error(`Tool not found: ${name}`);
