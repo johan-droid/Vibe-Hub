@@ -6,6 +6,7 @@ import { Brain, Search, PenTool, Terminal, ShieldCheck, Loader2, MessageSquare }
 const STATE_CONFIG = {
   idle: { icon: ShieldCheck, color: 'text-emerald-400', label: 'Idle' },
   thinking: { icon: Brain, color: 'text-blue-400', label: 'Thinking' },
+  planning: { icon: Brain, color: 'text-fuchsia-400', label: 'Planning' },
   reading: { icon: Search, color: 'text-cyan-400', label: 'Reading' },
   writing: { icon: PenTool, color: 'text-purple-400', label: 'Writing' },
   debating: { icon: MessageSquare, color: 'text-indigo-400', label: 'Debating' },

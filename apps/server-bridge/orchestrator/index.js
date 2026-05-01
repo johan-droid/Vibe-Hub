@@ -1,16 +1,10 @@
 import { Router } from './router.js';
-import { CodeExpert, UIExpert, DebuggerExpert, GitExpert, ReviewerExpert } from './experts.js';
+import { CodeExpert, UIExpert, DebuggerExpert, GitExpert, ReviewerExpert, ManagerExpert } from './experts.js';
 import { buildSystemPrompt } from './skill-loader.js';
 import { loadMemory, appendBrainJournal } from '../memory/loader.js';
 
 /**
- * AgentOrchestrator — Brain v3.0
- * 
- * Key improvements:
- * - Pre-iteration project scan (reads tree + package.json for context)
- * - Skills + memory injected into system prompt before every iteration
- * - Clarification and planning tools handled server-side
- * - Memory writing after significant tasks
+ * AgentOrchestrator — Brain v4.1 (Phase 3 Upgrade)
  */
 export class AgentOrchestrator {
   constructor() {
@@ -21,6 +15,7 @@ export class AgentOrchestrator {
       debug: new DebuggerExpert(),
       git: new GitExpert(),
       reviewer: new ReviewerExpert(),
+      manager: new ManagerExpert(),
     };
     
     // Project context (populated by pre-scan)

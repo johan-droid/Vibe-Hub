@@ -39,6 +39,30 @@ graph TD
 - **Anti-Hallucination Protocol**: Enforced "Panic Protocol" that prevents agents from guessing file paths or function signatures.
 - **Surgical Edit Engine**: 100% precision with `search/replace` blocks, avoiding full file overwrites.
 - **Recursive Self-Correction**: Deep 5-pass loops for `npm run build` verification in the browser.
+- **GitHub Foundation (v4.1)**: Deep integration with GitHub Apps, Actions, and Codespaces for cloud-native orchestration.
+
+---
+
+## 💡 How to Unlock Highest Value
+
+To get the most out of the Vibe Hub Neural Swarm, treat it as a **delegated engineering partner**, not just a simple chatbot.
+
+### 1. Give Complex, Multi-File Goals
+The **ManagerExpert** can decompose high-level requests (e.g., *"Add authentication with JWT and role-based access"*) into subtasks and dispatch them to the right specialists. Provide clear acceptance criteria and integration points.
+
+### 2. Let it Self-Correct
+Thanks to the **ReAct loop**, Vibe Hub handles errors autonomously. Don’t interrupt after one failure—let the loop run. It will often recover from broken builds or hallucinated imports without help.
+
+### 3. Teach it Once, Remember Forever
+Use the **Brain Journal** for persistent memory. Explicitly tell the swarm about project-specific patterns (e.g., *"All API routes must validate with Zod"*), and it will inject those learnings into future sessions.
+
+### 4. Lean on Git Safety & Atomic Edits
+Every change is a surgical edit with an automatic **Git Checkpoint**. Safely perform risky refactors or experiment with new patterns—there’s always a rollback point.
+
+### 5. Leverage the GitHub Ecosystem
+- **Cloud Sandboxing**: Use `github_create_codespace` to offload heavy builds or integration tests to the cloud.
+- **MCP Integration**: Connect external AI assistants to Vibe Hub via the **Model Context Protocol** to use its specialized tools.
+- **GitHub Models**: Utilize the free high-end LLMs provided by GitHub for deep code reviews and brainstorming.
 
 ---
 

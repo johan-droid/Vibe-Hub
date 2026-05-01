@@ -10,6 +10,8 @@ import { requireAuth, verifyToken } from './auth/middleware.js';
 import googleAuth from './auth/google.js';
 import githubAuth from './auth/github.js';
 import { AgentOrchestrator } from './orchestrator/index.js';
+import { githubService } from './github/index.js';
+import { modelService } from './orchestrator/models.js';
 
 dotenv.config();
 
@@ -24,6 +26,48 @@ app.use(express.json({ limit: '5mb' }));
 // === Auth Routes ===
 app.use('/api/auth', googleAuth);
 app.use('/api/auth', githubAuth);
+
+// === GitHub Webhooks ===
+app.post('/api/github/webhook', async (req, res) => {
+  const event = req.headers['x-github-event'];
+  const payload = req.body;
+
+  console.log(`[GitHub] Webhook received: ${event}`);
+
+  // In a real scenario, we would verify the signature here.
+  // Then route the event to the appropriate agent session.
+  
+  if (event === 'pull_request' && payload.action === 'opened') {
+    // Example: Auto-assign reviewer agent
+    console.log(`[GitHub] New PR #${payload.number} in ${payload.repository.full_name}`);
+  }
+
+  res.status(200).send('OK');
+});
+
+// === GitHub Copilot Extension ===
+app.post('/api/copilot/chat', async (req, res) => {
+  const { messages, context } = req.body;
+  
+  console.log('[Copilot] Message received from GitHub Copilot Chat');
+
+  // Copilot Extensions expect a streaming response or a single response.
+  // We will route this to our AgentOrchestrator.
+  
+  try {
+    // Mock response for now — in a real setup, this would trigger the swarm
+    res.json({
+      choices: [{
+        message: {
+          role: 'assistant',
+          content: 'Hello from Vibe Hub! I am your multi-agent swarm. How can I help you with your repository today?'
+        }
+      }]
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to process Copilot request' });
+  }
+});
 
 // === Health ===
 app.get('/health', (req, res) => {
@@ -75,7 +119,47 @@ wss.on('connection', (ws, req) => {
 
         try {
           // Tool dispatch: sends request to client, waits for response
-          const onToolCall = (name, args) => {
+          const onToolCall = async (name, args) => {
+            // === Server-Side Tools (v4.1) ===
+            
+            // 1. GitHub Integration Tools
+            if (name.startsWith('github_')) {
+              console.log(`[Tool] Server-side GitHub operation: ${name}`);
+              // In a real app, we'd fetch the installationId from the DB
+              const installationId = msg.githubInstallationId || 'default-installation';
+              
+              switch (name) {
+                case 'github_post_comment':
+                  return await githubService.postComment(installationId, args);
+                case 'github_create_pr':
+                  return await githubService.createPR(installationId, args);
+                case 'github_create_codespace':
+                  return await githubService.createCodespace(installationId, args);
+                default:
+                  throw new Error(`Server-side tool ${name} not fully implemented.`);
+              }
+            }
+
+            // 2. Agent HQ: Delegation Tool
+            if (name === 'delegate_task') {
+              console.log(`[Tool] Agent HQ delegation: ${args.expert} -> ${args.task}`);
+              onThought(`Delegating sub-task to ${args.expert}Expert: ${args.task}`);
+              
+              // Recurse into orchestrator but with the specialist domain
+              // This creates a nested loop (hierarchical swarm)
+              return await orchestrator.handlePrompt(
+                `${args.task}\n\nContext: ${args.context || 'None'}`,
+                'standard', // sub-tasks usually run at standard depth
+                onToolCall,
+                (t) => onThought(`[${args.expert}] ${t}`),
+                onClarification,
+                onPlan,
+                undefined, // Memory update
+                (st, val) => ws.send(JSON.stringify({ type: 'status', status: st, value: val }))
+              );
+            }
+
+            // === Client-Side Tools (VFS/WebContainer) ===
             return new Promise((resolve, reject) => {
               const callId = uuid();
               pendingToolCalls.set(callId, { resolve, reject });

@@ -173,4 +173,62 @@ export const AGENT_TOOLS = [
       required: ['type', 'content'],
     },
   },
+
+  // === GITHUB ===
+  {
+    name: 'github_post_comment',
+    description: 'Posts a comment on a GitHub Issue or Pull Request. Use to report test results or ask for feedback in the PR thread.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        owner: { type: 'STRING', description: 'Repository owner (user or org).' },
+        repo: { type: 'STRING', description: 'Repository name.' },
+        issue_number: { type: 'NUMBER', description: 'The PR or Issue number.' },
+        body: { type: 'STRING', description: 'The comment text (Markdown supported).' },
+      },
+      required: ['owner', 'repo', 'issue_number', 'body'],
+    },
+  },
+  {
+    name: 'github_create_pr',
+    description: 'Creates a new Pull Request on GitHub. Call this after pushing a new branch with features or fixes.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        owner: { type: 'STRING', description: 'Repository owner.' },
+        repo: { type: 'STRING', description: 'Repository name.' },
+        title: { type: 'STRING', description: 'PR title.' },
+        body: { type: 'STRING', description: 'PR description/summary.' },
+        head: { type: 'STRING', description: 'The branch containing the changes (e.g., "feature-xyz").' },
+        base: { type: 'STRING', description: 'The branch to merge into (default: "main").' },
+      },
+      required: ['owner', 'repo', 'title', 'head'],
+    },
+  },
+  {
+    name: 'github_create_codespace',
+    description: 'Spawns a new GitHub Codespace for the current project. Use this for "Cloud Sandboxing" to run integration tests or heavy builds in an isolated environment.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        owner: { type: 'STRING', description: 'Repository owner.' },
+        repo: { type: 'STRING', description: 'Repository name.' },
+        ref: { type: 'STRING', description: 'The branch or commit SHA to spawn the codespace from.' },
+      },
+      required: ['owner', 'repo', 'ref'],
+    },
+  },
+  {
+    name: 'delegate_task',
+    description: 'Delegates a specific sub-task to a specialist expert. Use this to distribute work across the swarm.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        expert: { type: 'STRING', description: 'The expert to call: "code", "ui", "git", or "debug".' },
+        task: { type: 'STRING', description: 'The specific task for the expert to perform.' },
+        context: { type: 'STRING', description: 'Any relevant file paths or background info.' },
+      },
+      required: ['expert', 'task'],
+    },
+  },
 ];
