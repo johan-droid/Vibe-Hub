@@ -66,6 +66,15 @@ export class SwarmSocket {
             risks: msg.risks,
           });
           break;
+        case 'state_change':
+          this.emit('state_change', { state: msg.state, message: msg.message });
+          break;
+        case 'terminal_output':
+          this.emit('terminal_output', msg.data);
+          break;
+        case 'conflict_warning':
+          this.emit('conflict_warning', { risk: msg.risk });
+          break;
       }
     };
 
