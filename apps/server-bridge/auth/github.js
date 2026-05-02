@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import { upsertUser } from '../db.js';
 import { generateToken } from './middleware.js';
 
@@ -14,10 +15,19 @@ const GITHUB_EMAILS_URL = 'https://api.github.com/user/emails';
  * Redirect user to GitHub's consent screen
  */
 router.get('/github', (req, res) => {
+  const state = crypto.randomBytes(32).toString('hex');
+  res.cookie('github_oauth_state', state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 15 * 60 * 1000, // 15 minutes
+  });
+
   const params = new URLSearchParams({
     client_id: process.env.GITHUB_CLIENT_ID,
     redirect_uri: process.env.GITHUB_REDIRECT_URI,
     scope: 'user:email read:user',
+    state,
   });
   res.redirect(`${GITHUB_AUTH_URL}?${params}`);
 });
@@ -27,8 +37,19 @@ router.get('/github', (req, res) => {
  * Exchange code for access token, fetch user profile
  */
 router.get('/github/callback', async (req, res) => {
-  const { code } = req.query;
+  const { code, state } = req.query;
+  const cookieState = req.cookies?.github_oauth_state || (req.headers.cookie
+    ?.split('; ')
+    .find(row => row.startsWith('github_oauth_state='))
+    ?.split('=')[1]);
+
   if (!code) return res.status(400).json({ error: 'Missing authorization code.' });
+  if (!state || !cookieState || state !== cookieState) {
+    return res.status(403).json({ error: 'Invalid OAuth state.' });
+  }
+
+  // Clear state cookie
+  res.clearCookie('github_oauth_state');
 
   try {
     // Exchange code for token
