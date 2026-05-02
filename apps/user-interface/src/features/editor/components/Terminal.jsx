@@ -72,7 +72,7 @@ const LogLine = memo(function LogLine({ line, index }) {
 
 // ─── Main Terminal ────────────────────────────────────────────────────────────
 export default function Terminal() {
-  const { terminalOutput } = useStore();
+  const { terminalOutput, neuralStatus } = useStore();
   const scrollRef = useRef(null);
   const [isUserScrolled, setIsUserScrolled] = useState(false);
   const isUserScrolledRef = useRef(false);
@@ -158,13 +158,23 @@ export default function Terminal() {
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto py-4 px-2 scrollbar-none"
       >
-        {lines.length === 0 ? (
+                {lines.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 gap-4 opacity-20">
-            <Surface elevation={1} shape="full" className="w-12 h-12 flex items-center justify-center border border-outline-variant/30">
-               <Play size={20} className="text-on-surface ml-1" />
-            </Surface>
+            {neuralStatus?.waitingForGitHub ? (
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+              >
+                <Surface elevation={1} shape="full" className="w-12 h-12 flex items-center justify-center border-t-2 border-primary border-outline-variant/30">
+                </Surface>
+              </motion.div>
+            ) : (
+              <Surface elevation={1} shape="full" className="w-12 h-12 flex items-center justify-center border border-outline-variant/30">
+                 <Play size={20} className="text-on-surface ml-1" />
+              </Surface>
+            )}
             <span className="label-small font-mono uppercase tracking-[0.5em]">
-              Idle_System
+              {neuralStatus?.waitingForGitHub ? 'Awaiting_GitHub_Runner...' : 'Idle_System'}
             </span>
           </div>
         ) : (
