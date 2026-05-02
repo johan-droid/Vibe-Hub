@@ -54,7 +54,6 @@ services:
   - type: web
     name: vibe-hub-ui
     runtime: static
-    region: oregon
     plan: free
     rootDir: apps/user-interface
     buildCommand: npm install && npm run build
