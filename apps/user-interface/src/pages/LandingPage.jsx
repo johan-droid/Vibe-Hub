@@ -13,15 +13,36 @@ import { BentoGrid, BentoCard } from '../components/ui/BentoGrid';
 
 const SwarmBackground = () => (
   <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
-    <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-primary/10 blur-[120px] rounded-full animate-pulse" />
-    <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-secondary/10 blur-[140px] rounded-full animate-pulse delay-700" />
-    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full opacity-[0.03] [background-image:radial-gradient(circle_at_center,var(--primary)_1px,transparent_1px)] [background-size:40px_40px]" />
+    <motion.div 
+      animate={{ 
+        scale: [1, 1.1, 1],
+        rotate: [0, 5, 0],
+        opacity: [0.3, 0.5, 0.3]
+      }}
+      transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+      className="absolute -top-[10%] -left-[10%] w-[60%] h-[60%] bg-primary/5 blur-[120px] rounded-full" 
+    />
+    <motion.div 
+      animate={{ 
+        scale: [1, 1.2, 1],
+        rotate: [0, -10, 0],
+        opacity: [0.2, 0.4, 0.2]
+      }}
+      transition={{ duration: 25, repeat: Infinity, ease: "linear", delay: 2 }}
+      className="absolute -bottom-[10%] -right-[10%] w-[70%] h-[70%] bg-secondary/5 blur-[160px] rounded-full" 
+    />
+    <div className="absolute inset-0 opacity-[0.02] [background-image:linear-gradient(to_right,#888_1px,transparent_1px),linear-gradient(to_bottom,#888_1px,transparent_1px)] [background-size:40px_40px]" />
   </div>
 );
 
 export default function LandingPage() {
   const { scrollYProgress } = useScroll();
-  const y = useTransform(scrollYProgress, [0, 1], [0, -200]);
+  const y = useTransform(scrollYProgress, [0, 1], [0, -100]);
+  const opacity = useTransform(scrollYProgress, [0, 0.2], [1, 0]);
+  const scale = useTransform(scrollYProgress, [0, 0.2], [1, 0.95]);
+  
+  const navigate = useNavigate();
+  const user = useStore(s => s.user);
   const navigate = useNavigate();
   const user = useStore(s => s.user);
 
@@ -68,33 +89,37 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero Section */}
-      <section className="relative pt-48 pb-32 px-8 flex flex-col items-center text-center">
+      <section className="relative pt-40 pb-20 px-8 flex flex-col items-center text-center">
         <motion.div
-          initial={{ opacity: 0, y: 30 }}
+          style={{ opacity, scale }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: [0.2, 0, 0, 1] }}
-          className="max-w-5xl"
+          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+          className="max-w-4xl"
         >
-          <Surface elevation={2} shape="full" className="inline-flex items-center gap-3 px-6 py-2 border border-outline-variant/30 mb-10 bg-surface-container/40">
-            <Sparkles size={16} className="text-primary" />
-            <span className="label-large text-on-surface-variant">Mixture of Experts: Now Operational</span>
+          <Surface elevation={1} shape="full" className="inline-flex items-center gap-2.5 px-4 py-1.5 border border-outline-variant/20 mb-8 bg-surface-container-low/40 backdrop-blur-md">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+            </span>
+            <span className="label-medium text-on-surface-variant font-mono uppercase tracking-[0.2em] text-[10px]">Neural_Swarm_Operational</span>
           </Surface>
 
-          <h1 className="display-large md:text-8xl mb-8 leading-[0.95]">
-            Architecting <br />
-            <span className="text-gradient">Pure Intelligence.</span>
+          <h1 className="display-medium md:text-7xl mb-6 leading-[1.1] tracking-tight font-black">
+            The Agentic <br />
+            <span className="text-gradient italic">Operating System.</span>
           </h1>
 
-          <p className="text-xl md:text-2xl text-on-surface-variant max-w-2xl mx-auto leading-relaxed mb-12">
-            Vibe Hub is a professional-grade agentic IDE. Powered by a specialized swarm of autonomous experts, orchestrated for surgical precision.
+          <p className="text-lg md:text-xl text-on-surface-variant max-w-xl mx-auto leading-relaxed mb-10 opacity-70">
+            A high-performance workspace where specialized autonomous agents solve complex engineering tasks with surgical precision.
           </p>
 
-          <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
-            <Button size="lg" trailingIcon={ArrowRight} className="h-16 px-12 text-lg" onClick={() => handleLaunch()}>
-              Initialize Project
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <Button size="lg" trailingIcon={ArrowRight} className="h-14 px-10 text-base rounded-2xl" onClick={() => handleLaunch()}>
+              Get Started
             </Button>
-            <Button variant="outlined" size="lg" className="h-16 px-12 text-lg" onClick={() => window.open('https://github.com/johan-droid/Vibe-Hub', '_blank')}>
-              View Repository
+            <Button variant="outlined" size="lg" className="h-14 px-10 text-base rounded-2xl border-outline-variant/50" onClick={() => window.open('https://github.com/johan-droid/Vibe-Hub', '_blank')}>
+              View Protocol
             </Button>
           </div>
         </motion.div>
@@ -145,29 +170,40 @@ export default function LandingPage() {
       </section>
 
       {/* Expertise Section */}
-      <section id="capabilities" className="py-32 bg-surface-container-lowest/50">
-        <div className="max-w-7xl mx-auto px-8">
-          <div className="text-center mb-20">
-            <span className="label-large text-primary mb-4 block">The Expert Swarm</span>
-            <h2 className="headline-medium md:text-5xl mb-6">Specialized Intelligence.</h2>
-            <p className="text-on-surface-variant max-w-2xl mx-auto text-lg">
-              Generic models fail at complex engineering. Vibe Hub uses a Recurrent Mixture of Experts to solve domain-specific problems.
+      <section id="capabilities" className="py-24 relative">
+        <div className="max-w-6xl mx-auto px-8">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <h2 className="headline-small md:text-4xl mb-4 font-bold tracking-tight">Expert Orchestration.</h2>
+            <p className="text-on-surface-variant max-w-lg mx-auto text-base opacity-60">
+              Generic models fail at scale. Vibe Hub uses a specialized swarm to handle domain-specific logic.
             </p>
-          </div>
+          </motion.div>
 
           <BentoGrid cols={4}>
             {[
-              { icon: Code2, title: 'Code Architect', desc: 'Surgical logic implementation and recursive pattern recognition.', span: 2, color: 'text-primary' },
-              { icon: Layout, title: 'UX Specialist', desc: 'Material 3 design system architecture and motion engineering.', span: 2, color: 'text-secondary' },
-              { icon: Zap, title: 'Debug Engine', desc: 'Root-cause analysis through automated sandbox execution.', span: 2, color: 'text-error' },
-              { icon: GitBranch, title: 'Git Orchestrator', desc: 'Secure repository synchronization and conflict resolution.', span: 2, color: 'text-tertiary' },
+              { icon: Code2, title: 'Logic Architect', desc: 'Surgical code generation and recursive pattern analysis.', span: 2, color: 'text-primary' },
+              { icon: Layout, title: 'UX Architect', desc: 'Material 3 design systems and motion engineering.', span: 2, color: 'text-secondary' },
+              { icon: Zap, title: 'Neural Debugger', desc: 'Root-cause isolation through automated sandboxing.', span: 2, color: 'text-error' },
+              { icon: GitBranch, title: 'Git Master', desc: 'Secure repository sync and conflict resolution.', span: 2, color: 'text-tertiary' },
             ].map((feature, i) => (
-              <BentoCard key={i} span={feature.span} className="relative group">
-                <Surface elevation={3} shape="lg" className="w-12 h-12 flex items-center justify-center mb-6 bg-on-surface/5 group-hover:scale-110 transition-transform duration-500 emphasized">
-                  <feature.icon size={24} className={feature.color} />
-                </Surface>
-                <h3 className="title-medium text-xl mb-3">{feature.title}</h3>
-                <p className="text-on-surface-variant leading-relaxed">{feature.desc}</p>
+              <BentoCard key={i} span={feature.span} className="group hover:bg-surface-container-high transition-colors duration-500">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  whileInView={{ opacity: 1, scale: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.1 }}
+                >
+                  <div className="w-10 h-10 flex items-center justify-center mb-5 bg-on-surface/5 rounded-xl group-hover:scale-110 transition-transform duration-500">
+                    <feature.icon size={20} className={feature.color} />
+                  </div>
+                  <h3 className="title-small text-lg mb-2 font-bold">{feature.title}</h3>
+                  <p className="text-sm text-on-surface-variant leading-relaxed opacity-60">{feature.desc}</p>
+                </motion.div>
               </BentoCard>
             ))}
           </BentoGrid>
