@@ -39,9 +39,6 @@ const DEFAULT_TERM_H = 300;
 const DEFAULT_SIDEBAR_W = 320;
 const DEFAULT_CHAT_W = 440;
 
-  );
-}
-
 // ─── Workspace ─────────────────────────────────────────────────────────────────
 export default function Workspace() {
   const {
