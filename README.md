@@ -2,17 +2,17 @@
 
 # ⚡ VIBE HUB
 
-### *Powered by **Selina** — The Autonomous Neural Swarm*
+### *Powered by **Selina** — The Material Evolution*
 
 <img src="docs/assets/selina.png" alt="Selina — Neural Swarm Core" width="360"/>
 
-> *"I don't write code. I **think** in systems, **reason** in architectures, and **execute** in milliseconds."*
-> — **Selina**, Neural Swarm Core
+> *"I don't just write code. I **architect** with intention, **evolve** with aesthetics, and **execute** with surgical precision."*
+> — **Selina**, Principal Systems Architect
 
-[![Version](https://img.shields.io/badge/VERSION-4.1__SELINA-bf00ff?style=for-the-badge&logo=ghost&logoColor=white)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/VERSION-4.2__MATERIAL-bf00ff?style=for-the-badge&logo=ghost&logoColor=white)](CHANGELOG.md)
 [![Node](https://img.shields.io/badge/NODE-22_Alpine-00d4aa?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
 [![Gemini](https://img.shields.io/badge/BRAIN-Gemini_2.0_Flash-4285f4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev)
-[![React](https://img.shields.io/badge/COCKPIT-React_19_Vite-61dafb?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
+[![React](https://img.shields.io/badge/COCKPIT-Material_3__Bento-61dafb?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
 [![Docker](https://img.shields.io/badge/SANDBOX-Docker_Alpine-2496ed?style=for-the-badge&logo=docker&logoColor=white)](https://docker.com)
 [![Deploy](https://img.shields.io/badge/DEPLOY-Render-46e3b7?style=for-the-badge&logo=render&logoColor=white)](https://render.com)
 [![License](https://img.shields.io/badge/LICENSE-MIT-ffffff?style=for-the-badge)](LICENSE)
@@ -85,18 +85,25 @@ Selina's brain uses a **two-pass routing system** to assign every request to the
 - **L2 — Gemini Classifier:** Zero-shot intent classification for ambiguous requests. Falls back instantly if the LLM fails.
 - **Token-Budgeted System Prompts:** `quick` (400 tokens), `standard` (1500), `deep` (3000). Protects your API quota and your host's RAM.
 
-### 🤖 Mixture-of-Experts Swarm (8 Specialists)
+### 💎 Material 3 & Bento Design System
+Vibe Hub is built on a custom implementation of the **Material 3 (M3)** design system, optimized for agentic workflows:
+- **Tonal Palettes:** Dynamic primary, secondary, and tertiary tonal palettes that shift with the project context.
+- **Bento Modularity:** A flexible grid system that organizes telemetry, code, and agent thoughts into cohesive, elevated surfaces.
+- **Motion Orchestration:** Expressive transitions using `framer-motion` and M3-standard easing (`emphasized`, `standard`).
+
+### 🤖 Mixture-of-Experts Swarm (9 Specialists)
 
 | Expert | Domain | Superpower |
 |:-------|:-------|:-----------|
 | **ManagerExpert** | Planning | Decomposes any goal into a dependency graph of sub-tasks |
 | **CodeExpert** | Implementation | Surgical search/replace edits — never rewrites what it doesn't need to |
 | **UIExpert** | React / CSS | Builds component trees, applies design systems, writes animations |
+| **CreativeDirector** | Design | Generates design tokens, moodboards, UI variants, and motion specs |
 | **DebuggerExpert** | Root Cause | Reads stack traces, reproduces bugs, applies targeted fixes |
 | **GitExpert** | Repository | Branches, commits, rebases — always on a `vibe/<timestamp>/<slug>` branch |
 | **SecurityAuditor** | Red Team | Probes for OWASP vulnerabilities, path traversal, injection points |
 | **ReviewerExpert** | Adversarial Audit | Reviews every change before it hits the VFS. Returns `REVIEW_FAILED` + critique |
-| **CreativeDirector** | Design | Generates design tokens, moodboards, UI variants, and motion specs |
+| **AssetGenerator** | Visuals | Orchestrates high-fidelity asset generation and image synthesis |
 
 ### 🔁 Self-Correcting ReAct Loop
 
@@ -161,6 +168,9 @@ Every architectural decision was made with the constraint: **"this must run alon
 
 | Concern | Solution |
 |:--------|:---------|
+| ESM Env Race | `load-env.js` bootstrap ensures variables are available before module hoisting |
+| CSS Build Failure | Static Tailwind mappings + inline dynamic styles prevent minification syntax errors |
+| Repo Bloat/Leak | Centralized root-level `.gitignore` with `.env*` and `.vite/` hardening |
 | SDK HTTP pool leak | Module-level Gemini SDK singleton — one undici pool for all 8 experts |
 | Zombie WS sessions | 30s ping / 10s pong heartbeat + `clearTimeout` on all pending Maps at disconnect |
 | Terminal OOM | `terminalOutput` is a 2000-line capped circular buffer, not a growing string |
