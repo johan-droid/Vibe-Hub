@@ -17,10 +17,14 @@ services:
         value: https://vibe-hub-ui.onrender.com
       - key: GEMINI_API_KEY
         sync: false
+      - key: OPENAI_API_KEY
+        sync: false
       - key: JWT_SECRET
         sync: false
       - key: SESSION_SECRET
         sync: false
+      - key: LOG_LEVEL
+        value: info
       - key: DATABASE_URL
         fromDatabase:
           name: vibe-hub-db
