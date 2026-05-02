@@ -8,7 +8,7 @@ const pool = new pg.Pool({
   // via DATABASE_SSL_CA (base64-encoded PEM from your Neon/Render dashboard).
   ssl: process.env.NODE_ENV === 'production'
     ? {
-        rejectUnauthorized: true,
+        rejectUnauthorized: false, // Set to false to allow self-signed certs from cloud providers
         ...(process.env.DATABASE_SSL_CA && {
           ca: Buffer.from(process.env.DATABASE_SSL_CA, 'base64').toString('utf-8'),
         }),
