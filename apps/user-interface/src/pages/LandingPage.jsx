@@ -4,6 +4,9 @@ import {
   Brain, Sparkles, ArrowRight, Cpu, Zap, Shield, GitBranch, 
   MessageSquare, Layout, Terminal, Code2, Globe, Database
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useStore } from '../store/useStore';
+import { api } from '../services/api';
 import { Surface } from '../components/ui/Surface';
 import { Button } from '../components/ui/Button';
 import { BentoGrid, BentoCard } from '../components/ui/BentoGrid';
@@ -19,6 +22,18 @@ const SwarmBackground = () => (
 export default function LandingPage() {
   const { scrollYProgress } = useScroll();
   const y = useTransform(scrollYProgress, [0, 1], [0, -200]);
+  const navigate = useNavigate();
+  const user = useStore(s => s.user);
+
+  const handleLaunch = (provider = 'google') => {
+    if (localStorage.getItem('vibe_token')) {
+      navigate('/workspace');
+    } else {
+      window.location.href = provider === 'github' 
+        ? api.getGithubAuthUrl() 
+        : api.getGoogleAuthUrl();
+    }
+  };
 
   return (
     <div className="min-h-screen bg-surface text-on-surface selection:bg-primary/20 selection:text-primary overflow-x-hidden">
@@ -46,8 +61,8 @@ export default function LandingPage() {
           </div>
 
           <div className="flex items-center gap-4">
-            <Button variant="text" size="sm" className="hidden sm:flex">Sign In</Button>
-            <Button variant="filled" size="sm">Launch IDE</Button>
+            <Button variant="text" size="sm" className="hidden sm:flex" onClick={() => handleLaunch('google')}>Sign In</Button>
+            <Button variant="filled" size="sm" onClick={() => handleLaunch()}>Launch IDE</Button>
           </div>
         </div>
       </nav>
@@ -75,10 +90,10 @@ export default function LandingPage() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
-            <Button size="lg" trailingIcon={ArrowRight} className="h-16 px-12 text-lg">
+            <Button size="lg" trailingIcon={ArrowRight} className="h-16 px-12 text-lg" onClick={() => handleLaunch()}>
               Initialize Project
             </Button>
-            <Button variant="outlined" size="lg" className="h-16 px-12 text-lg">
+            <Button variant="outlined" size="lg" className="h-16 px-12 text-lg" onClick={() => window.open('https://github.com/johan-droid/Vibe-Hub', '_blank')}>
               View Repository
             </Button>
           </div>
