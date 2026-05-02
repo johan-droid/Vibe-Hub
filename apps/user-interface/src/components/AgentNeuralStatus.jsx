@@ -1,115 +1,146 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../store/useStore';
-import { Brain, Search, PenTool, Terminal, ShieldCheck, Loader2, MessageSquare, Palette } from 'lucide-react';
+import { Brain, Search, PenTool, Terminal, ShieldCheck, Loader2, MessageSquare, Palette, Sparkles, Activity } from 'lucide-react';
+import { Surface } from './ui/Surface';
 
+/**
+ * AgentNeuralStatus — Material 3 Orchestration Indicator
+ * Visualizes the current cognitive phase and active protocol of the agent swarm.
+ */
 const STATE_CONFIG = {
-  idle: { icon: ShieldCheck, color: 'text-emerald-400', label: 'Idle' },
-  thinking: { icon: Brain, color: 'text-blue-400', label: 'Thinking' },
-  planning: { icon: Brain, color: 'text-fuchsia-400', label: 'Planning' },
-  scanning: { icon: ShieldCheck, color: 'text-amber-500', label: 'Scanning' },
-  designing: { icon: Palette, color: 'text-pink-400', label: 'Designing' },
-  reading: { icon: Search, color: 'text-cyan-400', label: 'Reading' },
-  writing: { icon: PenTool, color: 'text-purple-400', label: 'Writing' },
-  debating: { icon: MessageSquare, color: 'text-indigo-400', label: 'Debating' },
-  debugging: { icon: Terminal, color: 'text-amber-400', label: 'Debugging' },
-  verifying: { icon: Loader2, color: 'text-emerald-400', label: 'Verifying' },
+  idle: { icon: ShieldCheck, color: 'text-secondary', label: 'Idle' },
+  thinking: { icon: Brain, color: 'text-primary', label: 'Thinking' },
+  planning: { icon: Brain, color: 'text-tertiary', label: 'Planning' },
+  scanning: { icon: Search, color: 'text-secondary', label: 'Scanning' },
+  designing: { icon: Palette, color: 'text-primary', label: 'Designing' },
+  reading: { icon: Search, color: 'text-primary', label: 'Reading' },
+  writing: { icon: PenTool, color: 'text-primary', label: 'Writing' },
+  debating: { icon: MessageSquare, color: 'text-tertiary', label: 'Debating' },
+  debugging: { icon: Terminal, color: 'text-error', label: 'Debugging' },
+  verifying: { icon: Activity, color: 'text-secondary', label: 'Verifying' },
 };
 
 export default function AgentNeuralStatus({ compact = false }) {
-  const { agentState, statusMessage, isThinking, neuralStatus } = useStore();
+  const { agentState, statusMessage, isThinking } = useStore();
   const config = STATE_CONFIG[agentState] || STATE_CONFIG.idle;
   const Icon = config.icon;
 
   if (!isThinking && agentState === 'idle') return null;
 
-  // Compact mode: shows as a tiny pill in the tab bar
+  // Compact Mode: Integrated System Chip
   if (compact) {
     return (
-      <div className={`flex items-center gap-1.5 px-2.5 py-1 bg-neutral-900 border border-neutral-800 rounded-full`}>
-        <Icon size={10} className={`${config.color} ${agentState === 'verifying' ? 'animate-spin' : ''}`} />
-        <span className={`text-[9px] font-mono font-bold uppercase tracking-widest ${config.color}`}>
+      <Surface
+        elevation={2}
+        shape="full"
+        className="flex items-center gap-2.5 px-4 py-1.5 bg-surface-container-highest border border-outline-variant/30 hover:bg-surface-container-highest/80 transition-all duration-500 group cursor-help"
+      >
+        <div className="relative flex items-center justify-center">
+          <Icon size={12} className={`${config.color} transition-transform duration-500 group-hover:scale-125`} />
+          {isThinking && (
+            <motion.div
+              animate={{ scale: [1, 2, 1], opacity: [0.4, 0, 0.4] }}
+              transition={{ repeat: Infinity, duration: 2 }}
+              className="absolute inset-0 rounded-full bg-primary blur-[2px] -z-10"
+            />
+          )}
+        </div>
+        <span className="label-small font-bold uppercase tracking-[0.2em] text-on-surface opacity-60 group-hover:opacity-100 transition-opacity">
           {config.label}
         </span>
-        {isThinking && (
-          <div className="flex gap-0.5">
-            {[0,1,2].map(i => (
-              <motion.div key={i} animate={{ opacity: [0, 1, 0] }}
-                transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }}
-                className="w-1 h-1 rounded-full bg-current opacity-40" />
-            ))}
-          </div>
-        )}
-      </div>
+      </Surface>
     );
   }
 
+  // Full Mode: Floating Orchestration Hub
   return (
-    <motion.div
-      initial={{ y: 20, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      exit={{ y: 20, opacity: 0 }}
-      className="flex items-center gap-3 px-4 py-2 bg-black/40 backdrop-blur-xl border border-white/10 rounded-full shadow-2xl"
-    >
-      <div className={`relative ${config.color}`}>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={agentState}
-            initial={{ scale: 0, rotate: -90 }}
-            animate={{ scale: 1, rotate: 0 }}
-            exit={{ scale: 0, rotate: 90 }}
-            transition={{ type: 'spring', damping: 12 }}
-          >
-            <Icon size={16} className={agentState === 'verifying' ? 'animate-spin' : ''} />
-          </motion.div>
-        </AnimatePresence>
-        
-        {isThinking && (
-          <motion.div
-            animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }}
-            transition={{ repeat: Infinity, duration: 2 }}
-            className={`absolute inset-0 rounded-full bg-current blur-md -z-10`}
-          />
-        )}
-      </div>
-
-      <div className="flex flex-col">
-        <div className="flex items-center gap-2">
-          <span className={`text-[10px] font-bold uppercase tracking-widest ${config.color}`}>
-            {config.label}
-          </span>
-          <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[8px] text-emerald-400 font-bold uppercase tracking-tighter">
-            <ShieldCheck size={8} />
-            Safe
-          </div>
-          {isThinking && (
-            <div className="flex gap-1">
-              {[0, 1, 2].map((i) => (
-                <motion.div
-                  key={i}
-                  animate={{ opacity: [0, 1, 0] }}
-                  transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }}
-                  className="w-1 h-1 rounded-full bg-current opacity-40"
-                />
-              ))}
-            </div>
-          )}
-        </div>
-        
-        <AnimatePresence mode="wait">
-          {statusMessage && (
-            <motion.span
-              key={statusMessage}
-              initial={{ x: 10, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: -10, opacity: 0 }}
-              className="text-[11px] text-white/40 font-medium truncate max-w-[200px]"
+    <AnimatePresence>
+      <motion.div
+        initial={{ y: 40, opacity: 0, scale: 0.9, filter: 'blur(8px)' }}
+        animate={{ y: 0, opacity: 1, scale: 1, filter: 'blur(0px)' }}
+        exit={{ y: 40, opacity: 0, scale: 0.9, filter: 'blur(8px)' }}
+        transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+        className="fixed bottom-12 right-12 z-[100]"
+      >
+        <Surface
+          elevation={4}
+          shape="2xl"
+          className="flex items-center gap-6 px-8 py-5 bg-primary-container text-on-primary-container border border-primary/20 shadow-[0_32px_64px_-16px_rgba(var(--primary-rgb),0.4)] min-w-[320px] overflow-hidden"
+        >
+          {/* Animated Background Pulse */}
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent pointer-events-none" />
+          
+          <div className="relative">
+            <Surface 
+              elevation={2} 
+              shape="full" 
+              className="w-14 h-14 flex items-center justify-center bg-on-primary-container/10 border border-on-primary-container/5"
             >
-              {statusMessage}
-            </motion.span>
-          )}
-        </AnimatePresence>
-      </div>
-    </motion.div>
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={agentState}
+                  initial={{ scale: 0.5, opacity: 0, rotate: -45 }}
+                  animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                  exit={{ scale: 0.5, opacity: 0, rotate: 45 }}
+                  transition={{ type: 'spring', damping: 15 }}
+                >
+                  <Icon size={28} className={agentState === 'verifying' ? 'animate-pulse' : ''} />
+                </motion.div>
+              </AnimatePresence>
+            </Surface>
+            
+            {isThinking && (
+              <motion.div
+                animate={{ scale: [1, 2.5, 1], opacity: [0.2, 0, 0.2] }}
+                transition={{ repeat: Infinity, duration: 2.5 }}
+                className="absolute inset-0 rounded-full bg-current blur-2xl -z-10"
+              />
+            )}
+          </div>
+
+          <div className="flex flex-col flex-1 gap-1 min-w-0 relative z-10">
+            <div className="flex items-center gap-3">
+              <span className="headline-small font-black tracking-tighter uppercase leading-none">
+                {config.label}
+              </span>
+              <AnimatePresence>
+                {isThinking && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex gap-1.5"
+                  >
+                    {[0, 1, 2].map((i) => (
+                      <motion.div
+                        key={i}
+                        animate={{ y: [0, -4, 0], opacity: [0.2, 1, 0.2] }}
+                        transition={{ repeat: Infinity, duration: 1, delay: i * 0.15 }}
+                        className="w-1.5 h-1.5 rounded-full bg-on-primary-container"
+                      />
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={statusMessage}
+                initial={{ x: 15, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: -15, opacity: 0 }}
+                className="flex items-center gap-2"
+              >
+                <Sparkles size={12} className="opacity-40 shrink-0" />
+                <span className="label-medium font-bold opacity-60 truncate">
+                  {statusMessage || 'Awaiting instruction...'}
+                </span>
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </Surface>
+      </motion.div>
+    </AnimatePresence>
   );
 }

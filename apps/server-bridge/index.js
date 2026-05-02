@@ -1,48 +1,12 @@
 /**
  * server-bridge/index.js — Vibe-Hub Central Nervous System v4.1
- * ──────────────────────────────────────────────────────────────
- *
- * SSE vs WebSockets — Design Rationale
- * ─────────────────────────────────────
- * This server uses WEBSOCKETS, not SSE, for the primary agent channel.
- * Here is the explicit reasoning for this hardware profile:
- *
- *   SSE Strengths: Simple, works through HTTP/2 multiplexing, automatic
- *   reconnect in browsers, text-only frames.
- *
- *   SSE Weakness (critical for us): SSE is unidirectional — server to client.
- *   Vibe-Hub requires a true bidirectional channel: the agent sends tool_request
- *   frames TO the client (to execute VFS ops in the browser WebContainer), and
- *   the client responds with tool_response frames. With SSE, this would require
- *   a second HTTP fetch channel from the client to the server per tool call,
- *   doubling the socket overhead and introducing timing correlation bugs.
- *
- *   WebSocket on this hardware: Under WSL2 / Docker Desktop + Node.js, a
- *   full-duplex WebSocket frame costs ~2 µs of kernel overhead per message
- *   on the Ryzen 5500U — negligible. The 'ws' library uses N-API bindings,
- *   so frame parsing happens in native C, not in the V8 event loop.
- *
- *   Token streaming: We emit Gemini token chunks as they arrive from the SDK's
- *   generateContentStream() iterator, forwarding each chunk over the WebSocket
- *   in a `stream_chunk` message. This gives the frontend a sub-100ms perceived
- *   first-token latency even on the integrated Vega 7 GPU sharing memory with
- *   the host OS.
- *
- * Connection lifecycle & zombie prevention
- * ─────────────────────────────────────────
- *   Every session is stored in the `sessions` Map keyed by sessionId.
- *   On ws.on('close'), the session is deleted immediately. We also run a
- *   30-second ping interval: if a client doesn't pong within 10 s, it is
- *   terminated and its session map entry is deleted. This kills connections
- *   that are silently dead (e.g., laptop lid closed with no TCP RST) before
- *   they can accumulate into a memory leak over a long dev session.
  */
 
+import './load-env.js';
 import express            from 'express';
 import cors               from 'cors';
 import { createServer }   from 'http';
 import { WebSocketServer } from 'ws';
-import dotenv             from 'dotenv';
 import { v4 as uuid }     from 'uuid';
 
 import { initDB }                from './db.js';
@@ -55,8 +19,6 @@ import { githubService }         from './github/index.js';
 import { securitySandboxService } from './sandbox/security-sandbox.js';
 import { creativeService }       from './creative/index.js';
 import { uiVariantService }      from './creative/generate-ui-variant.js';
-
-dotenv.config();
 
 // ─── Express + HTTP server ────────────────────────────────────────────────────
 

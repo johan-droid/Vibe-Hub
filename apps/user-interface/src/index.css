@@ -4,10 +4,32 @@
 
 @layer base {
   :root {
-    /* Google-Inspired Tonal Palette */
+    /* --- Material 3 Tonal Palette (Dark Mode Base) --- */
+    --primary: 210 100% 56%; 
+    --on-primary: 210 100% 100%;
+    --primary-container: 210 80% 20%;
+    --on-primary-container: 210 100% 90%;
+    
+    --secondary: 165 80% 45%;
+    --on-secondary: 165 100% 100%;
+    --secondary-container: 165 80% 15%;
+    --on-secondary-container: 165 100% 85%;
+    
+    --tertiary: 280 60% 60%;
+    --on-tertiary: 280 100% 100%;
+    --tertiary-container: 280 60% 20%;
+    --on-tertiary-container: 280 100% 90%;
+    
+    --error: 0 75% 55%;
+    --on-error: 0 100% 100%;
+    --error-container: 0 75% 15%;
+    --on-error-container: 0 100% 85%;
+    
     --surface-dim: 222 47% 5%;
     --surface: 222 47% 7%;
     --surface-bright: 222 30% 11%;
+    --surface-container-lowest: 222 47% 4%;
+    --surface-container-low: 222 47% 6%;
     --surface-container: 222 30% 9%;
     --surface-container-high: 222 25% 13%;
     --surface-container-highest: 222 20% 17%;
@@ -16,15 +38,50 @@
     --on-surface-variant: 222 10% 65%;
     --outline: 222 10% 25%;
     --outline-variant: 222 8% 18%;
+
+    --radius-full: 9999px;
+    --radius-2xl: 1.5rem;
+    --radius-xl: 1rem;
+    --radius-lg: 0.75rem;
+    --radius-md: 0.5rem;
+    --radius-sm: 0.25rem;
+  }
+
+  [data-theme='light'] {
+    /* --- Material 3 Tonal Palette (Light Mode) --- */
+    --primary: 210 100% 45%; 
+    --on-primary: 210 100% 100%;
+    --primary-container: 210 100% 90%;
+    --on-primary-container: 210 100% 15%;
     
-    --primary: 210 100% 56%;
-    --primary-container: 210 80% 20%;
-    --on-primary: 0 0% 100%;
+    --secondary: 165 80% 35%;
+    --on-secondary: 165 100% 100%;
+    --secondary-container: 165 80% 90%;
+    --on-secondary-container: 165 100% 10%;
     
-    --secondary: 165 80% 45%;
-    --tertiary: 280 60% 60%;
-    --error: 0 75% 55%;
-    --warning: 40 95% 55%;
+    --tertiary: 280 60% 45%;
+    --on-tertiary: 280 100% 100%;
+    --tertiary-container: 280 60% 90%;
+    --on-tertiary-container: 280 100% 15%;
+    
+    --error: 0 75% 45%;
+    --on-error: 0 100% 100%;
+    --error-container: 0 100% 90%;
+    --on-error-container: 0 100% 10%;
+    
+    --surface-dim: 222 10% 90%;
+    --surface: 222 10% 98%;
+    --surface-bright: 222 10% 100%;
+    --surface-container-lowest: 222 10% 100%;
+    --surface-container-low: 222 10% 96%;
+    --surface-container: 222 10% 94%;
+    --surface-container-high: 222 10% 92%;
+    --surface-container-highest: 222 10% 90%;
+    
+    --on-surface: 222 10% 15%;
+    --on-surface-variant: 222 10% 45%;
+    --outline: 222 10% 70%;
+    --outline-variant: 222 8% 85%;
   }
 
   * {
@@ -32,69 +89,86 @@
   }
 
   body {
-    @apply bg-[hsl(222,47%,5%)] text-[hsl(222,10%,93%)] font-sans antialiased;
+    @apply bg-surface text-on-surface font-sans antialiased overflow-hidden;
     font-feature-settings: "rlig" 1, "calt" 1;
+    transition: background-color 0.5s cubic-bezier(0.2, 0, 0, 1), color 0.5s cubic-bezier(0.2, 0, 0, 1);
   }
 
   ::selection {
-    background: hsl(210 100% 56% / 0.2);
-    color: hsl(210 100% 76%);
+    @apply bg-primary/20 text-primary;
   }
 
   ::-webkit-scrollbar { @apply w-1.5 h-1.5; }
   ::-webkit-scrollbar-track { @apply bg-transparent; }
-  ::-webkit-scrollbar-thumb { @apply bg-white/10 rounded-full hover:bg-white/20; }
+  ::-webkit-scrollbar-thumb { @apply bg-on-surface/10 rounded-full hover:bg-on-surface/20 transition-colors; }
 }
 
 @layer components {
-  /* Material You inspired surfaces */
-  .surface { background: hsl(var(--surface)); }
-  .surface-dim { background: hsl(var(--surface-dim)); }
-  .surface-bright { background: hsl(var(--surface-bright)); }
-  .surface-container { background: hsl(var(--surface-container)); }
-  .surface-container-high { background: hsl(var(--surface-container-high)); }
-  
-  /* Glass morphism */
-  .glass {
-    @apply bg-white/[0.04] backdrop-blur-xl border border-white/[0.06] shadow-2xl;
+  /* Bento Grid System */
+  .bento-grid {
+    @apply grid gap-6 p-6;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    grid-auto-rows: minmax(220px, auto);
   }
-  
-  /* Bento card */
+
   .bento-card {
-    @apply glass rounded-3xl p-6 transition-all duration-300 hover:bg-white/[0.07] hover:border-white/[0.12] hover:shadow-xl hover:-translate-y-0.5;
-  }
-  
-  /* Google-style pill button */
-  .btn-primary {
-    @apply px-8 py-3 bg-[hsl(210,100%,56%)] text-white rounded-full font-semibold 
-           transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/25 
-           hover:brightness-110 active:scale-95;
-  }
-  
-  .btn-outline {
-    @apply px-8 py-3 bg-transparent border border-white/20 text-white/80 rounded-full font-semibold 
-           transition-all duration-200 hover:bg-white/5 hover:border-white/30 active:scale-95;
-  }
-  
-  .btn-google {
-    @apply px-6 py-3 bg-white text-zinc-800 rounded-full font-semibold flex items-center gap-3
-           transition-all duration-200 hover:shadow-lg active:scale-95 w-full justify-center;
-  }
-  
-  .btn-github {
-    @apply px-6 py-3 bg-zinc-800 text-white rounded-full font-semibold flex items-center gap-3 border border-white/10
-           transition-all duration-200 hover:bg-zinc-700 active:scale-95 w-full justify-center;
+    @apply relative overflow-hidden transition-all duration-700 emphasized;
+    @apply bg-surface-container border border-outline-variant/30 rounded-[var(--radius-xl)];
   }
 
-  .code-font {
-    @apply font-mono font-medium;
+  .bento-card:hover {
+    @apply bg-surface-container-high border-primary/30 -translate-y-1 shadow-2xl shadow-black/10;
   }
 
-  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  /* Glass Effects */
+  .glass {
+    @apply backdrop-blur-2xl bg-surface-container/40 border border-on-surface/[0.05];
+  }
+
+  /* M3 Typography */
+  .display-large { @apply font-display text-6xl font-black tracking-tighter; }
+  .display-medium { @apply font-display text-4xl font-black tracking-tighter; }
+  .display-small { @apply font-display text-2xl font-black tracking-tight; }
+  
+  .headline-large { @apply font-display text-3xl font-bold tracking-tight; }
+  .headline-medium { @apply font-display text-2xl font-bold tracking-tight; }
+  .headline-small { @apply font-display text-xl font-bold tracking-tight; }
+
+  .title-large { @apply font-sans text-xl font-semibold; }
+  .title-medium { @apply font-sans text-lg font-semibold; }
+  .title-small { @apply font-sans text-base font-semibold; }
+
+  .body-large { @apply font-sans text-base font-medium; }
+  .body-medium { @apply font-sans text-sm font-medium; }
+  .body-small { @apply font-sans text-xs font-medium; }
+
+  .label-large { @apply font-mono text-[11px] uppercase tracking-[0.25em] font-black; }
+  .label-medium { @apply font-mono text-[10px] uppercase tracking-[0.2em] font-bold; }
+  .label-small { @apply font-mono text-[9px] uppercase tracking-[0.15em] font-bold; }
+
+  /* M3 Elevation Layers */
+  .elevation-1 { @apply bg-surface-container-low shadow-sm; }
+  .elevation-2 { @apply bg-surface-container shadow-md; }
+  .elevation-3 { @apply bg-surface-container-high shadow-lg; }
+  .elevation-4 { @apply bg-surface-container-highest shadow-xl; }
+
+  /* M3 State Layers */
+  .state-layer {
+    @apply absolute inset-0 bg-current opacity-0 transition-opacity duration-300 pointer-events-none;
+  }
+  .hover-layer:hover .state-layer { @apply opacity-[0.08]; }
+  .press-layer:active .state-layer { @apply opacity-[0.12]; }
+
+  /* Custom Utilities */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-br from-primary via-primary/80 to-secondary;
+  }
+
+  .scrollbar-none::-webkit-scrollbar { display: none; }
 }
 
 @layer utilities {
-  .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-cyan-300 to-emerald-400;
-  }
+  .emphasized { transition-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  .ease-emphasized { transition-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  .ease-standard { transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
 }

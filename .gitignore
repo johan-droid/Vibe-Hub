@@ -2,9 +2,13 @@
 node_modules/
 .pnp
 .pnp.js
+.pnpm-store/
 
 # Testing
 coverage/
+junit.xml
+playwright-report/
+test-results/
 
 # Production
 build/
@@ -12,6 +16,15 @@ dist/
 dist-ssr/
 .next/
 out/
+.vercel/
+.render/
+
+# Cache and Tooling
+.vite/
+.turbo/
+.eslintcache
+*.tsbuildinfo
+.cache/
 
 # Logs
 logs/
@@ -29,10 +42,13 @@ lerna-debug.log*
 .env.test.local
 .env.production.local
 *.env
+*.env.local
 
 # OS files
 .DS_Store
 Thumbs.db
+*.tmp
+*.bak
 
 # IDEs and Editors
 .vscode/
@@ -42,6 +58,8 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+*.patch
+*.diff
 
 # Vibe Hub Specific
 # (Add any project-specific ignore patterns here)

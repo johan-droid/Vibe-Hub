@@ -21,6 +21,7 @@ export const useStore = create(
       chatCollapsed: false,
       terminalHeight: 256,
       activeTab: 'diff',
+      theme: 'dark', // 'dark' | 'light'
 
       // --- AGENT CORE STATE (Volatile) ---
       messages: [],
@@ -66,6 +67,7 @@ export const useStore = create(
       setChatCollapsed: (v) => set({ chatCollapsed: v }),
       setActiveTab: (tab) => set({ activeTab: tab }),
       setHydrated: (v) => set({ hydrated: v }),
+      toggleTheme: () => set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
 
       // Agent Streaming
       setStreamingMessage: (content) => set({ streamingMessage: content }),
@@ -134,6 +136,7 @@ export const useStore = create(
         sidebarCollapsed: state.sidebarCollapsed,
         chatCollapsed: state.chatCollapsed,
         terminalHeight: state.terminalHeight,
+        theme: state.theme,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) state.setHydrated(true);

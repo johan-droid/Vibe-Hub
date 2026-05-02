@@ -1,29 +1,27 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Send, Cpu, User, Brain, Terminal, Sparkles } from 'lucide-react';
+import { Send, User, Brain, Terminal, Sparkles, Code, Fingerprint } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../store/useStore';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { Surface } from './ui/Surface';
+import { IconButton } from './ui/IconButton';
+import { Button } from './ui/Button';
 
 /**
- * ChatInterface — Principal UX/UI Implementation
- * 
- * Engineered for zero-latency vibe coding.
- * Optimized with useMemo and atomic streaming updates to prevent UI stutter on Ryzen 5500U.
+ * ChatInterface — Material 3 Intelligence Conduit
+ * The primary channel for autonomous orchestration.
  */
 export default function ChatInterface({ onSend }) {
   const [input, setInput] = useState('');
   const { messages, streamingMessage, isThinking, neuralStatus } = useStore();
   const scrollRef = useRef(null);
 
-  // Auto-scroll logic: Throttled and respects manual user scrolling
   useEffect(() => {
     if (scrollRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-      const isAtBottom = scrollHeight - scrollTop <= clientHeight + 100;
+      const isAtBottom = scrollHeight - scrollTop <= clientHeight + 150;
       if (isAtBottom) {
         scrollRef.current.scrollTop = scrollHeight;
       }
@@ -36,145 +34,161 @@ export default function ChatInterface({ onSend }) {
     setInput('');
   };
 
-  const renderMessage = useMemo(() => (content, role) => (
-    <div className={twMerge(
-      "flex flex-col gap-2 max-w-[85%]",
-      role === 'user' ? "items-end ml-auto" : "items-start mr-auto"
-    )}>
-      <div className="flex items-center gap-2 opacity-40 px-1">
-        {role === 'user' ? (
-          <>
-            <span className="text-[9px] font-mono uppercase tracking-widest text-zinc-400">User_Cmd</span>
-            <User size={10} className="text-zinc-400" />
-          </>
-        ) : (
-          <>
-            <Brain size={10} className="text-cyan-500" />
-            <span className="text-[9px] font-mono uppercase tracking-widest text-cyan-500">Expert_Res</span>
-          </>
-        )}
-      </div>
-      
-      <div className={twMerge(
-        "p-4 rounded-2xl text-[11px] font-mono leading-relaxed border shadow-2xl",
-        role === 'user' 
-          ? "bg-zinc-900 text-zinc-200 border-zinc-800 rounded-tr-none" 
-          : "bg-black text-cyan-50 border-cyan-500/10 rounded-tl-none"
-      )}>
-        <ReactMarkdown
-          components={{
-            code({ node, inline, className, children, ...props }) {
-              const match = /language-(\w+)/.exec(className || '');
-              return !inline && match ? (
-                <div className="my-3 rounded-lg overflow-hidden border border-zinc-800/50">
-                  <div className="bg-zinc-900 px-3 py-1.5 flex justify-between items-center border-b border-zinc-800/50">
-                    <span className="text-[9px] text-zinc-500 font-mono uppercase">{match[1]}</span>
-                  </div>
-                  <SyntaxHighlighter
-                    style={vscDarkPlus}
-                    language={match[1]}
-                    PreTag="div"
-                    className="!bg-black !m-0 !text-[10px]"
-                    {...props}
-                  >
-                    {String(children).replace(/\n$/, '')}
-                  </SyntaxHighlighter>
-                </div>
-              ) : (
-                <code className="bg-zinc-800 px-1 rounded text-cyan-400" {...props}>
-                  {children}
-                </code>
-              );
-            }
-          }}
+  const MessageBubble = useMemo(() => ({ content, role }) => {
+    const isUser = role === 'user';
+    return (
+      <div className={`flex flex-col gap-3 max-w-[92%] ${isUser ? "items-end ml-auto" : "items-start mr-auto"}`}>
+        <div className={`flex items-center gap-2 px-2 label-small font-bold uppercase tracking-widest opacity-40`}>
+          {isUser ? (
+            <>
+              <span>Command_Origin</span>
+              <Fingerprint size={12} className="text-primary" />
+            </>
+          ) : (
+            <>
+              <Brain size={12} className="text-primary" />
+              <span className="text-primary">Response_Stream</span>
+            </>
+          )}
+        </div>
+        
+        <Surface
+          elevation={isUser ? 2 : 1}
+          shape="xl"
+          className={`p-5 body-medium leading-relaxed border transition-all duration-500 emphasized ${
+            isUser 
+              ? "bg-primary-container text-on-primary-container border-primary/20 rounded-tr-sm" 
+              : "bg-surface-container-high text-on-surface border-outline-variant/30 rounded-tl-sm"
+          }`}
         >
-          {content}
-        </ReactMarkdown>
+          <ReactMarkdown
+            components={{
+              p: ({children}) => <p className="mb-4 last:mb-0">{children}</p>,
+              code({ node, inline, className, children, ...props }) {
+                const match = /language-(\w+)/.exec(className || '');
+                return !inline && match ? (
+                  <Surface elevation={0} shape="lg" className="my-6 border border-outline-variant/30 overflow-hidden bg-black/20 shadow-inner">
+                    <div className="bg-surface-container-highest/50 px-4 py-2.5 flex justify-between items-center border-b border-outline-variant/20">
+                      <div className="flex items-center gap-2">
+                        <Code size={12} className="text-primary" />
+                        <span className="label-small text-on-surface-variant font-mono font-bold uppercase tracking-widest">{match[1]}</span>
+                      </div>
+                    </div>
+                    <SyntaxHighlighter
+                      style={vscDarkPlus}
+                      language={match[1]}
+                      PreTag="div"
+                      className="!bg-transparent !m-0 !text-[11px] !p-5 !font-mono"
+                      {...props}
+                    >
+                      {String(children).replace(/\n$/, '')}
+                    </SyntaxHighlighter>
+                  </Surface>
+                ) : (
+                  <code className="bg-primary/10 text-primary px-1.5 py-0.5 rounded-md font-mono font-bold text-[0.9em]" {...props}>
+                    {children}
+                  </code>
+                );
+              }
+            }}
+          >
+            {content}
+          </ReactMarkdown>
+        </Surface>
       </div>
-    </div>
-  ), []);
+    );
+  }, []);
 
   return (
-    <div className="flex flex-col h-full bg-black border-r border-zinc-900">
-      {/* Neural Header */}
-      <div className="h-14 px-5 border-b border-zinc-900 flex items-center justify-between bg-zinc-950/50 backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <div className={clsx(
-              "w-2 h-2 rounded-full",
-              isThinking ? "bg-cyan-500 animate-ping" : "bg-zinc-700"
-            )} />
-            <div className={clsx(
-              "absolute inset-0 w-2 h-2 rounded-full",
-              isThinking ? "bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.8)]" : "bg-zinc-700"
-            )} />
-          </div>
+    <Surface elevation={0} className="flex flex-col h-full bg-surface-container-lowest border-r border-outline-variant/20">
+      {/* Header */}
+      <div className="h-16 px-6 border-b border-outline-variant/20 flex items-center justify-between bg-surface-container-low/30 backdrop-blur-xl">
+        <div className="flex items-center gap-4">
+          <Surface elevation={2} shape="full" className="w-10 h-10 flex items-center justify-center bg-surface-container-highest relative">
+             <Brain size={20} className={isThinking ? "text-primary" : "text-on-surface-variant opacity-40"} />
+             <AnimatePresence>
+                {isThinking && (
+                  <motion.div 
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1.4, opacity: [0, 0.5, 0] }}
+                    exit={{ opacity: 0 }}
+                    transition={{ repeat: Infinity, duration: 2 }}
+                    className="absolute inset-0 bg-primary rounded-full -z-10"
+                  />
+                )}
+             </AnimatePresence>
+          </Surface>
           <div className="flex flex-col">
-            <h3 className="text-[10px] font-mono font-bold tracking-widest text-zinc-400 uppercase">
+            <h3 className="label-large font-bold text-on-surface uppercase tracking-[0.2em]">
               {neuralStatus.expert}_PROTOCOL
             </h3>
-            <span className="text-[8px] font-mono text-zinc-600 uppercase tracking-tighter">
-              State: {neuralStatus.phase}
+            <span className="label-small text-primary opacity-60 font-mono flex items-center gap-2">
+              <span className="w-1 h-1 bg-current rounded-full" />
+              {neuralStatus.phase}
             </span>
           </div>
         </div>
         
-        <div className="flex items-center gap-4">
-          <div className="flex gap-1">
-             {[1,2,3,4,5].map(i => (
-               <div key={i} className={clsx("w-0.5 h-3 rounded-full", isThinking && i <= 3 ? "bg-cyan-500 animate-pulse" : "bg-zinc-800")} />
-             ))}
-          </div>
+        <div className="flex items-center gap-1.5 h-6">
+           {[1,2,3,4,6,8,4,2].map((h, i) => (
+             <motion.div 
+               key={i} 
+               animate={{ height: isThinking ? [`${h*2}px`, `${h*4}px`, `${h*2}px`] : '4px' }}
+               transition={{ repeat: Infinity, duration: 0.8, delay: i * 0.1 }}
+               className={`w-1 rounded-full ${isThinking ? "bg-primary" : "bg-outline-variant/30"}`} 
+             />
+           ))}
         </div>
       </div>
 
-      {/* Messages Stream */}
+      {/* Messages */}
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-5 space-y-8 scrollbar-hide scroll-smooth selection:bg-cyan-500/30"
+        className="flex-1 overflow-y-auto p-8 space-y-12 scrollbar-none"
       >
         <AnimatePresence initial={false}>
           {messages.map((m, i) => (
             <motion.div
-              // BUG #9 FIX: key={`msg-${i}`} uses array index — any insertion shifts
-              // all subsequent keys, causing React to unmount+remount every motion.div
-              // in AnimatePresence. This re-triggers enter animations for ALL historical
-              // messages whenever a new one arrives. Use a stable id stamped on addMessage.
-              key={m.id ?? `msg-fallback-${i}`}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
+              key={m.id || `msg-${i}`}
+              initial={{ opacity: 0, y: 30, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.4, ease: [0.2, 0, 0, 1] }}
             >
-              {renderMessage(m.content, m.role)}
+              <MessageBubble content={m.content} role={m.role} />
             </motion.div>
           ))}
           
           {streamingMessage && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              {renderMessage(streamingMessage, 'assistant')}
+              <MessageBubble content={streamingMessage} role="assistant" />
             </motion.div>
           )}
 
           {isThinking && !streamingMessage && (
             <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex items-center gap-3 px-2 py-4"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="flex items-center gap-6 px-4"
             >
-              <div className="flex gap-1.5">
-                <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1 }} className="w-1.5 h-1.5 bg-cyan-500 rounded-full" />
-                <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1, delay: 0.2 }} className="w-1.5 h-1.5 bg-cyan-500 rounded-full" />
-                <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1, delay: 0.4 }} className="w-1.5 h-1.5 bg-cyan-500 rounded-full" />
+              <div className="flex gap-2">
+                {[0, 1, 2].map((i) => (
+                  <motion.div 
+                    key={i}
+                    animate={{ y: [0, -8, 0], opacity: [0.2, 1, 0.2] }} 
+                    transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.2 }} 
+                    className="w-2 h-2 bg-primary rounded-full" 
+                  />
+                ))}
               </div>
-              <span className="text-[9px] font-mono text-cyan-500/50 uppercase italic tracking-tighter">Neural_Pathway_Active...</span>
+              <span className="label-medium font-bold text-primary uppercase tracking-[0.3em] animate-pulse">Neural_Sync...</span>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      {/* Input Module */}
-      <div className="p-5 bg-black/80 backdrop-blur-xl border-t border-zinc-900">
-        <div className="relative group">
+      {/* Input */}
+      <div className="p-8 bg-surface-container-low/50 backdrop-blur-2xl border-t border-outline-variant/20">
+        <Surface elevation={1} shape="2xl" className="relative border border-outline-variant/30 bg-surface-container-highest shadow-2xl focus-within:border-primary/50 transition-all duration-500">
           <textarea 
             rows="1"
             value={input}
@@ -186,27 +200,32 @@ export default function ChatInterface({ onSend }) {
                 handleSend();
               }
             }}
-            placeholder="Command Vibe Hub..." 
-            className="w-full bg-zinc-900/50 text-zinc-100 border border-zinc-800 rounded-2xl pl-5 pr-14 py-4 focus:outline-none focus:border-cyan-500/40 focus:ring-4 focus:ring-cyan-500/5 transition-all font-mono text-xs placeholder:text-zinc-700 resize-none overflow-hidden"
+            placeholder="Instruct the swarm..." 
+            className="w-full bg-transparent text-on-surface pl-6 pr-20 py-5 focus:outline-none body-large font-medium placeholder:text-on-surface-variant/20 resize-none min-h-[64px]"
           />
-          <button 
-            onClick={handleSend}
-            disabled={isThinking || !input.trim()}
-            className="absolute right-2.5 top-2.5 p-2.5 bg-cyan-600 text-white rounded-xl hover:bg-cyan-500 active:scale-95 transition-all disabled:bg-zinc-800 disabled:text-zinc-600 disabled:scale-100 group shadow-lg shadow-cyan-900/20"
-          >
-            <Send size={16} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-          </button>
-        </div>
-        <div className="mt-3 flex justify-between items-center px-1">
-          <span className="text-[8px] font-mono text-zinc-600 uppercase tracking-widest flex items-center gap-1.5">
-            <Terminal size={10} /> Shift + Enter for new line
-          </span>
-          <div className="flex gap-3">
-             <Sparkles size={10} className="text-zinc-800" />
-             <Cpu size={10} className="text-zinc-800" />
+          <div className="absolute right-3 bottom-3">
+             <Button 
+                variant="filled"
+                size="md"
+                disabled={isThinking || !input.trim()}
+                onClick={handleSend}
+                className="!h-11 !w-11 !p-0 !rounded-xl shadow-lg shadow-primary/20"
+             >
+                <Send size={18} />
+             </Button>
+          </div>
+        </Surface>
+        <div className="mt-4 flex justify-between items-center px-4">
+          <div className="flex items-center gap-3 opacity-30">
+            <Terminal size={14} />
+            <span className="label-small font-bold uppercase tracking-widest">Shift+Enter for newline</span>
+          </div>
+          <div className="flex gap-4 opacity-10">
+             <Sparkles size={16} />
+             <Fingerprint size={16} />
           </div>
         </div>
       </div>
-    </div>
+    </Surface>
   );
 }
