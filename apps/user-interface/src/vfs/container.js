@@ -87,7 +87,7 @@ export class VFSContainer {
       const sha = await git.commit({
         fs: this.instance.fs,
         dir,
-        author: { name: 'Vibe AI', email: 'ai@vibe-hub.internal' },
+        author: { name: 'Selina AI', email: 'ai@selina.internal' },
         message: message || 'AI Safety Checkpoint',
       });
       console.log(`[VFS] Checkpoint created: ${sha.slice(0, 7)}`);

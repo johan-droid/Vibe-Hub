@@ -55,7 +55,7 @@ export default function SettingsModal({ isOpen, onClose }) {
               </Surface>
               <div className="flex flex-col">
                 <span className="label-large font-bold text-on-surface">Settings</span>
-                <span className="label-small text-on-surface-variant opacity-60 uppercase tracking-tighter">Vibe_Sys v2.0</span>
+                <span className="label-small text-on-surface-variant opacity-60 uppercase tracking-tighter">Selina_Sys v2.0</span>
               </div>
             </div>
 
@@ -196,7 +196,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                        </Surface>
                        <div className="text-center space-y-2">
                          <h3 className="title-medium text-on-surface opacity-40">System Aesthetics</h3>
-                         <p className="label-medium text-on-surface-variant opacity-30">Vibe_Hub Dark Standard (Material 3 Dynamic)</p>
+                         <p className="label-medium text-on-surface-variant opacity-30">Selina_Hub Dark Standard (Material 3 Dynamic)</p>
                        </div>
                     </div>
                   )}

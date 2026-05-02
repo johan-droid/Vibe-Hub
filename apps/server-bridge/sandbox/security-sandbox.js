@@ -1,5 +1,5 @@
 /**
- * security-sandbox.js — Vibe-Hub Code Execution Sandbox Controller
+ * security-sandbox.js — Selina-Hub Code Execution Sandbox Controller
  * ─────────────────────────────────────────────────────────────────
  * Orchestrates Docker containers to execute untrusted LLM-generated
  * scripts in strict isolation.
@@ -37,7 +37,7 @@ import { EventEmitter } from 'events';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-const SANDBOX_IMAGE = 'vibe-hub-sandbox:latest';
+const SANDBOX_IMAGE = 'selina-sandbox:latest';
 
 /**
  * RESOURCE LIMIT RATIONALE (Ryzen 5 5500U / 16 GB host)
@@ -241,7 +241,7 @@ export class SecuritySandboxService extends EventEmitter {
     try {
       // ── Create container (not started yet) ──────────────────────────────
       container = await docker.createContainer({
-        name: `vibe-sandbox-${executionId.slice(0, 8)}`,
+        name: `selina-sandbox-${executionId.slice(0, 8)}`,
         Image: SANDBOX_IMAGE,
 
         // Command: [runtime, scriptPath]

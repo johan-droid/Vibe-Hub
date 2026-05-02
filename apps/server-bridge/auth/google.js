@@ -40,10 +40,8 @@ router.get('/google', (req, res) => {
  */
 router.get('/google/callback', async (req, res) => {
   const { code, state } = req.query;
-  const cookieState = req.cookies?.google_oauth_state || (req.headers.cookie
-    ?.split('; ')
-    .find(row => row.startsWith('google_oauth_state='))
-    ?.split('=')[1]);
+  const match = req.headers.cookie?.match(/(?:^|;\s*)google_oauth_state=([^;]*)/);
+  const cookieState = match ? match[1] : null;
 
   if (!code) return res.status(400).json({ error: 'Missing authorization code.' });
   if (!state || !cookieState || state !== cookieState) {
@@ -87,7 +85,7 @@ router.get('/google/callback', async (req, res) => {
     // Generate JWT and redirect to frontend with token
     const jwt = generateToken(user);
     const frontendUrl = process.env.NODE_ENV === 'production'
-      ? 'https://vibe-hub-ui.onrender.com'
+      ? 'https://selina-ui.onrender.com'
       : 'http://localhost:5173';
     res.redirect(`${frontendUrl}/auth/callback?token=${jwt}`);
   } catch (err) {

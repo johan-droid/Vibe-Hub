@@ -11,9 +11,9 @@ function App() {
 
   useEffect(() => {
     if (hydrated) {
-      document.documentElement.setAttribute('data-theme', theme);
+      document.documentElement.setAttribute('data-theme', 'dark'); // Enforce dark theme
     }
-  }, [theme, hydrated]);
+  }, [hydrated]);
 
   if (!hydrated) return null;
 

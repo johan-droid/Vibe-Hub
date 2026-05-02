@@ -1,5 +1,5 @@
 /**
- * github/index.js — Vibe-Hub GitHub Operations Module v4.0
+ * github/index.js — Selina-Hub GitHub Operations Module v4.0
  * ──────────────────────────────────────────────────────────
  * Provides the agent swarm with safe, collaborative Git/GitHub operations.
  *
@@ -22,9 +22,9 @@
  *    continuing. This prevents the agent from producing broken merges.
  *
  * 3. AGENT BRANCHING CONVENTION
- *    All agent-created branches follow: `vibe/<timestamp>/<slug>`.
+ *    All agent-created branches follow: `selina/<timestamp>/<slug>`.
  *    This namespace prevents collisions with human branches and makes
- *    automated cleanup easy (delete all `vibe/*` branches older than N days).
+ *    automated cleanup easy (delete all `selina/*` branches older than N days).
  */
 
 import { App, Octokit } from 'octokit';
@@ -116,7 +116,7 @@ export class GitHubService {
   /**
    * Create an isolated agent working branch.
    *
-   * Convention: `vibe/<unix-timestamp>/<slug>`
+   * Convention: `selina/<unix-timestamp>/<slug>`
    *   • The timestamp allows easy cleanup of stale agent branches.
    *   • The slug is derived from the task description, capped at 40 chars.
    *
@@ -138,7 +138,7 @@ export class GitHubService {
       .slice(0, 40)
       .replace(/-+$/, '');
 
-    const branchName = `vibe/${Date.now()}/${safeslug}`;
+    const branchName = `selina/${Date.now()}/${safeslug}`;
 
     await octokit.rest.git.createRef({
       owner, repo,

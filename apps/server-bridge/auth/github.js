@@ -38,10 +38,8 @@ router.get('/github', (req, res) => {
  */
 router.get('/github/callback', async (req, res) => {
   const { code, state } = req.query;
-  const cookieState = req.cookies?.github_oauth_state || (req.headers.cookie
-    ?.split('; ')
-    .find(row => row.startsWith('github_oauth_state='))
-    ?.split('=')[1]);
+  const match = req.headers.cookie?.match(/(?:^|;\s*)github_oauth_state=([^;]*)/);
+  const cookieState = match ? match[1] : null;
 
   if (!code) return res.status(400).json({ error: 'Missing authorization code.' });
   if (!state || !cookieState || state !== cookieState) {
@@ -69,7 +67,7 @@ router.get('/github/callback', async (req, res) => {
     const tokens = await tokenRes.json();
     if (tokens.error) throw new Error(tokens.error_description || tokens.error);
 
-    const headers = { Authorization: `Bearer ${tokens.access_token}`, 'User-Agent': 'VibeHub' };
+    const headers = { Authorization: `Bearer ${tokens.access_token}`, 'User-Agent': 'Selina' };
 
     // Get user profile
     const userRes = await fetch(GITHUB_USER_URL, { headers });
@@ -96,7 +94,7 @@ router.get('/github/callback', async (req, res) => {
     // Generate JWT and redirect
     const jwt = generateToken(user);
     const frontendUrl = process.env.NODE_ENV === 'production'
-      ? 'https://vibe-hub-ui.onrender.com'
+      ? 'https://selina-ui.onrender.com'
       : 'http://localhost:5173';
     res.redirect(`${frontendUrl}/auth/callback?token=${jwt}`);
   } catch (err) {

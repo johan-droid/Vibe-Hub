@@ -4,7 +4,7 @@ import { idbStorage } from './idbStorage';
 import { v4 as uuid } from 'uuid';
 
 /**
- * Vibe Hub Global State Store — Principal Architect Implementation
+ * Selina Global State Store — Principal Architect Implementation
  * 
  * Engineered for hyper-performance on Ryzen hardware.
  * Uses atomic updates and selective persistence to minimize I/O overhead.
@@ -21,7 +21,7 @@ export const useStore = create(
       chatCollapsed: false,
       terminalHeight: 256,
       activeTab: 'diff',
-      theme: 'dark', // 'dark' | 'light'
+      theme: 'dark', // Always dark
 
       // --- AGENT CORE STATE (Volatile) ---
       messages: [],
@@ -59,7 +59,7 @@ export const useStore = create(
       // Auth
       setUser: (user) => set({ user }),
       logout: () => {
-        localStorage.removeItem('vibe_token');
+        localStorage.removeItem('selina_token');
         set({ user: null, messages: [], agentThoughts: [], streamingMessage: null });
       },
 
@@ -162,7 +162,7 @@ export const useStore = create(
       clearThoughts: () => set({ agentThoughts: [] }),
     }),
     {
-      name: 'vibehub-neural-storage',
+      name: 'selinahub-neural-storage',
       storage: createJSONStorage(() => idbStorage),
       partialize: (state) => ({
         user: state.user,

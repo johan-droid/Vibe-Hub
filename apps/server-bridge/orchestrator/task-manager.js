@@ -1,5 +1,5 @@
 /**
- * TaskManager — Vibe-Hub Brain v5.0 (Token-Efficient Queue Engine)
+ * TaskManager — Selina-Hub Brain v5.0 (Token-Efficient Queue Engine)
  * ─────────────────────────────────────────────────────────────────
  *
  * Manages a queue of agent tasks, executing them sequentially.

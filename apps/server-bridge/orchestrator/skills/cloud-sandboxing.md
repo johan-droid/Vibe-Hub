@@ -14,7 +14,7 @@ Use this protocol when performing high-risk operations, heavy builds, or complex
 4. Inform the user that validation is moving to the cloud.
 
 ## 3. Remote Execution
-- Once the Codespace is ready, the agent can connect to it (via future bridge logic) or you can instruct the user to check the "Vibe Hub Cloud Runner".
+- Once the Codespace is ready, the agent can connect to it (via future bridge logic) or you can instruct the user to check the "Selina Cloud Runner".
 - Report completion status back to the PR using `github_post_comment`.
 
 ## 4. Cost Efficiency

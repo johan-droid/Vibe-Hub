@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileCode2, LayoutGrid, Terminal as TerminalIcon, Sparkles, X, Search as SearchIcon, Activity } from 'lucide-react';
+import { FileCode2, LayoutGrid, Terminal as TerminalIcon, Sparkles, X, Search as SearchIcon, Activity , ShieldAlert } from 'lucide-react';
 import { useAgent } from '../hooks/useAgent';
 import { useStore } from '../store/useStore';
 
@@ -26,6 +26,7 @@ import { FileViewer } from '../features/editor/components/FileViewer';
 const DiffViewer = React.lazy(() => import('../features/editor/components/DiffViewer'));
 const Terminal = React.lazy(() => import('../features/editor/components/Terminal'));
 const IntelligenceDashboard = React.lazy(() => import('../features/swarm/components/Dashboard'));
+const SecurityAudit = React.lazy(() => import('../features/security/components/SecurityAudit'));
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const NAV_RAIL_W = 64;
@@ -44,6 +45,7 @@ export default function Workspace() {
   const {
     user,
     sidebarCollapsed,
+    setSidebarCollapsed,
     chatCollapsed,
     activeTab,
     activeFileContent, activeFilePath,
@@ -56,10 +58,6 @@ export default function Workspace() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const { sendPrompt } = useAgent();
 
-  if (!user && !localStorage.getItem('vibe_token')) {
-    return <Navigate to="/" replace />;
-  }
-
   const onSidebarDrag = useCallback((delta) => {
     setSidebarW((w) => Math.max(MIN_SIDEBAR_W, Math.min(MAX_SIDEBAR_W, w + delta)));
   }, []);
@@ -71,6 +69,10 @@ export default function Workspace() {
   const onTerminalDrag = useCallback((delta) => {
     setTerminalH((h) => Math.max(MIN_TERM_H, Math.min(MAX_TERM_H, h - delta)));
   }, []);
+
+  if (!user && !localStorage.getItem('selina_token')) {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <div className="flex flex-col w-screen h-screen bg-surface-container-lowest text-on-surface overflow-hidden font-sans selection:bg-primary/20 selection:text-primary">
@@ -99,6 +101,11 @@ export default function Workspace() {
               active={sidebarMode === 'search'} 
               onClick={() => { setSidebarMode('search'); setSidebarCollapsed(false); }}
             />
+            <NavIcon
+              icon={ShieldAlert}
+              active={sidebarMode === 'security'}
+              onClick={() => { setSidebarMode('security'); setSidebarCollapsed(false); }}
+            />
             <div className="mt-auto">
                <NavIcon icon={Sparkles} />
             </div>
@@ -123,6 +130,7 @@ export default function Workspace() {
                         <span className="label-small font-bold uppercase tracking-widest">Global_Search_Pending</span>
                       </div>
                     )}
+                    {sidebarMode === 'security' && <SecurityAudit />}
                   </React.Suspense>
                 </div>
                 {sidebarMode === 'explorer' && (

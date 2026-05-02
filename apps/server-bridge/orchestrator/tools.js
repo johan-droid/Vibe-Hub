@@ -177,7 +177,7 @@ export const AGENT_TOOLS = [
   // === GITHUB ===
   {
     name: 'github_create_branch',
-    description: 'Creates an isolated agent working branch on GitHub using the vibe/<timestamp>/<slug> convention. ALWAYS call this before making any file commits on a shared repository.',
+    description: 'Creates an isolated agent working branch on GitHub using the selina/<timestamp>/<slug> convention. ALWAYS call this before making any file commits on a shared repository.',
     parameters: {
       type: 'OBJECT',
       properties: {
@@ -255,7 +255,7 @@ export const AGENT_TOOLS = [
       properties: {
         owner:      { type: 'STRING', description: 'Repository owner.' },
         repo:       { type: 'STRING', description: 'Repository name.' },
-        name:       { type: 'STRING', description: 'Check name (e.g., "Vibe Hub Tests").' },
+        name:       { type: 'STRING', description: 'Check name (e.g., "Selina Tests").' },
         head_sha:   { type: 'STRING', description: 'The commit SHA to attach the check to.' },
         status:     { type: 'STRING', enum: ['queued', 'in_progress', 'completed'], description: 'Check status.' },
         conclusion: { type: 'STRING', enum: ['success', 'failure', 'neutral', 'cancelled', 'skipped', 'timed_out'], description: 'Final result (required when status is "completed").' },
@@ -367,9 +367,9 @@ DO NOT USE for:
       type: 'OBJECT',
       properties: {
         componentId: { type: 'STRING', description: 'The component to redesign.' },
-        vibe: { type: 'STRING', description: 'The desired aesthetic shift (e.g., "more brutalist").' },
+        selina: { type: 'STRING', description: 'The desired aesthetic shift (e.g., "more brutalist").' },
       },
-      required: ['componentId', 'vibe'],
+      required: ['componentId', 'selina'],
     },
   },
 ];

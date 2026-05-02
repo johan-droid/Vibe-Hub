@@ -50,7 +50,7 @@ export class CreativeService {
       status: 'completed',
       metadata: {
         dimensions: '1024x1024',
-        model: 'flux-vibe-core'
+        model: 'flux-selina-core'
       }
     };
     
@@ -61,8 +61,8 @@ export class CreativeService {
   /**
    * Generate alternative UI variants.
    */
-  async getUiVariants(componentId, vibe) {
-    console.log(`[Creative] Requesting variants for ${componentId} with vibe: ${vibe}`);
+  async getUiVariants(componentId, selina) {
+    console.log(`[Creative] Requesting variants for ${componentId} with selina: ${selina}`);
     
     return [
       { variant: 'A', description: 'Maximum Minimalism', tokenOverrides: { spacing: 'tight' } },
