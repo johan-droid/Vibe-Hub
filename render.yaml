@@ -51,8 +51,9 @@ services:
         value: https://vibe-hub-bridge.onrender.com/api/auth/github/callback
 
   # ===== FRONTEND: React Cockpit (Bento UI) =====
-  - type: static_site
+  - type: web
     name: vibe-hub-ui
+    runtime: static
     rootDir: apps/user-interface
     buildCommand: npm install && npm run build
     staticPublishPath: dist
