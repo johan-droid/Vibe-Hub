@@ -57,6 +57,11 @@ services:
     rootDir: apps/user-interface
     buildCommand: npm install && npm run build
     staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE
+        value: https://vibe-hub-bridge.onrender.com
+      - key: VITE_WS_BASE
+        value: wss://vibe-hub-bridge.onrender.com
     headers:
       - path: /*
         name: X-Frame-Options

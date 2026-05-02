@@ -1,6 +1,6 @@
-const API_BASE = import.meta.env.PROD
+const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.PROD
   ? 'https://vibe-hub-bridge.onrender.com'
-  : '';
+  : '');
 
 /**
  * Centralized API client for all REST calls to the backend.
