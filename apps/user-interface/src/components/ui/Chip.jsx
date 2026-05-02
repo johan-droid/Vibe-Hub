@@ -13,11 +13,25 @@ export const Chip = ({
   className = '',
   onClick
 }) => {
-  const variants = {
-    tonal: `bg-${color}-container/20 border-${color}/20 text-${color}`,
-    outlined: `bg-transparent border-outline-variant/30 text-on-surface-variant`,
-    elevated: `bg-surface-container-high border-outline-variant/10 text-on-surface shadow-sm`
+  const colorMap = {
+    primary: {
+      tonal: 'bg-primary-container/20 border-primary/20 text-primary',
+      outlined: 'bg-transparent border-outline-variant/30 text-on-surface-variant',
+      elevated: 'bg-surface-container-high border-outline-variant/10 text-on-surface shadow-sm'
+    },
+    secondary: {
+      tonal: 'bg-secondary-container/20 border-secondary/20 text-secondary',
+      outlined: 'bg-transparent border-outline-variant/30 text-on-surface-variant',
+      elevated: 'bg-surface-container-high border-outline-variant/10 text-on-surface shadow-sm'
+    },
+    error: {
+      tonal: 'bg-error-container/20 border-error/20 text-error',
+      outlined: 'bg-transparent border-outline-variant/30 text-on-surface-variant',
+      elevated: 'bg-surface-container-high border-outline-variant/10 text-on-surface shadow-sm'
+    }
   };
+
+  const currentVariant = colorMap[color]?.[variant] || colorMap.primary[variant];
 
   return (
     <motion.div
@@ -28,7 +42,7 @@ export const Chip = ({
         inline-flex items-center gap-2.5 px-4 h-8 rounded-full border text-[10px] font-black uppercase tracking-widest
         transition-all duration-500 ease-emphasized
         ${onClick ? 'cursor-pointer hover:bg-on-surface/5 active:bg-on-surface/10' : ''}
-        ${variants[variant]}
+        ${currentVariant}
         ${className}
       `}
     >
