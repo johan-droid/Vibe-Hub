@@ -104,21 +104,20 @@ export class VFSContainer {
   async listFiles(path) {
     try {
       const entries = await this.instance.fs.readdir(path, { withFileTypes: true });
-      const results = [];
-      
-      for (const e of entries) {
-        const fullPath = path === '.' ? e.name : `${path}/${e.name}`;
-        
-        // Basic .gitignore awareness
-        const ignored = await this.isPathIgnored(fullPath);
-        if (ignored) continue;
 
-        results.push({
+      const ignoredResults = await Promise.all(
+        entries.map((e) => {
+          const fullPath = path === '.' ? e.name : `${path}/${e.name}`;
+          return this.isPathIgnored(fullPath);
+        })
+      );
+
+      return entries
+        .filter((_, index) => !ignoredResults[index])
+        .map((e) => ({
           name: e.name,
           type: e.isDirectory() ? 'directory' : 'file',
-        });
-      }
-      return results;
+        }));
     } catch {
       return [];
     }
