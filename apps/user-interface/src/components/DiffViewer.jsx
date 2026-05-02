@@ -1,186 +1,204 @@
-import React from 'react';
-import { Eye, Zap, Code, FileCode, CheckCircle2, AlertCircle } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { Eye, Zap, Code, FileCode, GitPullRequest, ChevronRight } from 'lucide-react';
 import ReactDiffViewer from 'react-diff-viewer-continued';
 import { useStore } from '../store/useStore';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { clsx } from 'clsx';
 
-export default function DiffViewer({ onRecure }) {
-  const { visionScore, diffData, isThinking } = useStore();
+/**
+ * DiffViewer — Principal Frontend Architect Implementation
+ * 
+ * Optimized for displaying surgical code edits with minimal performance impact.
+ * Uses useMemo to prevent re-calculating diff chunks on every state change.
+ */
+export default function DiffViewer({ onApply, onDiscard }) {
+  const { diffData, isThinking, neuralStatus } = useStore();
 
-  const getSurgicalChunk = (oldValue, newValue) => {
-    if (!oldValue || !newValue) return { old: oldValue, new: newValue };
+  // Optimized Surgical Chunking
+  // Focuses only on the lines that changed, providing context around the edit.
+  const diffChunk = useMemo(() => {
+    if (!diffData || !diffData.oldValue || !diffData.newValue) return null;
     
-    const oldLines = oldValue.split('\n');
-    const newLines = newValue.split('\n');
+    const oldLines = diffData.oldValue.split('\n');
+    const newLines = diffData.newValue.split('\n');
     
     let firstDiff = 0;
     while (firstDiff < oldLines.length && oldLines[firstDiff] === newLines[firstDiff]) {
       firstDiff++;
     }
 
-    const start = Math.max(0, firstDiff - 20);
-    const end = Math.min(newLines.length, firstDiff + 30);
+    // Capture context: 15 lines before and 25 lines after the first detected difference
+    const start = Math.max(0, firstDiff - 15);
+    const end = Math.min(newLines.length, firstDiff + 25);
     
     return {
       old: oldLines.slice(start, end).join('\n'),
       new: newLines.slice(start, end).join('\n'),
-      startLine: start + 1
+      startLine: start + 1,
+      totalLines: newLines.length
     };
-  };
-
-  const chunked = diffData ? getSurgicalChunk(diffData.oldValue, diffData.newValue) : null;
+  }, [diffData]);
 
   return (
-    <div className="h-full bg-black flex flex-col relative overflow-hidden">
-      {/* Header */}
-      <div className="h-12 px-4 border-b border-zinc-900 flex items-center justify-between bg-zinc-950 select-none">
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2">
-            <Eye size={14} className="text-zinc-500" />
-            <h2 className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-[0.2em]">Surgical_Diff</h2>
+    <div className="h-full bg-black flex flex-col relative overflow-hidden font-mono">
+      {/* Precision Header */}
+      <div className="h-14 px-6 border-b border-zinc-900 flex items-center justify-between bg-zinc-950 select-none">
+        <div className="flex items-center gap-8">
+          <div className="flex items-center gap-2.5">
+            <GitPullRequest size={14} className="text-cyan-500" />
+            <h2 className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.3em]">Surgical_Projection</h2>
           </div>
           
-          {diffData && (
-            <div className="flex items-center gap-2 bg-zinc-900/50 border border-zinc-800 rounded-full px-3 py-1">
-              <FileCode size={10} className="text-cyan-400" />
-              <span className="text-[10px] font-mono text-zinc-300">{diffData.path}</span>
-            </div>
-          )}
+          <AnimatePresence>
+            {diffData && (
+              <motion.div 
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="flex items-center gap-2.5 bg-zinc-900/40 border border-zinc-800/50 rounded-full px-4 py-1.5 shadow-inner"
+              >
+                <FileCode size={12} className="text-cyan-400" />
+                <span className="text-[10px] text-zinc-300 tracking-tight">{diffData.path}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-        <div className="flex items-center gap-2">
-          {diffData && (
-            <>
-              <button 
-                onClick={() => onRecure("Please re-examine the current state and perform another optimization pass.")}
-                disabled={isThinking}
-                className="px-3 py-1 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white rounded-lg text-[9px] uppercase font-mono transition-all btn-hover disabled:opacity-30"
+        <div className="flex items-center gap-3">
+          <AnimatePresence>
+            {diffData && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="flex items-center gap-2"
               >
-                RECUR_AND_REPAIR
-              </button>
-              <div className="w-[1px] h-4 bg-zinc-800 mx-1" />
-              <button className="px-3 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 rounded-lg text-[9px] uppercase font-mono transition-all">Discard</button>
-              <button className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-[9px] font-bold font-mono transition-all btn-hover">APPLY_STATE</button>
-            </>
-          )}
+                <button 
+                  onClick={onDiscard}
+                  disabled={isThinking}
+                  className="px-4 py-1.5 text-zinc-500 hover:text-zinc-200 text-[10px] uppercase font-bold transition-colors disabled:opacity-20"
+                >
+                  Discard
+                </button>
+                <button 
+                  onClick={() => onApply(diffData)}
+                  disabled={isThinking}
+                  className="px-5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-[10px] font-bold uppercase transition-all shadow-lg shadow-cyan-900/20 active:scale-95 disabled:bg-zinc-800 disabled:shadow-none"
+                >
+                  Apply_Mutation
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
-      {/* Diff Area */}
-      <div className="flex-1 overflow-auto bg-black p-4">
-        {chunked ? (
+      {/* Diff Workspace */}
+      <div className="flex-1 overflow-auto bg-[#050505] p-6 selection:bg-cyan-500/30">
+        {diffChunk ? (
           <motion.div 
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="rounded-xl border border-zinc-900 overflow-hidden"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl border border-zinc-900 overflow-hidden bg-black shadow-2xl"
           >
-            <div className="bg-zinc-900/50 px-4 py-2 border-b border-zinc-800 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-[9px] text-zinc-500 font-mono uppercase tracking-widest">
-                <Code size={10} /> 
-                Lines {chunked.startLine} - {chunked.startLine + 50}
+            <div className="bg-zinc-900/30 px-5 py-3 border-b border-zinc-900/50 flex items-center justify-between">
+              <div className="flex items-center gap-3 text-[9px] text-zinc-500 uppercase tracking-widest">
+                <Code size={12} /> 
+                <span className="flex items-center gap-1.5">
+                  Frame <ChevronRight size={10} /> Lines {diffChunk.startLine} - {diffChunk.startLine + 40}
+                </span>
               </div>
-              {visionScore && (
-                 <div className="flex gap-1">
-                    {[1,2,3,4,5,6,7,8,9,10].map(v => (
-                      <div key={v} className={`w-1 h-3 rounded-full ${v <= visionScore.score ? 'bg-cyan-500' : 'bg-zinc-800'}`} />
-                    ))}
-                 </div>
-              )}
+              <div className="text-[9px] text-zinc-700 font-bold">
+                TOTAL_LINES: {diffChunk.totalLines}
+              </div>
             </div>
-            <ReactDiffViewer
-              oldValue={chunked.old}
-              newValue={chunked.new}
-              splitView={true}
-              useDarkTheme={true}
-              codeFoldGutter={true}
-              styles={{
-                variables: {
-                  dark: {
-                    diffViewerBackground: '#000',
-                    diffViewerTitleBackground: '#0a0a0a',
-                    diffViewerTitleColor: '#666',
-                    addedBackground: 'rgba(16, 185, 129, 0.05)',
-                    addedColor: '#10b981',
-                    removedBackground: 'rgba(239, 68, 68, 0.05)',
-                    removedColor: '#ef4444',
-                    wordAddedBackground: 'rgba(16, 185, 129, 0.2)',
-                    wordRemovedBackground: 'rgba(239, 68, 68, 0.2)',
+            
+            <div className="p-2">
+              <ReactDiffViewer
+                oldValue={diffChunk.old}
+                newValue={diffChunk.new}
+                splitView={true}
+                useDarkTheme={true}
+                codeFoldGutter={true}
+                styles={{
+                  variables: {
+                    dark: {
+                      diffViewerBackground: '#000',
+                      diffViewerTitleBackground: '#0a0a0a',
+                      diffViewerTitleColor: '#444',
+                      addedBackground: 'rgba(6, 182, 212, 0.08)',
+                      addedColor: '#06b6d4',
+                      removedBackground: 'rgba(239, 68, 68, 0.08)',
+                      removedColor: '#ef4444',
+                      wordAddedBackground: 'rgba(6, 182, 212, 0.25)',
+                      wordRemovedBackground: 'rgba(239, 68, 68, 0.25)',
+                      gutterBackground: '#000',
+                      gutterColor: '#333',
+                      codeFoldGutterBackground: '#050505',
+                      codeFoldBackground: '#080808',
+                      codeFoldContentColor: '#444'
+                    }
+                  },
+                  contentText: {
+                    fontSize: '11px',
+                    fontFamily: 'JetBrains Mono, Menlo, monospace',
+                    lineHeight: '1.7',
+                    letterSpacing: '-0.02em'
+                  },
+                  line: {
+                    padding: '1px 0',
+                    '&:hover': {
+                      background: 'rgba(255,255,255,0.015)'
+                    }
+                  },
+                  gutter: {
+                    padding: '0 15px',
+                    minWidth: '60px'
                   }
-                },
-                contentText: {
-                  fontSize: '11px',
-                  fontFamily: 'JetBrains Mono, Menlo, monospace',
-                  lineHeight: '1.6'
-                },
-                line: {
-                  padding: '2px 0',
-                  '&:hover': {
-                    background: 'rgba(255,255,255,0.02)'
-                  }
-                }
-              }}
-            />
+                }}
+              />
+            </div>
           </motion.div>
         ) : (
-          <div className="h-full flex flex-col items-center justify-center text-zinc-700 font-mono gap-6 opacity-40">
+          <div className="h-full flex flex-col items-center justify-center text-zinc-800 gap-8 opacity-60">
             <div className="relative">
               <motion.div 
-                animate={{ scale: [1, 1.2, 1], rotate: [0, 90, 180, 270, 360] }}
-                transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
-                className="w-16 h-16 rounded-2xl border border-dashed border-zinc-700" 
+                animate={{ 
+                  scale: [1, 1.15, 1],
+                  rotate: [0, 90, 180, 270, 360],
+                  borderRadius: ["20%", "40%", "20%"]
+                }}
+                transition={{ repeat: Infinity, duration: 6, ease: "easeInOut" }}
+                className="w-24 h-24 border-2 border-dashed border-zinc-900" 
               />
-              <Eye size={24} className="absolute inset-0 m-auto text-zinc-800" />
+              <Zap size={32} className="absolute inset-0 m-auto text-zinc-900" />
             </div>
-            <div className="text-center space-y-1">
-              <div className="text-xs uppercase tracking-[0.4em]">awaiting_vfs_diff</div>
-              <p className="text-[10px] text-zinc-800">Surgical edits will be projected here in real-time.</p>
+            <div className="text-center space-y-2">
+              <div className="text-[11px] uppercase tracking-[0.5em] font-black text-zinc-700">Awaiting_Neural_Input</div>
+              <p className="text-[9px] text-zinc-800 uppercase tracking-widest">Surgical patches will materialize here.</p>
             </div>
           </div>
         )}
       </div>
 
-      {/* Vision Card Overlay */}
-      {visionScore && (
-        <motion.div 
-          initial={{ x: 300 }}
-          animate={{ x: 0 }}
-          className="absolute top-16 right-8 w-72 glass p-6 rounded-3xl border border-white/10 z-20"
-        >
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
-              <Zap size={16} className="text-amber-400 fill-amber-400" />
-              <h4 className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest">Neural_Eval</h4>
-            </div>
-            <div className="text-xl font-black font-mono text-cyan-400">{visionScore.score}/10</div>
-          </div>
-
-          <div className="space-y-4">
-            {Object.entries(visionScore.metrics || {}).map(([key, val]) => (
-              <div key={key} className="space-y-1.5">
-                <div className="flex justify-between text-[9px] font-mono text-zinc-500 uppercase tracking-tighter">
-                  <span>{key}</span>
-                  <span>{val * 10}%</span>
-                </div>
-                <div className="h-1 bg-zinc-900 rounded-full overflow-hidden border border-white/5">
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: `${val * 10}%` }}
-                    className={`h-full ${val >= 7 ? 'bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)]' : 'bg-red-500'}`}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-6 pt-4 border-t border-white/5">
-            <p className="text-[10px] text-zinc-400 leading-relaxed italic">
-               <span className="text-cyan-500/50 mr-1">"</span>
-               {visionScore.reasoning}
-               <span className="text-cyan-500/50 ml-1">"</span>
-            </p>
-          </div>
-        </motion.div>
-      )}
+      {/* Neural Feedback Overlay */}
+      <AnimatePresence>
+        {isThinking && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="absolute bottom-8 left-1/2 -translate-x-1/2 px-6 py-3 bg-zinc-900/90 backdrop-blur-xl border border-white/5 rounded-full flex items-center gap-4 z-30 shadow-2xl"
+          >
+             <div className="flex gap-1">
+                <motion.div animate={{ scale: [1, 1.4, 1] }} transition={{ repeat: Infinity, duration: 0.8 }} className="w-1 h-1 bg-cyan-500 rounded-full" />
+                <motion.div animate={{ scale: [1, 1.4, 1] }} transition={{ repeat: Infinity, duration: 0.8, delay: 0.2 }} className="w-1 h-1 bg-cyan-500 rounded-full" />
+                <motion.div animate={{ scale: [1, 1.4, 1] }} transition={{ repeat: Infinity, duration: 0.8, delay: 0.4 }} className="w-1 h-1 bg-cyan-500 rounded-full" />
+             </div>
+             <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-[0.2em]">
+               Analyzing_VFS_Structure...
+             </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

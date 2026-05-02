@@ -176,44 +176,111 @@ export const AGENT_TOOLS = [
 
   // === GITHUB ===
   {
-    name: 'github_post_comment',
-    description: 'Posts a comment on a GitHub Issue or Pull Request. Use to report test results or ask for feedback in the PR thread.',
+    name: 'github_create_branch',
+    description: 'Creates an isolated agent working branch on GitHub using the vibe/<timestamp>/<slug> convention. ALWAYS call this before making any file commits on a shared repository.',
     parameters: {
       type: 'OBJECT',
       properties: {
-        owner: { type: 'STRING', description: 'Repository owner (user or org).' },
-        repo: { type: 'STRING', description: 'Repository name.' },
+        owner:    { type: 'STRING', description: 'Repository owner (user or org).' },
+        repo:     { type: 'STRING', description: 'Repository name.' },
+        base:     { type: 'STRING', description: 'Branch to fork from (default: "main").' },
+        taskSlug: { type: 'STRING', description: 'Short description of the task, used in the branch name (e.g. "fix-login-bug").' },
+      },
+      required: ['owner', 'repo'],
+    },
+  },
+  {
+    name: 'github_detect_conflicts',
+    description: 'Compares the agent branch against the upstream base to detect divergence and overlapping file changes. CALL THIS before opening a PR if other contributors may have pushed commits. If hasRisk is true, halt and ask the user how to resolve before proceeding.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        owner:        { type: 'STRING', description: 'Repository owner.' },
+        repo:         { type: 'STRING', description: 'Repository name.' },
+        agentBranch:  { type: 'STRING', description: 'The agent\'s working branch name.' },
+        baseBranch:   { type: 'STRING', description: 'The upstream base branch (default: "main").' },
+      },
+      required: ['owner', 'repo', 'agentBranch'],
+    },
+  },
+  {
+    name: 'github_fetch_upstream',
+    description: 'Fetches the latest commit log from the upstream base branch. Use to check what other contributors have pushed before making changes.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        owner:  { type: 'STRING', description: 'Repository owner.' },
+        repo:   { type: 'STRING', description: 'Repository name.' },
+        branch: { type: 'STRING', description: 'Branch to inspect (default: "main").' },
+        limit:  { type: 'NUMBER', description: 'Number of commits to fetch (max 30, default 10).' },
+      },
+      required: ['owner', 'repo'],
+    },
+  },
+  {
+    name: 'github_post_comment',
+    description: 'Posts a comment on a GitHub Issue or Pull Request. Use to report test results, summarise changes, or ask for review.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        owner:        { type: 'STRING', description: 'Repository owner (user or org).' },
+        repo:         { type: 'STRING', description: 'Repository name.' },
         issue_number: { type: 'NUMBER', description: 'The PR or Issue number.' },
-        body: { type: 'STRING', description: 'The comment text (Markdown supported).' },
+        body:         { type: 'STRING', description: 'The comment text (Markdown supported).' },
       },
       required: ['owner', 'repo', 'issue_number', 'body'],
     },
   },
   {
     name: 'github_create_pr',
-    description: 'Creates a new Pull Request on GitHub. Call this after pushing a new branch with features or fixes.',
+    description: 'Opens a Pull Request. Automatically runs conflict detection — if the agent branch is behind upstream with overlapping changes, the PR will be blocked and the user will be asked to resolve. Use github_detect_conflicts first if in doubt.',
     parameters: {
       type: 'OBJECT',
       properties: {
         owner: { type: 'STRING', description: 'Repository owner.' },
-        repo: { type: 'STRING', description: 'Repository name.' },
+        repo:  { type: 'STRING', description: 'Repository name.' },
         title: { type: 'STRING', description: 'PR title.' },
-        body: { type: 'STRING', description: 'PR description/summary.' },
-        head: { type: 'STRING', description: 'The branch containing the changes (e.g., "feature-xyz").' },
-        base: { type: 'STRING', description: 'The branch to merge into (default: "main").' },
+        body:  { type: 'STRING', description: 'PR description/summary (Markdown).' },
+        head:  { type: 'STRING', description: 'The agent branch containing changes.' },
+        base:  { type: 'STRING', description: 'Target branch to merge into (default: "main").' },
       },
       required: ['owner', 'repo', 'title', 'head'],
     },
   },
   {
-    name: 'github_create_codespace',
-    description: 'Spawns a new GitHub Codespace for the current project. Use this for "Cloud Sandboxing" to run integration tests or heavy builds in an isolated environment.',
+    name: 'github_create_check_run',
+    description: 'Creates a GitHub Check Run to report CI/test status on a commit. Use after running tests in the sandbox to mark the PR with pass/fail.',
     parameters: {
       type: 'OBJECT',
       properties: {
-        owner: { type: 'STRING', description: 'Repository owner.' },
-        repo: { type: 'STRING', description: 'Repository name.' },
-        ref: { type: 'STRING', description: 'The branch or commit SHA to spawn the codespace from.' },
+        owner:      { type: 'STRING', description: 'Repository owner.' },
+        repo:       { type: 'STRING', description: 'Repository name.' },
+        name:       { type: 'STRING', description: 'Check name (e.g., "Vibe Hub Tests").' },
+        head_sha:   { type: 'STRING', description: 'The commit SHA to attach the check to.' },
+        status:     { type: 'STRING', enum: ['queued', 'in_progress', 'completed'], description: 'Check status.' },
+        conclusion: { type: 'STRING', enum: ['success', 'failure', 'neutral', 'cancelled', 'skipped', 'timed_out'], description: 'Final result (required when status is "completed").' },
+        output: {
+          type: 'OBJECT',
+          description: 'Check output object.',
+          properties: {
+            title:   { type: 'STRING' },
+            summary: { type: 'STRING' },
+          },
+        },
+      },
+      required: ['owner', 'repo', 'name', 'head_sha', 'status'],
+    },
+  },
+  {
+    name: 'github_create_codespace',
+    description: 'Spawns a GitHub Codespace for heavy builds or integration tests that cannot run in the local Docker sandbox.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        owner:             { type: 'STRING', description: 'Repository owner.' },
+        repo:              { type: 'STRING', description: 'Repository name.' },
+        ref:               { type: 'STRING', description: 'Branch or commit SHA.' },
+        machine_type_name: { type: 'STRING', description: 'Machine type (e.g., "basicLinux32gb").' },
       },
       required: ['owner', 'repo', 'ref'],
     },
@@ -233,16 +300,40 @@ export const AGENT_TOOLS = [
   },
   {
     name: 'security_sandbox',
-    description: 'Provisions an ephemeral sandbox with security tools (Semgrep, OWASP ZAP, etc.) or executes commands inside it.',
+    description: `Executes a script or test file inside a fully isolated Docker sandbox with no network access.
+Use this to run LLM-generated code, test suites, or scripts safely without risking the host machine.
+The sandbox is ephemeral — it starts, runs the script, streams output, then self-destructs.
+
+WHEN TO USE:
+  - Verify that generated code actually runs ("npm test", "node script.js")
+  - Run linters or formatters in isolation (eslint, prettier)
+  - Execute any script where correctness or safety is uncertain
+
+DO NOT USE for:
+  - Commands that require network access (use the VFS + git tools instead)
+  - Installing global packages (the sandbox is read-only except /tmp)`,
     parameters: {
       type: 'OBJECT',
       properties: {
-        action: { type: 'STRING', enum: ['create', 'exec', 'destroy'], description: 'The action to perform.' },
-        sandboxId: { type: 'STRING', description: 'The ID of the existing sandbox (required for exec/destroy).' },
-        command: { type: 'STRING', description: 'The command to execute (required for exec).' },
-        profile: { type: 'STRING', description: 'Tool profile: "standard", "web", or "full".' },
+        scriptPath: {
+          type: 'STRING',
+          description: 'Relative path to the script inside the workspace to execute. E.g., "test/run.js" or "scripts/lint.sh".',
+        },
+        runtime: {
+          type: 'STRING',
+          enum: ['node', 'sh', 'python3', 'bun'],
+          description: 'The interpreter to use. Defaults to "node".',
+        },
+        workspacePath: {
+          type: 'STRING',
+          description: 'Absolute host path of the workspace to mount read-only. Defaults to the current project root.',
+        },
+        timeoutMs: {
+          type: 'NUMBER',
+          description: 'Maximum execution time in milliseconds (1000–60000). Defaults to 10000. Lower for simple scripts.',
+        },
       },
-      required: ['action'],
+      required: ['scriptPath'],
     },
   },
   {

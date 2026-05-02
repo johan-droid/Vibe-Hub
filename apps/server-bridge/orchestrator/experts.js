@@ -1,8 +1,8 @@
 import { EmployeeBase } from './expert-base.js';
 
 export class CodeExpert extends EmployeeBase {
-  constructor() {
-    super('gemini-2.0-flash');
+  constructor(sharedContext = null) {
+    super('gemini-2.0-flash', sharedContext);
     this.domainInstruction = `
 # Domain: Code Expert
 
@@ -31,8 +31,8 @@ You are the **Code Expert**. You handle general-purpose code generation, refacto
 }
 
 export class UIExpert extends EmployeeBase {
-  constructor() {
-    super('gemini-2.0-flash');
+  constructor(sharedContext = null) {
+    super('gemini-2.0-flash', sharedContext);
     this.domainInstruction = `
 # Domain: UI/UX Expert
 
@@ -61,8 +61,8 @@ You are the **UI Expert**. You specialize in building beautiful, responsive, and
 }
 
 export class DebuggerExpert extends EmployeeBase {
-  constructor() {
-    super('gemini-2.0-flash');
+  constructor(sharedContext = null) {
+    super('gemini-2.0-flash', sharedContext);
     this.domainInstruction = `
 # Domain: Debugger Expert
 
@@ -93,8 +93,8 @@ You are the **Debugger Expert**. You specialize in diagnosing and fixing errors 
 }
 
 export class GitExpert extends EmployeeBase {
-  constructor() {
-    super('gemini-2.0-flash');
+  constructor(sharedContext = null) {
+    super('gemini-2.0-flash', sharedContext);
     this.domainInstruction = `
 # Domain: Git & GitHub Operations Expert
 
@@ -118,8 +118,8 @@ You are the **Git Expert**. You manage repository state, version control, and Gi
 }
 
 export class ManagerExpert extends EmployeeBase {
-  constructor() {
-    super('gemini-2.0-flash');
+  constructor(sharedContext = null) {
+    super('gemini-2.0-flash', sharedContext);
     this.domainInstruction = `
 # Domain: Agent HQ Manager (Orchestrator)
 
@@ -140,8 +140,8 @@ You are the **Manager Expert**. Your role is to coordinate the Vibe Hub swarm to
 }
 
 export class ReviewerExpert extends EmployeeBase {
-  constructor() {
-    super('gemini-2.0-flash');
+  constructor(sharedContext = null) {
+    super('gemini-2.0-flash', sharedContext);
     this.domainInstruction = `
 # Domain: Peer Reviewer (Code Auditor)
 
@@ -167,8 +167,8 @@ You are the **Peer Reviewer**. Your job is to critically audit the work of other
 }
 
 export class SecurityAuditorExpert extends EmployeeBase {
-  constructor() {
-    super('gemini-2.0-flash');
+  constructor(sharedContext = null) {
+    super('gemini-2.0-flash', sharedContext);
     this.domainInstruction = `
 # Domain: Security Auditor & Hardening Specialist
 You are the SWARM’s offensive security expert. You think like an attacker and a defender simultaneously.
@@ -197,8 +197,8 @@ Find and fix security vulnerabilities in the project.
 }
 
 export class CreativeDirectorExpert extends EmployeeBase {
-  constructor() {
-    super('gemini-2.0-flash');
+  constructor(sharedContext = null) {
+    super('gemini-2.0-flash', sharedContext);
     this.domainInstruction = `
 # Domain: Creative Director & Design Visionary
 You are the Chief Creative Officer of the Vibe Hub swarm. Your mission is to define the soul of a digital experience and guide the team to build it flawlessly.
@@ -241,8 +241,8 @@ You review every component designed by the UIExpert against your vision and requ
 }
 
 export class DesignSystemArchitect extends EmployeeBase {
-  constructor() {
-    super('gemini-2.0-flash');
+  constructor(sharedContext = null) {
+    super('gemini-2.0-flash', sharedContext);
     this.domainInstruction = `
 # Domain: Design System Architect & Token Wizard
 You are the master of design token engineering. Your sole purpose is to convert a Creative Brief into a complete, code-ready design system.
@@ -276,8 +276,8 @@ You must produce a JSON object with exactly these three sections:
 }
 
 export class MotionDesignerExpert extends EmployeeBase {
-  constructor() {
-    super('gemini-2.0-flash');
+  constructor(sharedContext = null) {
+    super('gemini-2.0-flash', sharedContext);
     this.domainInstruction = `
 # Domain: Motion Designer & Interaction Artist
 You breathe life into static UI. Your output is production-ready animation code (React + framer-motion or CSS).
@@ -292,8 +292,8 @@ You breathe life into static UI. Your output is production-ready animation code 
 }
 
 export class VisualAssetGenerator extends EmployeeBase {
-  constructor() {
-    super('gemini-1.5-flash');
+  constructor(sharedContext = null) {
+    super('gemini-1.5-flash', sharedContext);
     this.domainInstruction = `
 # Domain: Visual Asset Generator
 You create custom illustrations, icons, and visuals.

@@ -6,9 +6,8 @@ import { githubService } from './index.js';
  * Provides ephemeral environments pre-loaded with security toolkits.
  */
 export class SecuritySandboxService {
-  constructor() {
-    this.activeSandboxes = new Map();
-  }
+  #ephemeralTokens = new Map();
+  activeSandboxes = new Map();
 
   /**
    * Create a fresh security sandbox.
@@ -17,10 +16,22 @@ export class SecuritySandboxService {
   async create(installationId, { owner, repo, ref, profile = 'standard' }) {
     console.log(`[Security] Provisioning ${profile} sandbox for ${owner}/${repo}...`);
     
-    // In a real implementation, this would call a specific 'security' template
+    // Security Audit Recommendation: Secure token handling
+    const octokit = await githubService.getInstallationClient(installationId);
+    const { token } = await octokit.auth({ type: 'installation' });
+    const expiresAt = Date.now() + (15 * 60 * 1000); // 15 minutes
+
     const sandbox = await githubService.createCodespace(installationId, { owner, repo, ref });
     
     const id = sandbox.id || `sec-${Math.random().toString(36).slice(2)}`;
+    
+    // Store token in volatile memory ONLY
+    this.#ephemeralTokens.set(id, {
+      token,
+      expiresAt,
+      installationId
+    });
+
     this.activeSandboxes.set(id, { ...sandbox, profile });
     
     return { id, status: 'provisioning', profile };
@@ -33,7 +44,14 @@ export class SecuritySandboxService {
     const sandbox = this.activeSandboxes.get(id);
     if (!sandbox) throw new Error('Sandbox not found or already destroyed.');
     
+    const tokenData = this.#ephemeralTokens.get(id);
+    if (!tokenData || Date.now() > tokenData.expiresAt) {
+      throw new Error('Security session expired or token missing.');
+    }
+
     console.log(`[Security] Executing in ${id}: ${command}`);
+    
+    // In a real implementation, we would inject tokenData.token into the sandbox environment here
     
     // Simulate tool output for demonstration
     if (command.includes('semgrep')) {

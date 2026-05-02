@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../store/useStore';
-import { Brain, Search, PenTool, Terminal, ShieldCheck, Loader2, MessageSquare } from 'lucide-react';
+import { Brain, Search, PenTool, Terminal, ShieldCheck, Loader2, MessageSquare, Palette } from 'lucide-react';
 
 const STATE_CONFIG = {
   idle: { icon: ShieldCheck, color: 'text-emerald-400', label: 'Idle' },
@@ -16,12 +16,33 @@ const STATE_CONFIG = {
   verifying: { icon: Loader2, color: 'text-emerald-400', label: 'Verifying' },
 };
 
-export default function AgentNeuralStatus() {
-  const { agentState, statusMessage, isThinking } = useStore();
+export default function AgentNeuralStatus({ compact = false }) {
+  const { agentState, statusMessage, isThinking, neuralStatus } = useStore();
   const config = STATE_CONFIG[agentState] || STATE_CONFIG.idle;
   const Icon = config.icon;
 
   if (!isThinking && agentState === 'idle') return null;
+
+  // Compact mode: shows as a tiny pill in the tab bar
+  if (compact) {
+    return (
+      <div className={`flex items-center gap-1.5 px-2.5 py-1 bg-neutral-900 border border-neutral-800 rounded-full`}>
+        <Icon size={10} className={`${config.color} ${agentState === 'verifying' ? 'animate-spin' : ''}`} />
+        <span className={`text-[9px] font-mono font-bold uppercase tracking-widest ${config.color}`}>
+          {config.label}
+        </span>
+        {isThinking && (
+          <div className="flex gap-0.5">
+            {[0,1,2].map(i => (
+              <motion.div key={i} animate={{ opacity: [0, 1, 0] }}
+                transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }}
+                className="w-1 h-1 rounded-full bg-current opacity-40" />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <motion.div

@@ -1,45 +1,57 @@
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { githubService } from '../github/index.js';
 
 /**
  * ModelService — Phase 2
  * 
- * Orchestrates calls to free GitHub Models using GITHUB_TOKEN.
+ * Orchestrates calls to Gemini models using GEMINI_API_KEY.
+ * Leverage massive context windows and structured outputs.
  */
 export class ModelService {
   constructor() {
-    this.endpoint = 'https://models.inference.ai.azure.com';
+    this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   }
 
   /**
-   * Run a chat completion using a GitHub Model.
-   * This allows Vibe Hub to perform "Heavy Brain" tasks for free.
+   * Run a chat completion using Google Gemini.
    */
-  async chat(installationId, { model = 'gpt-4o', messages, max_tokens = 2048 }) {
-    // In a real scenario, installation client would provide the token
-    const octokit = await githubService.getInstallationClient(installationId);
-    
-    // Retrieve the installation token
-    const { token } = await octokit.auth({ type: 'installation' });
-
-    const response = await fetch(`${this.endpoint}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        max_tokens
-      })
+  async chat(installationId, { model = 'gemini-2.0-flash', messages, max_tokens = 2048 }) {
+    const geminiModel = this.genAI.getGenerativeModel({ 
+      model,
+      generationConfig: {
+        maxOutputTokens: max_tokens,
+        responseMimeType: 'application/json', // Default to structured JSON if possible
+      }
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`[GitHub Models] ${error.message || 'API Error'}`);
-    }
+    // Convert messages to Gemini format if necessary
+    // Gemini usually takes a prompt or a history. 
+    // Here we assume a simple prompt for now or implement message mapping.
+    const lastMessage = messages[messages.length - 1].content;
+    const history = messages.slice(0, -1).map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }]
+    }));
 
-    return await response.json();
+    const chatSession = geminiModel.startChat({
+      history,
+    });
+
+    const result = await chatSession.sendMessage(lastMessage);
+    const responseText = result.response.text();
+
+    try {
+      return JSON.parse(responseText);
+    } catch (e) {
+      // If not JSON, wrap it
+      return {
+        choices: [{
+          message: {
+            content: responseText
+          }
+        }]
+      };
+    }
   }
 }
 

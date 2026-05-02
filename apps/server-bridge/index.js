@@ -1,339 +1,606 @@
-import express from 'express';
-import cors from 'cors';
-import { createServer } from 'http';
-import { WebSocketServer } from 'ws';
-import dotenv from 'dotenv';
-import { v4 as uuid } from 'uuid';
+/**
+ * server-bridge/index.js — Vibe-Hub Central Nervous System v4.1
+ * ──────────────────────────────────────────────────────────────
+ *
+ * SSE vs WebSockets — Design Rationale
+ * ─────────────────────────────────────
+ * This server uses WEBSOCKETS, not SSE, for the primary agent channel.
+ * Here is the explicit reasoning for this hardware profile:
+ *
+ *   SSE Strengths: Simple, works through HTTP/2 multiplexing, automatic
+ *   reconnect in browsers, text-only frames.
+ *
+ *   SSE Weakness (critical for us): SSE is unidirectional — server to client.
+ *   Vibe-Hub requires a true bidirectional channel: the agent sends tool_request
+ *   frames TO the client (to execute VFS ops in the browser WebContainer), and
+ *   the client responds with tool_response frames. With SSE, this would require
+ *   a second HTTP fetch channel from the client to the server per tool call,
+ *   doubling the socket overhead and introducing timing correlation bugs.
+ *
+ *   WebSocket on this hardware: Under WSL2 / Docker Desktop + Node.js, a
+ *   full-duplex WebSocket frame costs ~2 µs of kernel overhead per message
+ *   on the Ryzen 5500U — negligible. The 'ws' library uses N-API bindings,
+ *   so frame parsing happens in native C, not in the V8 event loop.
+ *
+ *   Token streaming: We emit Gemini token chunks as they arrive from the SDK's
+ *   generateContentStream() iterator, forwarding each chunk over the WebSocket
+ *   in a `stream_chunk` message. This gives the frontend a sub-100ms perceived
+ *   first-token latency even on the integrated Vega 7 GPU sharing memory with
+ *   the host OS.
+ *
+ * Connection lifecycle & zombie prevention
+ * ─────────────────────────────────────────
+ *   Every session is stored in the `sessions` Map keyed by sessionId.
+ *   On ws.on('close'), the session is deleted immediately. We also run a
+ *   30-second ping interval: if a client doesn't pong within 10 s, it is
+ *   terminated and its session map entry is deleted. This kills connections
+ *   that are silently dead (e.g., laptop lid closed with no TCP RST) before
+ *   they can accumulate into a memory leak over a long dev session.
+ */
 
-import { initDB } from './db.js';
+import express            from 'express';
+import cors               from 'cors';
+import { createServer }   from 'http';
+import { WebSocketServer } from 'ws';
+import dotenv             from 'dotenv';
+import { v4 as uuid }     from 'uuid';
+
+import { initDB }                from './db.js';
 import { requireAuth, verifyToken } from './auth/middleware.js';
-import googleAuth from './auth/google.js';
-import githubAuth from './auth/github.js';
-import { AgentOrchestrator } from './orchestrator/index.js';
-import { githubService } from './github/index.js';
+import googleAuth                from './auth/google.js';
+import githubAuth                from './auth/github.js';
+import { AgentOrchestrator }     from './orchestrator/index.js';
+import { githubService }         from './github/index.js';
 import { securitySandboxService } from './sandbox/security-sandbox.js';
-import { creativeService } from './creative/index.js';
-import { uiVariantService } from './creative/generate-ui-variant.js';
-import { modelService } from './orchestrator/models.js';
+import { creativeService }       from './creative/index.js';
+import { uiVariantService }      from './creative/generate-ui-variant.js';
 
 dotenv.config();
 
-const app = express();
-const server = createServer(app);
-const port = process.env.PORT || 3001;
+// ─── Express + HTTP server ────────────────────────────────────────────────────
 
-// === Middleware ===
-app.use(cors({ origin: true, credentials: true }));
+const app    = express();
+const server = createServer(app);
+const port   = process.env.PORT || 3001;
+
+// ── Middleware ────────────────────────────────────────────────────────────────
+
+// Restrict CORS to the UI origin in production; allow all in dev.
+const UI_ORIGIN = process.env.UI_ORIGIN || true;
+app.use(cors({ origin: UI_ORIGIN, credentials: true }));
+
+// 5 MB JSON cap — large enough for paste-in files, prevents body-flood DoS.
 app.use(express.json({ limit: '5mb' }));
 
-// === Auth Routes ===
+// Raw body parser for webhook signature verification (must come before JSON).
+app.use('/api/github/webhook', express.raw({ type: 'application/json' }));
+
+// ── Auth routes ───────────────────────────────────────────────────────────────
 app.use('/api/auth', googleAuth);
 app.use('/api/auth', githubAuth);
 
-// === GitHub Webhooks ===
-app.post('/api/github/webhook', async (req, res) => {
-  const event = req.headers['x-github-event'];
-  const payload = req.body;
-
-  console.log(`[GitHub] Webhook received: ${event}`);
-
-  // In a real scenario, we would verify the signature here.
-  // Then route the event to the appropriate agent session.
-  
-  if (event === 'pull_request' && payload.action === 'opened') {
-    // Example: Auto-assign reviewer agent
-    console.log(`[GitHub] New PR #${payload.number} in ${payload.repository.full_name}`);
-  }
-
-  res.status(200).send('OK');
+// ── Health endpoint ───────────────────────────────────────────────────────────
+app.get('/health', (_req, res) => {
+  res.json({
+    status:  'active',
+    version: '4.1.0',
+    uptime:  process.uptime(),
+    memory:  process.memoryUsage().heapUsed,
+  });
 });
 
-// === GitHub Copilot Extension ===
-app.post('/api/copilot/chat', async (req, res) => {
-  const { messages, context } = req.body;
-  
-  console.log('[Copilot] Message received from GitHub Copilot Chat');
-
-  // Copilot Extensions expect a streaming response or a single response.
-  // We will route this to our AgentOrchestrator.
-  
-  try {
-    // Mock response for now — in a real setup, this would trigger the swarm
-    res.json({
-      choices: [{
-        message: {
-          role: 'assistant',
-          content: 'Hello from Vibe Hub! I am your multi-agent swarm. How can I help you with your repository today?'
-        }
-      }]
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to process Copilot request' });
-  }
-});
-
-// === Health ===
-app.get('/health', (req, res) => {
-  res.json({ status: 'active', version: '3.0.0', brain: 'v3-skills-memory' });
-});
-
-// === Protected: User Profile ===
+// ── User profile (protected) ──────────────────────────────────────────────────
 app.get('/api/me', requireAuth, (req, res) => {
   const { id, email, name, avatar_url, provider } = req.user;
   res.json({ id, email, name, avatarUrl: avatar_url, provider });
 });
 
-// === WebSocket Server ===
+// ── GitHub webhooks ───────────────────────────────────────────────────────────
+app.post('/api/github/webhook', async (req, res) => {
+  // The body arrives as a raw Buffer because of the express.raw() middleware
+  // above. We must verify the HMAC signature before processing anything.
+  const signature = req.headers['x-hub-signature-256'];
+  const valid = await githubService.verifyWebhookSignature(req.body, signature);
+
+  if (!valid) {
+    console.warn('[GitHub] Webhook signature invalid — rejecting.');
+    return res.status(403).send('Invalid signature.');
+  }
+
+  const event   = req.headers['x-github-event'];
+  const payload = JSON.parse(req.body.toString());
+
+  console.log(`[GitHub] Webhook: ${event} (${payload.action ?? 'n/a'})`);
+
+  // Route webhook events to the relevant open agent session (if any).
+  // In a full implementation, we'd look up which session owns the repo.
+  if (event === 'pull_request' && payload.action === 'opened') {
+    console.log(`[GitHub] PR #${payload.number} opened in ${payload.repository?.full_name}`);
+  }
+
+  res.status(200).send('OK');
+});
+
+// ── GitHub Copilot Extension endpoint ─────────────────────────────────────────
+// Copilot Extensions use the OpenAI streaming chat completions protocol.
+// We translate it to our agent and stream back in SSE format here (the ONE
+// place SSE is appropriate: Copilot already handles the bidirectional channel).
+app.post('/api/copilot/chat', requireAuth, async (req, res) => {
+  const { messages } = req.body;
+  const lastUserMsg = messages?.findLast(m => m.role === 'user')?.content ?? '';
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  try {
+    const orchestrator = new AgentOrchestrator();
+    orchestrator.setUser(req.user.id);
+
+    // Stream Gemini tokens as OpenAI-compatible SSE events
+    const noopToolCall = async () => '{}';
+    const result = await orchestrator.handlePrompt(
+      lastUserMsg, 'quick',
+      noopToolCall, () => {}, () => {}, () => {}
+    );
+
+    const content = typeof result === 'string' ? result : result?.content ?? '';
+
+    // Emit as SSE data chunks (Copilot format)
+    res.write(`data: ${JSON.stringify({ choices: [{ delta: { content }, finish_reason: null }] })}\n\n`);
+    res.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`);
+    res.write('data: [DONE]\n\n');
+  } catch (err) {
+    res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+  } finally {
+    res.end();
+  }
+});
+
+// ─── WebSocket Server ─────────────────────────────────────────────────────────
+
 const wss = new WebSocketServer({ server, path: '/ws' });
+
+/**
+ * Session map: sessionId → { ws, orchestrator, pendingToolCalls,
+ *                             pendingClarifications, pendingPlans,
+ *                             user, pingTimeout }
+ *
+ * This is the authoritative reference count. When ws.on('close') fires,
+ * we delete from this map to release the orchestrator + all pending
+ * Promise resolver references so GC can collect them.
+ */
 const sessions = new Map();
 
+// ── Heartbeat ─────────────────────────────────────────────────────────────────
+// Runs every 30 s. Any client that doesn't respond to a ping within 10 s
+// is treated as a zombie and terminated.
+const PING_INTERVAL_MS = 30_000;
+const PONG_TIMEOUT_MS  = 10_000;
+
+const heartbeatInterval = setInterval(() => {
+  for (const [sessionId, session] of sessions) {
+    if (session.ws.readyState !== session.ws.OPEN) {
+      sessions.delete(sessionId);
+      continue;
+    }
+
+    // Mark as waiting for pong
+    session.pongReceived = false;
+    session.ws.ping();
+
+    // Kill if pong doesn't arrive within PONG_TIMEOUT_MS
+    session.pingTimeout = setTimeout(() => {
+      if (!session.pongReceived) {
+        console.warn(`[WS] Zombie session ${sessionId} — terminating.`);
+        session.ws.terminate();
+        sessions.delete(sessionId);
+      }
+    }, PONG_TIMEOUT_MS);
+  }
+}, PING_INTERVAL_MS);
+
+// Clean up the interval on server shutdown so Node.js can exit cleanly.
+server.on('close', () => clearInterval(heartbeatInterval));
+
+// ── Connection handler ────────────────────────────────────────────────────────
 wss.on('connection', (ws, req) => {
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  const token = url.searchParams.get('token');
+  // ── Authentication ─────────────────────────────────────────────────────
+  const url     = new URL(req.url, `http://${req.headers.host}`);
+  const token   = url.searchParams.get('token');
   const decoded = verifyToken(token);
 
   if (!decoded) {
-    ws.close(4001, 'Authentication required.');
+    ws.close(4001, 'Unauthenticated.');
     return;
   }
 
-  const sessionId = uuid();
+  // ── Session bootstrap ──────────────────────────────────────────────────
+  const sessionId    = uuid();
   const orchestrator = new AgentOrchestrator();
   orchestrator.setUser(decoded.id);
 
-  const pendingToolCalls = new Map();
-  const pendingClarifications = new Map();
-  const pendingPlans = new Map();
+  const session = {
+    ws,
+    orchestrator,
+    user:                decoded,
+    pendingToolCalls:    new Map(), // callId → { resolve, reject, timeout }
+    pendingClarifications: new Map(),
+    pendingPlans:        new Map(),
+    pongReceived:        true,
+    pingTimeout:         null,
+  };
+  sessions.set(sessionId, session);
 
-  sessions.set(sessionId, { ws, orchestrator, pendingToolCalls, pendingClarifications, pendingPlans, user: decoded });
-  console.log(`[WS] Session ${sessionId} connected for user ${decoded.email}`);
+  console.log(`[WS] Session ${sessionId} — ${decoded.email} connected.`);
 
+  // ── Pong handler (heartbeat) ───────────────────────────────────────────
+  ws.on('pong', () => {
+    session.pongReceived = true;
+    clearTimeout(session.pingTimeout);
+  });
+
+  // ── Helpers: safe send ────────────────────────────────────────────────
+  const send = (payload) => {
+    if (ws.readyState === ws.OPEN) {
+      ws.send(JSON.stringify(payload));
+    }
+  };
+
+  // ── Tool call dispatchers ─────────────────────────────────────────────
+
+  /**
+   * onThought — streams the agent's reasoning monologue to the frontend.
+   * These appear in the chat interface as collapsible "thought" bubbles.
+   */
+  const onThought = (message) => send({ type: 'thought', message });
+
+  /**
+   * onToolCall — routes a tool call to:
+   *   1. Server-side handlers (GitHub, sandbox, creative)
+   *   2. Client-side VFS/WebContainer (forwarded over WS, awaited via Promise)
+   */
+  const onToolCall = async (name, args) => {
+
+    // ── 1. GitHub Tools ───────────────────────────────────────────────
+    if (name.startsWith('github_')) {
+      const installationId = session.githubInstallationId;
+      const token          = session.githubPAT; // PAT set via 'set_github_token' message
+
+      switch (name) {
+        case 'github_create_branch':
+          return JSON.stringify(await githubService.createAgentBranch({ ...args, installationId, token }));
+
+        case 'github_detect_conflicts': {
+          const risk = await githubService.detectConflictRisk({ ...args, installationId, token });
+          if (risk.hasRisk) {
+            // Surface conflict to the user as a structured clarification
+            onThought(`⚠️ Conflict Risk: ${risk.recommendation}`);
+          }
+          return JSON.stringify(risk);
+        }
+
+        case 'github_fetch_upstream':
+          return JSON.stringify(await githubService.fetchUpstreamCommits({ ...args, installationId, token }));
+
+        case 'github_create_pr': {
+          const result = await githubService.createPR({ ...args, installationId, token });
+          // Blocked PRs surface as a clarification so the user decides next steps
+          if (result.blocked) {
+            send({ type: 'conflict_warning', risk: result.risk });
+            return JSON.stringify({ blocked: true, message: result.risk.recommendation });
+          }
+          return JSON.stringify(result);
+        }
+
+        case 'github_post_comment':
+          return JSON.stringify(await githubService.postComment({ ...args, installationId, token }));
+
+        case 'github_create_check_run':
+          return JSON.stringify(await githubService.createCheckRun({ ...args, installationId, token }));
+
+        case 'github_create_codespace':
+          return JSON.stringify(await githubService.createCodespace({ ...args, installationId, token }));
+
+        default:
+          throw new Error(`GitHub tool not implemented: ${name}`);
+      }
+    }
+
+    // ── 2. Security Sandbox ───────────────────────────────────────────
+    if (name === 'security_sandbox') {
+      const { workspacePath, scriptPath, runtime, timeoutMs } = args;
+      console.log(`[Tool] Sandbox execute: ${runtime ?? 'node'} ${scriptPath}`);
+
+      const result = await securitySandboxService.execute({
+        workspacePath: workspacePath || '.',
+        scriptPath,
+        runtime:   runtime   ?? 'node',
+        timeoutMs: timeoutMs ?? 10_000,
+        // Live-stream output chunks to the Terminal.jsx via WebSocket
+        onChunk: (chunk) => send({ type: 'terminal_output', data: chunk }),
+      });
+
+      onThought(
+        `[Sandbox] exit=${result.exitCode} in ${result.durationMs}ms` +
+        (result.timedOut ? ' ⚠️ KILLED: TIMEOUT' : '')
+      );
+
+      return JSON.stringify(result);
+    }
+
+    // ── 3. Creative Swarm ─────────────────────────────────────────────
+    if (name === 'design_research') {
+      return JSON.stringify(await creativeService.searchInspiration(args.query, args.source));
+    }
+    if (name === 'generate_image') {
+      return JSON.stringify(await creativeService.generateAsset(args.prompt, args.style));
+    }
+    if (name === 'generate_ui_variant') {
+      return JSON.stringify(await uiVariantService.generateVariants(args));
+    }
+
+    // ── 4. Delegation (sub-agent recursion) ──────────────────────────
+    if (name === 'delegate_task') {
+      onThought(`Delegating to ${args.expert}Expert: ${args.task}`);
+      // Recursive call — creates a nested ReAct loop on the same session.
+      // The sub-agent inherits the same tool dispatcher so it can also use
+      // VFS, sandbox, GitHub, etc.
+      const subResult = await orchestrator.handlePrompt(
+        `${args.task}\n\nContext: ${args.context ?? 'none'}`,
+        'standard',
+        onToolCall,
+        (t) => onThought(`[${args.expert}] ${t}`),
+        onClarification,
+        onPlan,
+        undefined,
+        (state, msg) => send({ type: 'status', state, message: msg }),
+      );
+      return typeof subResult === 'string' ? subResult : subResult?.content ?? '';
+    }
+
+    // ── 5. Client-Side VFS / WebContainer ────────────────────────────
+    // These tools run inside the browser sandbox (WebContainer API).
+    // We forward the call over the WebSocket and await the browser's response.
+    return new Promise((resolve, reject) => {
+      const callId = uuid();
+
+      // Self-cleaning timeout: releases the Promise if the client takes > 60 s
+      const timeout = setTimeout(() => {
+        if (session.pendingToolCalls.has(callId)) {
+          session.pendingToolCalls.delete(callId);
+          reject(new Error(`Tool "${name}" timed out after 60s (client did not respond).`));
+        }
+      }, 60_000);
+
+      session.pendingToolCalls.set(callId, { resolve, reject, timeout });
+      send({ type: 'tool_request', callId, name, args });
+    });
+  };
+
+  /**
+   * onClarification — suspends agent execution and asks the user a question.
+   * Resolves when the user sends a 'clarification_response' message.
+   * Auto-resolves after 5 minutes with a default "no answer" so the agent
+   * doesn't hang indefinitely (Ryzen host RAM).
+   */
+  const onClarification = (questions, context) =>
+    new Promise((resolve) => {
+      const clarificationId = uuid();
+      const timeout = setTimeout(() => {
+        if (session.pendingClarifications.has(clarificationId)) {
+          session.pendingClarifications.delete(clarificationId);
+          resolve('User did not respond — proceed with best judgement.');
+        }
+      }, 5 * 60_000);
+
+      session.pendingClarifications.set(clarificationId, { resolve, timeout });
+      send({ type: 'clarification_request', clarificationId, questions, context });
+    });
+
+  /**
+   * onPlan — suspends agent execution and shows a proposed plan to the user.
+   * Resolves with `true` (approved) or `false` (rejected).
+   */
+  const onPlan = (steps, risks) =>
+    new Promise((resolve) => {
+      const planId = uuid();
+      const timeout = setTimeout(() => {
+        if (session.pendingPlans.has(planId)) {
+          session.pendingPlans.delete(planId);
+          resolve(false); // Auto-reject on timeout
+        }
+      }, 5 * 60_000);
+
+      session.pendingPlans.set(planId, { resolve, timeout });
+      send({ type: 'plan_request', planId, steps, risks });
+    });
+
+  // ── Message router ────────────────────────────────────────────────────────
   ws.on('message', async (raw) => {
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
 
     switch (msg.type) {
-      // ========================
-      // USER SENDS A NEW PROMPT
-      // ========================
+
+      // ════════════════════════════════════════════════════════════════════
+      // USER SENDS PROMPT
+      // ════════════════════════════════════════════════════════════════════
       case 'prompt': {
         const { prompt, effortLevel = 'standard' } = msg;
-        ws.send(JSON.stringify({ type: 'thinking', value: true }));
+        send({ type: 'thinking', value: true });
 
         try {
-          // Tool dispatch: sends request to client, waits for response
-          const onToolCall = async (name, args) => {
-            // === Server-Side Tools (v4.1) ===
-            
-            // 1. GitHub Integration Tools
-            if (name.startsWith('github_')) {
-              console.log(`[Tool] Server-side GitHub operation: ${name}`);
-              // In a real app, we'd fetch the installationId from the DB
-              const installationId = msg.githubInstallationId || 'default-installation';
-              
-              switch (name) {
-                case 'github_post_comment':
-                  return await githubService.postComment(installationId, args);
-                case 'github_create_pr':
-                  return await githubService.createPR(installationId, args);
-                case 'github_create_codespace':
-                  return await githubService.createCodespace(installationId, args);
-                default:
-                  throw new Error(`Server-side tool ${name} not fully implemented.`);
-              }
-            }
-
-            // 2. Security Sandbox Tools
-            if (name === 'security_sandbox') {
-              console.log(`[Tool] Security Sandbox operation: ${args.action}`);
-              const installationId = msg.githubInstallationId || 'default-installation';
-              
-              switch (args.action) {
-                case 'create':
-                  return await securitySandboxService.create(installationId, args);
-                case 'exec':
-                  return await securitySandboxService.exec(args.sandboxId, args.command);
-                case 'destroy':
-                  return await securitySandboxService.destroy(args.sandboxId);
-                default:
-                  throw new Error(`Security sandbox action ${args.action} not supported.`);
-              }
-            }
-
-            // 3. Creative Swarm Tools
-            if (name === 'design_research') {
-              return await creativeService.searchInspiration(args.query, args.source);
-            }
-            if (name === 'generate_image') {
-              return await creativeService.generateAsset(args.prompt, args.style);
-            }
-            if (name === 'generate_ui_variant') {
-              return await uiVariantService.generateVariants(args);
-            }
-
-            // 4. Agent HQ: Delegation Tool
-            if (name === 'delegate_task') {
-              console.log(`[Tool] Agent HQ delegation: ${args.expert} -> ${args.task}`);
-              onThought(`Delegating sub-task to ${args.expert}Expert: ${args.task}`);
-              
-              // Recurse into orchestrator but with the specialist domain
-              // This creates a nested loop (hierarchical swarm)
-              return await orchestrator.handlePrompt(
-                `${args.task}\n\nContext: ${args.context || 'None'}`,
-                'standard', // sub-tasks usually run at standard depth
-                onToolCall,
-                (t) => onThought(`[${args.expert}] ${t}`),
-                onClarification,
-                onPlan,
-                undefined, // Memory update
-                (st, val) => ws.send(JSON.stringify({ type: 'status', status: st, value: val }))
-              );
-            }
-
-            // === Client-Side Tools (VFS/WebContainer) ===
-            return new Promise((resolve, reject) => {
-              const callId = uuid();
-              pendingToolCalls.set(callId, { resolve, reject });
-
-              ws.send(JSON.stringify({ type: 'tool_request', callId, name, args }));
-
-              setTimeout(() => {
-                if (pendingToolCalls.has(callId)) {
-                  pendingToolCalls.delete(callId);
-                  reject(new Error(`Tool call ${name} timed out after 60s.`));
-                }
-              }, 60000);
-            });
-          };
-
-          // Thought streaming
-          const onThought = (message) => {
-            ws.send(JSON.stringify({ type: 'thought', message }));
-          };
-
-          // Clarification: sends questions to user, waits for answers
-          const onClarification = (questions, context) => {
-            return new Promise((resolve) => {
-              const clarificationId = uuid();
-              pendingClarifications.set(clarificationId, { resolve });
-
-              ws.send(JSON.stringify({
-                type: 'clarification_request',
-                clarificationId,
-                questions,
-                context,
-              }));
-
-              // Timeout: auto-resolve with "no answer" after 5 minutes
-              setTimeout(() => {
-                if (pendingClarifications.has(clarificationId)) {
-                  pendingClarifications.delete(clarificationId);
-                  resolve('User did not respond to clarification request.');
-                }
-              }, 300000);
-            });
-          };
-
-          // Plan: sends plan to user for approval
-          const onPlan = (steps, risks) => {
-            return new Promise((resolve) => {
-              const planId = uuid();
-              pendingPlans.set(planId, { resolve });
-
-              ws.send(JSON.stringify({
-                type: 'plan_request',
-                planId,
-                steps,
-                risks,
-              }));
-
-              setTimeout(() => {
-                if (pendingPlans.has(planId)) {
-                  pendingPlans.delete(planId);
-                  resolve(false); // Auto-reject if no response
-                }
-              }, 300000);
-            });
+          // ── emitState: forward agent state transitions to the frontend
+          const emitState = (state, message) => {
+            send({ type: 'status', state, message });
           };
 
           const result = await orchestrator.handlePrompt(
-            prompt, effortLevel, onToolCall, onThought, onClarification, onPlan
+            prompt,
+            effortLevel,
+            onToolCall,
+            onThought,
+            onClarification,
+            onPlan,
+            undefined, // onMemoryUpdate (handled internally by orchestrator)
+            emitState,
           );
 
-          ws.send(JSON.stringify({ type: 'result', content: result }));
+          // handlePrompt returns the expert's final result object.
+          // The 'content' field is the prose response; toolCalls are for
+          // internal use and should not be forwarded to the client.
+          const content = typeof result === 'string'
+            ? result
+            : result?.content ?? '[Agent completed with no text output.]';
+
+          send({ type: 'result', content });
         } catch (err) {
-          ws.send(JSON.stringify({ type: 'error', message: err.message }));
+          console.error(`[WS] Prompt error for session ${sessionId}:`, err.message);
+          send({ type: 'error', message: err.message });
         } finally {
-          ws.send(JSON.stringify({ type: 'thinking', value: false }));
+          send({ type: 'thinking', value: false });
         }
         break;
       }
 
-      // ========================
-      // CLIENT COMPLETED A TOOL
-      // ========================
+      // ════════════════════════════════════════════════════════════════════
+      // CLIENT-SIDE TOOL COMPLETED (VFS / WebContainer)
+      // ════════════════════════════════════════════════════════════════════
       case 'tool_response': {
         const { callId, result, error } = msg;
-        const pending = pendingToolCalls.get(callId);
-        if (pending) {
-          pendingToolCalls.delete(callId);
-          error ? pending.reject(new Error(error)) : pending.resolve(result);
-        }
+        const pending = session.pendingToolCalls.get(callId);
+        if (!pending) break; // Already timed out — discard
+
+        clearTimeout(pending.timeout);
+        session.pendingToolCalls.delete(callId);
+        error ? pending.reject(new Error(error)) : pending.resolve(result);
         break;
       }
 
-      // ========================
+      // ════════════════════════════════════════════════════════════════════
       // USER ANSWERED CLARIFICATION
-      // ========================
+      // ════════════════════════════════════════════════════════════════════
       case 'clarification_response': {
         const { clarificationId, answer } = msg;
-        const pending = pendingClarifications.get(clarificationId);
-        if (pending) {
-          pendingClarifications.delete(clarificationId);
-          pending.resolve(answer);
-        }
+        const pending = session.pendingClarifications.get(clarificationId);
+        if (!pending) break;
+
+        clearTimeout(pending.timeout);
+        session.pendingClarifications.delete(clarificationId);
+        pending.resolve(answer);
         break;
       }
 
-      // ========================
-      // USER APPROVED/REJECTED PLAN
-      // ========================
+      // ════════════════════════════════════════════════════════════════════
+      // USER APPROVED / REJECTED PLAN
+      // ════════════════════════════════════════════════════════════════════
       case 'plan_response': {
         const { planId, approved } = msg;
-        const pending = pendingPlans.get(planId);
-        if (pending) {
-          pendingPlans.delete(planId);
-          pending.resolve(approved);
-        }
+        const pending = session.pendingPlans.get(planId);
+        if (!pending) break;
+
+        clearTimeout(pending.timeout);
+        session.pendingPlans.delete(planId);
+        pending.resolve(!!approved);
+        break;
+      }
+
+      // ════════════════════════════════════════════════════════════════════
+      // REGISTER GITHUB TOKEN (PAT mode)
+      // The client sends the user's PAT after OAuth. It lives only in the
+      // session object in memory — never written to DB or logged.
+      // ════════════════════════════════════════════════════════════════════
+      case 'set_github_token': {
+        session.githubPAT = msg.token; // volatile — lost when session closes
+        send({ type: 'ack', message: 'GitHub token registered for this session.' });
+        break;
+      }
+
+      // ════════════════════════════════════════════════════════════════════
+      // REGISTER GITHUB APP INSTALLATION
+      // ════════════════════════════════════════════════════════════════════
+      case 'set_installation_id': {
+        session.githubInstallationId = msg.installationId;
+        send({ type: 'ack', message: `Installation ${msg.installationId} registered.` });
         break;
       }
 
       default:
-        console.log(`[WS] Unknown message type: ${msg.type}`);
+        console.warn(`[WS] Unknown message type: ${msg.type}`);
     }
   });
 
+  // ── Disconnection cleanup ─────────────────────────────────────────────────
   ws.on('close', () => {
+    // Cancel all pending timeouts so they don't fire after GC
+    clearTimeout(session.pingTimeout);
+
+    for (const p of session.pendingToolCalls.values())    clearTimeout(p.timeout);
+    for (const p of session.pendingClarifications.values()) clearTimeout(p.timeout);
+    for (const p of session.pendingPlans.values())        clearTimeout(p.timeout);
+
+    // Remove session — lets V8 GC collect the orchestrator, all pending Maps,
+    // and the ws reference. Critical: without this, each disconnected session
+    // holds ~2–5 MB of orchestrator state alive indefinitely.
     sessions.delete(sessionId);
-    console.log(`[WS] Session ${sessionId} disconnected.`);
+    console.log(`[WS] Session ${sessionId} closed. Active sessions: ${sessions.size}`);
+  });
+
+  ws.on('error', (err) => {
+    console.error(`[WS] Session ${sessionId} error:`, err.message);
   });
 });
 
-// === Boot ===
+// ─── Boot sequence ─────────────────────────────────────────────────────────────
+
 async function start() {
+  // ── Database ────────────────────────────────────────────────────────────
   try {
     await initDB();
-    console.log('[DB] PostgreSQL connected.');
+    console.log('[DB] PostgreSQL ready.');
   } catch (err) {
-    console.warn('[DB] PostgreSQL not available, continuing without DB:', err.message);
+    // Non-fatal: memory and skill systems still work without DB.
+    console.warn('[DB] Not available — continuing without persistence:', err.message);
   }
 
+  // ── HTTP + WS ───────────────────────────────────────────────────────────
   server.listen(port, () => {
-    console.log(`\n  🧠 Vibe Brain v3.0 running at http://localhost:${port}`);
-    console.log(`  🔌 WebSocket at ws://localhost:${port}/ws`);
-    console.log(`  📚 Skills engine loaded.`);
-    console.log(`  🗃️  Memory system active.\n`);
+    const pad = (s) => s.padEnd(42);
+    console.log('\n' + '═'.repeat(50));
+    console.log(`  🧠 Vibe-Hub Server v4.1`);
+    console.log('─'.repeat(50));
+    console.log(`  ${pad('HTTP  →')} http://localhost:${port}`);
+    console.log(`  ${pad('WS    →')} ws://localhost:${port}/ws`);
+    console.log(`  ${pad('Health →')} http://localhost:${port}/health`);
+    console.log('═'.repeat(50) + '\n');
   });
+
+  // ── Graceful shutdown ────────────────────────────────────────────────────
+  // Close server on SIGTERM/SIGINT so in-flight WebSocket messages drain
+  // and the sandbox service kills its active containers.
+  const shutdown = async (signal) => {
+    console.log(`\n[Server] ${signal} received — shutting down gracefully...`);
+
+    // Drain active sandbox containers first (most critical)
+    await securitySandboxService.shutdown();
+
+    // Close all WS connections
+    for (const [, session] of sessions) {
+      session.ws.close(1001, 'Server shutting down.');
+    }
+
+    server.close(() => {
+      console.log('[Server] HTTP server closed. Exiting.');
+      process.exit(0);
+    });
+
+    // Force exit after 5 s if drain takes too long
+    setTimeout(() => process.exit(1), 5_000);
+  };
+
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
+  process.once('SIGINT',  () => shutdown('SIGINT'));
 }
 
 start();

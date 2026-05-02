@@ -1,54 +1,47 @@
-# Examples 1:
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
 
-    Input:
-    ### Added files:
-    [src/main.py, README.md, config.json]
+# Testing
+coverage/
 
-    ### Deleted files:
-    [old/unused.py]
-    ### Modified files:
-    [utils.py]
-    ###current .gitignore Content
-    (empty)
-    Expected Output:
-    (empty — output nothing)
+# Production
+build/
+dist/
+dist-ssr/
+.next/
+out/
 
-# Example 2 (Project with artifacts):
-Input:
-### Added files:
-[pycache/main.cpython-310.pyc, dist/app.js, .env.local, .vscode/settings.json
-
-### Deleted files:
-    []
-
-### Modified files:
-[]
-### current .gitignore Content
+# Logs
+logs/
 *.log
-Expected Output:
-    #Compiled and build artifacts
-    *.pyc
-    pycache/
-    *.o
-    *.obj
-    dist/
-    build/
-    #Dependencies
-    .venv/
-    venv/
-    node_modules/
-    #Logs and temp files
-    *.log
-    *.tmp
-    *.swp
-    #Environment
-    .env
-    .env.local
-    .env.
-    #Editors
-    .vscode/
-    .idea/
-    #Original rules preserved
-    *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
 
-# Final reminder: Output ONLY the .gitignore content. If nothing should be ignored, output NOTHING.
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Vibe Hub Specific
+# (Add any project-specific ignore patterns here)

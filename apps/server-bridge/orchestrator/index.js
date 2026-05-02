@@ -5,6 +5,7 @@ import {
 } from './experts.js';
 import { buildSystemPrompt } from './skill-loader.js';
 import { loadMemory, appendBrainJournal } from '../memory/loader.js';
+import { globalContext } from './context.js';
 
 /**
  * AgentOrchestrator — Brain v4.3 (Creative Swarm Upgrade)
@@ -13,17 +14,17 @@ export class AgentOrchestrator {
   constructor() {
     this.router = new Router();
     this.experts = {
-      code: new CodeExpert(),
-      ui: new UIExpert(),
-      debug: new DebuggerExpert(),
-      git: new GitExpert(),
-      reviewer: new ReviewerExpert(),
-      manager: new ManagerExpert(),
-      security: new SecurityAuditorExpert(),
-      creative: new CreativeDirectorExpert(),
-      architect: new DesignSystemArchitect(),
-      motion: new MotionDesignerExpert(),
-      artist: new VisualAssetGenerator(),
+      code: new CodeExpert(globalContext),
+      ui: new UIExpert(globalContext),
+      debug: new DebuggerExpert(globalContext),
+      git: new GitExpert(globalContext),
+      reviewer: new ReviewerExpert(globalContext),
+      manager: new ManagerExpert(globalContext),
+      security: new SecurityAuditorExpert(globalContext),
+      creative: new CreativeDirectorExpert(globalContext),
+      architect: new DesignSystemArchitect(globalContext),
+      motion: new MotionDesignerExpert(globalContext),
+      artist: new VisualAssetGenerator(globalContext),
     };
     
     // Project context (populated by pre-scan)
@@ -104,7 +105,7 @@ export class AgentOrchestrator {
     if (this.userId) {
       if (emitState) emitState('reading', 'Retrieving project neural memory...');
       try {
-        const memory = await loadMemory(this.userId, this.projectName);
+        const memory = await loadMemory(this.userId, this.projectName, prompt);
         userMemory = memory.userMemory;
         brainJournal = memory.brainJournal;
       } catch {}

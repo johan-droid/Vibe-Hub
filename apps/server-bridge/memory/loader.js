@@ -2,8 +2,9 @@ import pool from '../db.js';
 
 /**
  * Load memory for a project: user-written memory.md + auto-learned brain journal.
+ * v3.5: Implements Keyword-based Smart Retrieval to prevent context window bloat.
  */
-export async function loadMemory(userId, projectName) {
+export async function loadMemory(userId, projectName, query = null) {
   try {
     const result = await pool.query(
       'SELECT user_memory, brain_journal FROM project_memory WHERE user_id = $1 AND project_name = $2',
@@ -15,9 +16,30 @@ export async function loadMemory(userId, projectName) {
     }
 
     const row = result.rows[0];
+    const fullJournal = row.brain_journal || [];
+
+    // Smart Retrieval: If query exists, filter journal for relevance
+    let filteredJournal = fullJournal;
+    if (query && typeof query === 'string') {
+      const keywords = query.toLowerCase().split(/\s+/).filter(k => k.length > 3);
+      if (keywords.length > 0) {
+        filteredJournal = fullJournal.filter(entry => {
+          const content = JSON.stringify(entry).toLowerCase();
+          return keywords.some(k => content.includes(k));
+        });
+
+        // Always include the 5 most recent entries to maintain short-term context
+        const recent = fullJournal.slice(-5);
+        const combined = new Set([...filteredJournal, ...recent]);
+        filteredJournal = Array.from(combined).sort((a, b) => 
+          new Date(a.timestamp) - new Date(b.timestamp)
+        );
+      }
+    }
+
     return {
       userMemory: row.user_memory || null,
-      brainJournal: row.brain_journal || [],
+      brainJournal: filteredJournal,
     };
   } catch (err) {
     console.warn('[Memory] Failed to load memory:', err.message);
@@ -41,7 +63,7 @@ export async function saveUserMemory(userId, projectName, content) {
 
 /**
  * Append an auto-learned entry to the brain journal.
- * Auto-compacts when journal exceeds 50 entries.
+ * Auto-compacts when journal exceeds 100 entries.
  */
 export async function appendBrainJournal(userId, projectName, entry) {
   try {
@@ -67,27 +89,27 @@ export async function appendBrainJournal(userId, projectName, entry) {
       [userId, projectName, JSON.stringify([journalEntry])]
     );
 
-    // Auto-compact if over 50 entries
+    // Auto-compact if over 100 entries (v3.5 raised limit for more context)
     const result = await pool.query(
       'SELECT jsonb_array_length(brain_journal) as count FROM project_memory WHERE user_id = $1 AND project_name = $2',
       [userId, projectName]
     );
 
-    if (result.rows[0]?.count > 50) {
-      // Keep only the 30 most recent entries
+    if (result.rows[0]?.count > 100) {
+      // Keep only the 50 most recent entries
       await pool.query(
         `UPDATE project_memory 
          SET brain_journal = (
            SELECT jsonb_agg(elem) FROM (
              SELECT elem FROM jsonb_array_elements(brain_journal) AS elem
              ORDER BY elem->>'timestamp' DESC
-             LIMIT 30
+             LIMIT 50
            ) sub
          )
          WHERE user_id = $1 AND project_name = $2`,
         [userId, projectName]
       );
-      console.log('[Memory] Brain journal compacted to 30 entries.');
+      console.log('[Memory] Brain journal compacted to 50 entries.');
     }
   } catch (err) {
     console.warn('[Memory] Failed to append journal:', err.message);
