@@ -26,7 +26,7 @@ export function useAgent() {
   // TypeError which crashed the socket message handler irreversibly.
   const {
     addMessage, addThought, setThinking,
-    setDiffData, setVfsTree,
+    setDiffData, setVfsTree, setStreamingMessage,
   } = useStore();
 
   const token = localStorage.getItem('vibe_token');
@@ -88,8 +88,16 @@ export function useAgent() {
       const onThinking    = (val) => setThinking(val);
       const onStateChange = ({ state, message }) =>
         useStore.getState().setAgentStatus(state, message);
-      const onResult      = (content) =>
+      const onStreamChunk = ({ delta }) => {
+        setStreamingMessage((prev) => (prev || '') + delta);
+      };
+
+      const onResult      = (content) => {
+        // Clear streaming state and push final message to history
+        setStreamingMessage(null);
         addMessage({ role: 'assistant', content });
+      };
+
       const onError       = (msg) =>
         addMessage({ role: 'system', content: `Error: ${msg}` });
       const onTerminal    = (data) =>
@@ -135,6 +143,7 @@ export function useAgent() {
       socket.on('thought',          onThought);
       socket.on('thinking',         onThinking);
       socket.on('state_change',     onStateChange);
+      socket.on('stream_chunk',     onStreamChunk);
       socket.on('result',           onResult);
       socket.on('error',            onError);
       socket.on('terminal_output',  onTerminal);
@@ -151,6 +160,7 @@ export function useAgent() {
         socket.off('thought',          onThought);
         socket.off('thinking',         onThinking);
         socket.off('state_change',     onStateChange);
+        socket.off('stream_chunk',     onStreamChunk);
         socket.off('result',           onResult);
         socket.off('error',            onError);
         socket.off('terminal_output',  onTerminal);

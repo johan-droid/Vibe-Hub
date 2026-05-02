@@ -5,29 +5,31 @@ import {
 } from './experts.js';
 import { buildSystemPrompt } from './skill-loader.js';
 import { loadMemory, appendBrainJournal } from '../memory/loader.js';
-import { globalContext } from './context.js';
+import { SharedContext } from './context.js';
+import { extractSymbols } from './parser.js';
 
 /**
- * AgentOrchestrator — Brain v4.3 (Creative Swarm Upgrade)
+ * AgentOrchestrator — Brain v5.0 (Task Queue Edition)
  */
 export class AgentOrchestrator {
   constructor() {
     this.router = new Router();
+    this.context = new SharedContext();
+    
     this.experts = {
-      code: new CodeExpert(globalContext),
-      ui: new UIExpert(globalContext),
-      debug: new DebuggerExpert(globalContext),
-      git: new GitExpert(globalContext),
-      reviewer: new ReviewerExpert(globalContext),
-      manager: new ManagerExpert(globalContext),
-      security: new SecurityAuditorExpert(globalContext),
-      creative: new CreativeDirectorExpert(globalContext),
-      architect: new DesignSystemArchitect(globalContext),
-      motion: new MotionDesignerExpert(globalContext),
-      artist: new VisualAssetGenerator(globalContext),
+      code: new CodeExpert(this.context),
+      ui: new UIExpert(this.context),
+      debug: new DebuggerExpert(this.context),
+      git: new GitExpert(this.context),
+      reviewer: new ReviewerExpert(this.context),
+      manager: new ManagerExpert(this.context),
+      security: new SecurityAuditorExpert(this.context),
+      creative: new CreativeDirectorExpert(this.context),
+      architect: new DesignSystemArchitect(this.context),
+      motion: new MotionDesignerExpert(this.context),
+      artist: new VisualAssetGenerator(this.context),
     };
     
-    // Project context (populated by pre-scan)
     this.projectTree = null;
     this.packageJson = null;
     this.userId = null;
@@ -39,14 +41,65 @@ export class AgentOrchestrator {
   }
 
   /**
+   * Flush conversation history between tasks to conserve tokens.
+   *
+   * WHAT IS FLUSHED:
+   *   - context.history (the full multi-turn conversation)
+   *   - context.sessionState (goals, completed steps, decisions)
+   *
+   * WHAT IS PRESERVED:
+   *   - context.astCache (symbol index from Sprint 3 — expensive to rebuild)
+   *   - context.fileCache (recently read file snippets)
+   *   - this.projectTree (directory listing)
+   *   - this.packageJson (stack detection)
+   *
+   * This ensures the next task starts token-light but project-aware.
+   */
+  flushContext() {
+    const preserved = {
+      astCache:  this.context.astCache,
+      fileCache: this.context.fileCache,
+    };
+
+    // Replace context with a fresh instance, then restore the caches.
+    this.context = new SharedContext();
+    this.context.astCache  = preserved.astCache;
+    this.context.fileCache = preserved.fileCache;
+
+    // Re-wire all experts to the new context instance.
+    for (const expert of Object.values(this.experts)) {
+      expert.context = this.context;
+    }
+
+    console.log(
+      `[Orchestrator] Context flushed. ` +
+      `AST cache preserved (${preserved.astCache.size} files).`
+    );
+  }
+
+  /**
    * Pre-iteration scan: Understand the project before acting.
    */
   async preScan(onToolCall) {
     try {
-      // Get project tree
       this.projectTree = await onToolCall('list_files', { path: '.' });
       
-      // Try to read package.json for stack detection
+      const sourceFiles = (this.projectTree.match(/[a-zA-Z0-9_\-\/]+\.(js|jsx|ts|tsx)/g) || [])
+        .filter(f => !f.includes('node_modules') && !f.includes('.next') && !f.includes('dist'))
+        .slice(0, 50);
+
+      console.log(`[Orchestrator] Indexing symbols for ${sourceFiles.length} files...`);
+      
+      for (const filePath of sourceFiles) {
+        try {
+          const content = await onToolCall('read_file', { path: filePath, end_line: 500 });
+          const symbols = extractSymbols(content);
+          this.context.astCache.set(filePath, symbols);
+        } catch (err) {
+          console.warn(`[Orchestrator] Failed to index ${filePath}:`, err.message);
+        }
+      }
+
       try {
         const pkgRaw = await onToolCall('read_file', { path: './package.json' });
         this.packageJson = JSON.parse(pkgRaw);
@@ -55,166 +108,127 @@ export class AgentOrchestrator {
         this.packageJson = null;
       }
 
-      // Try to read user's memory.md if it exists
       try {
         const userMemoryContent = await onToolCall('read_file', { path: './memory.md' });
         if (userMemoryContent && this.userId) {
-          // Cache it in DB for cross-session access
           const { saveUserMemory } = await import('../memory/loader.js');
           await saveUserMemory(this.userId, this.projectName, userMemoryContent);
         }
-      } catch {
-        // No memory.md in project — that's fine
-      }
+      } catch { /* ignore */ }
     } catch (err) {
       console.warn('[Orchestrator] Pre-scan partial failure:', err.message);
     }
   }
 
   /**
-   * Handle a user prompt through the Brain v3 pipeline:
-   * 1. Pre-scan project (if not done)
-   * 2. Load skills + memory
-   * 3. Route to expert
-   * 4. Execute with full ReAct loop
-   * 5. Recurrent integrity verification
+   * Handle user prompt with ReAct loop and Peer Review (Debate).
    */
-  async handlePrompt(prompt, effortLevel, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState) {
-    // 1. Pre-scan project
+  async handlePrompt(prompt, effortLevel, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream) {
     if (!this.projectTree) {
       if (emitState) emitState('reading', 'Scanning project architecture...');
       await this.preScan(onToolCall);
     }
 
-    // 2. Route to expert
-    if (emitState) emitState('thinking', 'Identifying target expertise...');
-    const domain = await this.router.route(prompt);
-    const expert = this.experts[domain] || this.experts.code;
-    
-    if (emitState) {
-      // Emit both the status and the specific expert identity
-      emitState('thinking', `Projecting expertise to the ${domain}Expert...`);
-      // We assume the caller (socket handler) knows how to handle an 'expert_change' if we pass it through emitState
-      // Or we can just include it in the status message or a new field.
-      // Better: let's add an optional field to emitState or just call it directly if passed.
-    }
+    // Performance Heartbeat (Gap #12)
+    const startTime = Date.now();
+    const heartbeat = setInterval(() => {
+      const memory = process.memoryUsage();
+      const metrics = {
+        heapUsed: Math.round(memory.heapUsed / 1024 / 1024),
+        contextTurns: this.context.history.length,
+        duration: Math.round((Date.now() - startTime) / 1000),
+      };
+      if (emitState) emitState('heartbeat', metrics);
+    }, 15000);
 
-    // 3. Load memory from DB
-    let userMemory = null;
-    let brainJournal = [];
-    if (this.userId) {
-      if (emitState) emitState('reading', 'Retrieving project neural memory...');
-      try {
-        const memory = await loadMemory(this.userId, this.projectName, prompt);
-        userMemory = memory.userMemory;
-        brainJournal = memory.brainJournal;
-      } catch {}
-    }
-
-    // 4. Build system prompt from skills + memory
-    const systemPrompt = buildSystemPrompt({
-      domain,
-      projectTree: this.projectTree,
-      packageJson: this.packageJson,
-      userMemory,
-      brainJournal,
-      effortLevel,
-    });
-
-    // 5. Memory update callback
-    const onMemoryUpdateInternal = async (entry) => {
-      if (this.userId) {
-        await appendBrainJournal(this.userId, this.projectName, entry);
-      }
-    };
-
-    // 6. Neural Loop (Self-Correction + Multi-Agent Debate)
-    const itersMap = { quick: 1, standard: 3, deep: 5 };
-    const maxIters = itersMap[effortLevel] || 3;
-    let currentIter = 0;
-    let lastError = null;
-    let finalResult = null;
-
-    while (currentIter < maxIters) {
-      currentIter++;
-
-      const iterPrompt = lastError
-        ? `The previous iteration failed or was rejected by the reviewer. Critique/Error:\n${lastError}`
-        : prompt;
-
-      // Primary Expert Execution
-      finalResult = await expert.execute(
-        iterPrompt,
-        systemPrompt,
-        onToolCall,
-        onThought,
-        onClarification,
-        onPlan,
-        onMemoryUpdateInternal,
-        emitState
-      );
-
-      if (effortLevel === 'quick') break;
-
-      // 7. Debate Phase (Peer Review)
-      // Only for Standard/Deep, and only if tool calls were made (meaning changes happened)
-      const hasExecutedTools = finalResult.toolCalls && finalResult.toolCalls.length > 0;
+    try {
+      if (emitState) emitState('thinking', 'Identifying target expertise...');
+      const { domain } = await this.router.route(prompt);
+      const expert = this.experts[domain] || this.experts.code;
       
-      if (hasExecutedTools && (effortLevel === 'standard' || effortLevel === 'deep')) {
-        if (emitState) emitState('debating', `Expert review in progress (Peer Reviewer vs ${domain}Expert)...`);
-        
-        const reviewPrompt = `
-          PRIME PROMPT: ${prompt}
-          PRIMARY EXPERT ACTIONS: ${JSON.stringify(finalResult.toolCalls)}
-          PRIMARY EXPERT THOUGHTS: ${finalResult.thoughts || 'N/A'}
-          
-          Please audit these actions against the project structure and common pitfalls.
-          If there are any hallucinations, missing imports, or logic flaws, return REVIEW_FAILED and list them.
-          If it looks perfect, return REVIEW_PASSED.
-        `;
+      if (emitState) emitState('thinking', `Projecting expertise to the ${domain}Expert...`);
 
-        const reviewResult = await this.experts.reviewer.execute(
-          reviewPrompt,
-          "You are a pedantic code auditor.",
-          async () => {}, // Reviewer doesn't call tools itself in this phase
-          (t) => onThought(`[Reviewer] ${t}`),
-          () => {}, 
-          () => {},
-          () => {},
-          emitState
+      let userMemory = null;
+      let brainJournal = [];
+      if (this.userId) {
+        try {
+          const memory = await loadMemory(this.userId, this.projectName, prompt);
+          userMemory = memory.userMemory;
+          brainJournal = memory.brainJournal;
+        } catch {}
+      }
+
+      const systemPrompt = buildSystemPrompt({
+        domain,
+        projectTree: this.projectTree,
+        packageJson: this.packageJson,
+        userMemory,
+        brainJournal,
+        effortLevel,
+      });
+
+      const onMemoryUpdateInternal = async (entry) => {
+        if (this.userId) await appendBrainJournal(this.userId, this.projectName, entry);
+      };
+
+      const itersMap = { quick: 1, standard: 3, deep: 5 };
+      const maxIters = itersMap[effortLevel] || 3;
+      let currentIter = 0;
+      let lastError = null;
+      let finalResult = null;
+
+      while (currentIter < maxIters) {
+        currentIter++;
+        const iterPrompt = lastError
+          ? `The previous iteration failed. Critique/Error:\n${lastError}`
+          : prompt;
+
+        finalResult = await expert.execute(
+          iterPrompt,
+          systemPrompt,
+          onToolCall,
+          onThought,
+          onClarification,
+          onPlan,
+          onMemoryUpdateInternal,
+          emitState,
+          onStream
         );
 
-        if (reviewResult.content.includes('REVIEW_FAILED')) {
-          lastError = reviewResult.content;
-          if (emitState) emitState('debugging', 'Peer review failed. Primary expert is revising logic...');
-          continue; // Primary expert will fix the review issues
+        if (effortLevel === 'quick') break;
+
+        // Debate Phase (Peer Review)
+        const hasExecutedTools = finalResult.toolCalls && finalResult.toolCalls.length > 0;
+        if (hasExecutedTools && (effortLevel === 'standard' || effortLevel === 'deep')) {
+          if (emitState) emitState('debating', 'Peer review in progress...');
+          
+          const reviewPrompt = `PRIME PROMPT: ${prompt}\nACTIONS: ${JSON.stringify(finalResult.toolCalls)}\nTHOUGHTS: ${finalResult.thoughts}\nAudit these actions. If logic flaws exist, return REVIEW_FAILED. If perfect, return REVIEW_PASSED.`;
+          const reviewResult = await this.experts.reviewer.execute(reviewPrompt, "Pedantic Auditor", async () => {}, (t) => onThought(`[Reviewer] ${t}`), () => {}, () => {}, onMemoryUpdateInternal, emitState, onStream);
+
+          if (reviewResult.content.includes('REVIEW_FAILED')) {
+            lastError = reviewResult.content;
+            if (emitState) emitState('debugging', 'Review failed. Self-correcting...');
+            continue;
+          }
+        }
+
+        // Verification Phase
+        if (emitState) emitState('verifying', 'Validating build integrity...');
+        try {
+          const buildResultRaw = await onToolCall('run_command', { command: 'npm', args: ['run', 'build'] });
+          const buildResult = typeof buildResultRaw === 'string' ? JSON.parse(buildResultRaw) : buildResultRaw;
+          if (buildResult.exitCode === 0) break;
+          lastError = (buildResult.stdout || buildResult.stderr || 'Build failed').slice(-500);
+        } catch (err) {
+          lastError = err.message;
         }
       }
 
-      // 8. Verification Phase (Technical Integrity)
-      if (emitState) emitState('verifying', 'Validating build integrity...');
-      try {
-        const buildResult = await onToolCall('run_command', { command: 'npm', args: ['run', 'build'] });
-        const exitCode = typeof buildResult === 'object' ? buildResult.exitCode : 1;
+      try { this.projectTree = await onToolCall('list_files', { path: '.' }); } catch {}
+      return finalResult;
 
-        if (exitCode === 0) {
-          if (emitState) emitState('idle', 'Task completed successfully and verified.');
-          break;
-        } else {
-          lastError = (buildResult.output || '').slice(-800);
-          if (emitState) emitState('debugging', 'Build failure detected. Self-correcting...');
-        }
-      } catch (err) {
-        lastError = err.message;
-      }
+    } finally {
+      clearInterval(heartbeat);
     }
-
-    // Refresh tree
-    try {
-      this.projectTree = await onToolCall('list_files', { path: '.' });
-    } catch {}
-
-    return finalResult;
   }
-
 }

@@ -194,7 +194,7 @@ export class SecuritySandboxService extends EventEmitter {
    * @param {string}  opts.scriptPath     - Path *inside* the container to execute
    *                                        (relative to /workspace, e.g. "test/run.js")
    * @param {string}  [opts.runtime]      - "node" (default) | "sh" | "python3"
-   * @param {number}  [opts.timeoutMs]    - Override default timeout (max 60 000)
+   * @param {Object}  [opts.env]          - Environment variables (Object)
    * @param {Function}[opts.onChunk]      - Optional streaming callback(chunk: string)
    *                                        called as stdout/stderr bytes arrive
    * @returns {Promise<ExecutionResult>}
@@ -204,6 +204,7 @@ export class SecuritySandboxService extends EventEmitter {
     scriptPath,
     runtime = 'node',
     timeoutMs = LIMITS.DEFAULT_TIMEOUT_MS,
+    env = {},
     onChunk,
   }) {
     // ── Validate inputs ────────────────────────────────────────────────────
@@ -247,6 +248,9 @@ export class SecuritySandboxService extends EventEmitter {
         // We pass args as an array — never interpolated into a shell string —
         // to prevent command injection if scriptPath contains shell metacharacters.
         Cmd: [runtime, `/workspace/${normalised}`],
+
+        // Pass environment variables
+        Env: Object.entries(env).map(([k, v]) => `${k}=${v}`),
 
         // Attach streams for capture
         AttachStdout: true,

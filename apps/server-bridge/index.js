@@ -50,6 +50,7 @@ import { requireAuth, verifyToken } from './auth/middleware.js';
 import googleAuth                from './auth/google.js';
 import githubAuth                from './auth/github.js';
 import { AgentOrchestrator }     from './orchestrator/index.js';
+import { TaskManager }           from './orchestrator/task-manager.js';
 import { githubService }         from './github/index.js';
 import { securitySandboxService } from './sandbox/security-sandbox.js';
 import { creativeService }       from './creative/index.js';
@@ -138,16 +139,20 @@ app.post('/api/copilot/chat', requireAuth, async (req, res) => {
     orchestrator.setUser(req.user.id);
 
     // Stream Gemini tokens as OpenAI-compatible SSE events
-    const noopToolCall = async () => '{}';
-    const result = await orchestrator.handlePrompt(
-      lastUserMsg, 'quick',
-      noopToolCall, () => {}, () => {}, () => {}
+    await orchestrator.handlePrompt(
+      lastUserMsg, 
+      'quick',
+      async () => '{}', // Tool calls disabled in REST fallback for now
+      () => {},         // onThought
+      () => {},         // onClarification
+      () => {},         // onPlan
+      undefined,        // onMemoryUpdate
+      () => {},         // emitState
+      (delta) => {
+        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: delta }, finish_reason: null }] })}\n\n`);
+      }
     );
 
-    const content = typeof result === 'string' ? result : result?.content ?? '';
-
-    // Emit as SSE data chunks (Copilot format)
-    res.write(`data: ${JSON.stringify({ choices: [{ delta: { content }, finish_reason: null }] })}\n\n`);
     res.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`);
     res.write('data: [DONE]\n\n');
   } catch (err) {
@@ -224,11 +229,12 @@ wss.on('connection', (ws, req) => {
     ws,
     orchestrator,
     user:                decoded,
-    pendingToolCalls:    new Map(), // callId → { resolve, reject, timeout }
+    pendingToolCalls:    new Map(),
     pendingClarifications: new Map(),
     pendingPlans:        new Map(),
     pongReceived:        true,
     pingTimeout:         null,
+    taskManager:         null, // lazy-init on first task message
   };
   sessions.set(sessionId, session);
 
@@ -355,11 +361,52 @@ wss.on('connection', (ws, req) => {
         onPlan,
         undefined,
         (state, msg) => send({ type: 'status', state, message: msg }),
+        (delta) => send({ type: 'stream_chunk', delta }),
       );
       return typeof subResult === 'string' ? subResult : subResult?.content ?? '';
     }
 
-    // ── 5. Client-Side VFS / WebContainer ────────────────────────────
+    // ── 5. Security Sandbox (Gap #9) ─────────────────────────────────
+    if (name === 'security_sandbox') {
+      try {
+        const result = await securitySandboxService.execute({
+          workspacePath: args.workspacePath || process.cwd(),
+          scriptPath: args.scriptPath,
+          runtime: args.runtime || 'node',
+          timeoutMs: args.timeoutMs,
+          onChunk: (chunk) => send({ type: 'terminal_output', value: chunk }),
+        });
+        return JSON.stringify(result);
+      } catch (err) {
+        return `ERROR: ${err.message}`;
+      }
+    }
+
+    // ── 6. Auto-Sandbox for run_command ─────────────────────────────
+    // If the agent tries to run a script directly, force it into the sandbox.
+    if (name === 'run_command' && args.command) {
+      const scriptCommands = ['node', 'npm', 'python3', 'python', 'bun', 'sh', 'bash'];
+      const isScript = scriptCommands.includes(args.command);
+      
+      if (isScript) {
+        console.log(`[Orchestrator] Auto-sandboxing command: ${args.command} ${args.args?.join(' ')}`);
+        try {
+          // For npm test/run, we need to map it to a script execution if possible.
+          // For now, we'll try to run it in the sandbox with 'sh' or 'node'.
+          const result = await securitySandboxService.execute({
+            workspacePath: process.cwd(),
+            scriptPath: args.args?.length > 0 ? args.args[0] : 'index.js', // Heuristic
+            runtime: args.command === 'node' ? 'node' : 'sh',
+            onChunk: (chunk) => send({ type: 'terminal_output', value: chunk }),
+          });
+          return JSON.stringify(result);
+        } catch (err) {
+          console.warn('[Orchestrator] Auto-sandbox failed, falling back to WebContainer:', err.message);
+        }
+      }
+    }
+
+    // ── 7. Client-Side VFS / WebContainer ────────────────────────────
     // These tools run inside the browser sandbox (WebContainer API).
     // We forward the call over the WebSocket and await the browser's response.
     return new Promise((resolve, reject) => {
@@ -427,6 +474,18 @@ wss.on('connection', (ws, req) => {
       // USER SENDS PROMPT
       // ════════════════════════════════════════════════════════════════════
       case 'prompt': {
+        // Gap #3: Basic Rate Limiting (20 prompts / 15 min)
+        const now = Date.now();
+        const WINDOW_MS = 15 * 60 * 1000;
+        const MAX_PROMPTS = 20;
+
+        session.promptHistory = (session.promptHistory || []).filter(t => now - t < WINDOW_MS);
+        if (session.promptHistory.length >= MAX_PROMPTS) {
+          send({ type: 'error', message: 'Rate limit exceeded. Please wait a few minutes before sending more prompts.' });
+          break;
+        }
+        session.promptHistory.push(now);
+
         const { prompt, effortLevel = 'standard' } = msg;
         send({ type: 'thinking', value: true });
 
@@ -445,6 +504,7 @@ wss.on('connection', (ws, req) => {
             onPlan,
             undefined, // onMemoryUpdate (handled internally by orchestrator)
             emitState,
+            (delta) => send({ type: 'stream_chunk', delta }),
           );
 
           // handlePrompt returns the expert's final result object.
@@ -523,6 +583,73 @@ wss.on('connection', (ws, req) => {
       case 'set_installation_id': {
         session.githubInstallationId = msg.installationId;
         send({ type: 'ack', message: `Installation ${msg.installationId} registered.` });
+        break;
+      }
+
+      // ════════════════════════════════════════════════════════════════════
+      // TASK MANAGER — Queue Management
+      // ════════════════════════════════════════════════════════════════════
+      // add_task     — push a task onto the queue
+      // run_queue     — start sequential execution
+      // cancel_task   — mark a pending task as cancelled
+      // abort_queue   — stop after current task finishes
+      // get_task_status — return full queue snapshot
+      // ════════════════════════════════════════════════════════════════════
+
+      case 'add_task': {
+        // Lazy-init the TaskManager on first use
+        if (!session.taskManager) {
+          const emitState = (state, message) => send({ type: 'status', state, message });
+          session.taskManager = new TaskManager(orchestrator, {
+            onToolCall,
+            onThought,
+            onClarification,
+            onPlan,
+            emitState,
+            onStream: (delta) => send({ type: 'stream_chunk', delta }),
+            send,
+          });
+        }
+        const { title, prompt: taskPrompt, effortLevel: taskEffort } = msg;
+        if (!taskPrompt) { send({ type: 'error', message: 'add_task requires a prompt.' }); break; }
+        const id = session.taskManager.addTask(title, taskPrompt, taskEffort);
+        send({ type: 'task_added', id, queue: session.taskManager.getStatus() });
+        break;
+      }
+
+      case 'run_queue': {
+        if (!session.taskManager || session.taskManager._pendingCount() === 0) {
+          send({ type: 'error', message: 'No pending tasks in the queue.' });
+          break;
+        }
+        // Fire-and-forget — the TaskManager emits events as it progresses
+        session.taskManager.runQueue().catch(err =>
+          send({ type: 'error', message: `Queue error: ${err.message}` })
+        );
+        break;
+      }
+
+      case 'cancel_task': {
+        const cancelled = session.taskManager?.cancelTask(msg.id);
+        send({ type: 'ack', message: cancelled ? `Task ${msg.id} cancelled.` : `Task ${msg.id} not found or not cancellable.` });
+        break;
+      }
+
+      case 'abort_queue': {
+        session.taskManager?.abortQueue();
+        send({ type: 'ack', message: 'Queue will stop after the current task completes.' });
+        break;
+      }
+
+      case 'prioritize_task': {
+        const prioritized = session.taskManager?.prioritizeTask(msg.id);
+        send({ type: 'ack', message: prioritized ? `Task ${msg.id} moved to front.` : `Task ${msg.id} not found.` });
+        break;
+      }
+
+      case 'get_task_status': {
+        const status = session.taskManager?.getStatus() ?? { tasks: [], counts: {}, running: false };
+        send({ type: 'task_status', ...status });
         break;
       }
 

@@ -1,3 +1,5 @@
+import { v4 as uuid } from 'uuid';
+
 /**
  * CreativeService — Phase 5
  * 
@@ -26,17 +28,33 @@ export class CreativeService {
   }
 
   /**
-   * Generate a visual asset using DALL-E or Stable Diffusion.
+   * Generate a visual asset.
+   * v4.0: Structured for DALL-E 3 / Stable Diffusion integration.
    */
   async generateAsset(prompt, style = 'minimalist') {
     console.log(`[Creative] Generating asset: ${prompt} (${style})`);
     
-    // In production, call OpenAI/DALL-E 3
-    const mockUrl = `https://cdn.vibe-platform.io/assets/gen_${Math.random().toString(36).slice(2)}.png`;
+    // In production, you would call OpenAI/Midjourney/Gemini-Imagen
+    // const response = await openai.images.generate({ model: "dall-e-3", prompt, style });
     
-    const asset = { prompt, style, url: mockUrl, createdAt: new Date() };
+    // Using a realistic placeholder service for high-fidelity demos
+    const seed = Math.floor(Math.random() * 1000000);
+    const mockUrl = `https://pollinations.ai/p/${encodeURIComponent(prompt)}?width=1024&height=1024&seed=${seed}&model=flux`;
+    
+    const asset = { 
+      id: uuid(),
+      prompt, 
+      style, 
+      url: mockUrl, 
+      createdAt: new Date(),
+      status: 'completed',
+      metadata: {
+        dimensions: '1024x1024',
+        model: 'flux-vibe-core'
+      }
+    };
+    
     this.generationHistory.push(asset);
-    
     return asset;
   }
 

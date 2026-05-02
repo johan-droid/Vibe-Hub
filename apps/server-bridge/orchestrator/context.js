@@ -57,4 +57,3 @@ Decisions: ${this.sessionState.decisions.join(', ') || 'None'}
   }
 }
 
-export const globalContext = new SharedContext();

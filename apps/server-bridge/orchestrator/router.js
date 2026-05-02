@@ -13,11 +13,11 @@ const SKILLS_DIR = path.join(__dirname, 'skills');
  */
 class AIService {
     constructor() {
-        if (!process.env.GEMINI_API_KEY) {
-            throw new Error('GEMINI_API_KEY is missing from environment variables.');
+        this.apiKey = process.env.GEMINI_API_KEY;
+        if (this.apiKey) {
+            this.client = new GoogleGenerativeAI(this.apiKey);
+            this.model = this.client.getGenerativeModel({ model: 'gemini-2.0-flash' });
         }
-        this.client = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        this.model = this.client.getGenerativeModel({ model: 'gemini-2.0-flash' });
     }
 
     static getInstance() {
@@ -69,6 +69,11 @@ export class Router {
         }
 
         // L2: LLM Intent Classification (Zero-Shot)
+        if (!this.ai.model) {
+            console.warn('[Router] LLM not available for L2 routing. Falling back to "code".');
+            return await this.getExpertConfig('code');
+        }
+
         try {
             const classificationPrompt = `
                 Act as a lightweight intent classifier. Classify the user prompt into exactly ONE of these domains: 
@@ -81,7 +86,7 @@ export class Router {
                 - ui: Building React components, CSS, or Tailwind styling.
                 - code: General programming tasks, logic implementation, or refactoring.
                 - git: Repository management, branching, or commits.
-
+ 
                 User Prompt: "${prompt}"
                 Respond with only the domain name.
             `;

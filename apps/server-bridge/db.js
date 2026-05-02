@@ -29,6 +29,8 @@ pool.on('error', (err) => {
 export async function initDB(retries = 5) {
   try {
     await pool.query(`
+      CREATE EXTENSION IF NOT EXISTS vector;
+
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         email VARCHAR(255) UNIQUE NOT NULL,
@@ -58,6 +60,16 @@ export async function initDB(retries = 5) {
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(user_id, project_name)
+      );
+
+      CREATE TABLE IF NOT EXISTS semantic_memory (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        project_name VARCHAR(255) NOT NULL,
+        content TEXT NOT NULL,
+        embedding vector(768), -- Gemini text-embedding-004 is 768 dims
+        metadata JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ DEFAULT NOW()
       );
 
       CREATE TABLE IF NOT EXISTS github_installations (

@@ -10,7 +10,8 @@ let _geminiClient = null;
 function getGeminiClient() {
   if (!_geminiClient) {
     if (!process.env.GEMINI_API_KEY) {
-      throw new Error('[Agent] GEMINI_API_KEY is not set. Cannot initialise Gemini SDK.');
+      console.warn('[Agent] GEMINI_API_KEY is not set. SDK operations will fail if invoked.');
+      return { getGenerativeModel: () => ({ startChat: () => ({ sendMessageStream: () => { throw new Error('GEMINI_API_KEY missing'); } }) }) };
     }
     _geminiClient = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   }
@@ -41,14 +42,8 @@ export class EmployeeBase {
 
   /**
    * Execute the full ReAct loop.
-   *
-   * @returns {{ content: string, toolCalls: Array }}
-   *   BUG #3 FIX: Previously returned a plain string. orchestrator/index.js reads
-   *   `finalResult.toolCalls` to decide whether to run the peer-review phase.
-   *   A string return means `.toolCalls` is always undefined → debate phase is
-   *   always skipped → the reviewer expert is never consulted.
    */
-  async execute(prompt, systemPrompt, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState) {
+  async execute(prompt, systemPrompt, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream) {
     // Neural Context Management
     if (this.history.length > this.historyLimit * 2 && !this._summarizing) {
       this._summarizing = true;
@@ -71,18 +66,54 @@ export class EmployeeBase {
 
     const chat = model.startChat({ history: this.history });
 
+    /**
+     * Internal helper for streaming with retries (Gap #5)
+     */
+    const sendMessageWithRetry = async (msg, retries = 3, delay = 1000) => {
+      let lastErr;
+      for (let i = 0; i <= retries; i++) {
+        try {
+          // Gap #1: Streaming (using sendMessageStream)
+          const result = await chat.sendMessageStream(msg);
+          
+          let fullText = '';
+          for await (const chunk of result.stream) {
+            const parts = chunk.candidates?.[0]?.content?.parts || [];
+            const textPart = parts.find(p => p.text)?.text;
+            
+            if (textPart) {
+              fullText += textPart;
+              if (onStream) onStream(textPart);
+            }
+          }
+          
+          return await result.response;
+        } catch (err) {
+          lastErr = err;
+          // Retry on 429 (quota) or 503 (overload)
+          const isRetryable = err.message.includes('429') || err.message.includes('503') || err.message.includes('quota');
+          if (isRetryable && i < retries) {
+            console.warn(`[Agent] Gemini error (attempt ${i + 1}/${retries + 1}): ${err.message}. Retrying in ${delay}ms...`);
+            await new Promise(r => setTimeout(r, delay));
+            delay *= 2; // Exponential backoff
+            continue;
+          }
+          throw err;
+        }
+      }
+      throw lastErr;
+    };
+
     // Neural Phase: Initial Thought
     if (emitState) emitState('thinking', 'Reasoning about prompt...');
-    let result   = await chat.sendMessage(prompt);
-    let response = result.response;
+    let response = await sendMessageWithRetry(prompt);
 
     const maxIterations = 25;
     let iteration = 0;
 
-    // BUG #3 FIX: Track all tool calls made across iterations so the caller
-    // (orchestrator) can inspect them for the peer-review phase.
+    // BUG #3 FIX: Track all tool calls made across iterations
     const allToolCalls = [];
-    let calls = []; // calls from the most recent iteration
+    let calls = [];
 
     while (response.candidates?.[0]?.content?.parts?.some(p => p.functionCall) && iteration < maxIterations) {
       iteration++;
@@ -145,8 +176,7 @@ export class EmployeeBase {
 
       // Thinking Phase: Process observations
       if (emitState) emitState('thinking', 'Processing observations...');
-      result   = await chat.sendMessage(toolResponses);
-      response = result.response;
+      response = await sendMessageWithRetry(toolResponses);
     }
 
     const finalText = response.text();
