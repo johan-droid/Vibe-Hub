@@ -66,8 +66,8 @@ export default function LandingPage() {
               <Brain size={22} className="text-on-primary" />
             </Surface>
             <div className="flex flex-col">
-              <span className="font-display text-lg font-bold tracking-tight">Vibe Hub</span>
-              <span className="label-large text-primary opacity-60 !text-[8px]">Autonomous_Swarm_v4.0</span>
+              <span className="font-display text-lg font-bold tracking-tight">Selina</span>
+              <span className="label-large text-primary opacity-60 !text-[8px]">Autonomous_Intelligence_v4.0</span>
             </div>
           </div>
 
@@ -109,7 +109,7 @@ export default function LandingPage() {
           </h1>
 
           <p className="text-lg md:text-xl text-on-surface-variant max-w-xl mx-auto leading-relaxed mb-10 opacity-70">
-            A high-performance workspace where specialized autonomous agents solve complex engineering tasks with surgical precision.
+            Selina is a professional-grade autonomous workspace. Powered by a specialized swarm of experts, orchestrated for surgical precision.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
@@ -176,9 +176,9 @@ export default function LandingPage() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="headline-small md:text-4xl mb-4 font-bold tracking-tight">Expert Orchestration.</h2>
+            <h2 className="headline-small md:text-4xl mb-4 font-bold tracking-tight">Selina: Expert Orchestration.</h2>
             <p className="text-on-surface-variant max-w-lg mx-auto text-base opacity-60">
-              Generic models fail at scale. Vibe Hub uses a specialized swarm to handle domain-specific logic.
+              Generic models fail at scale. Selina uses a specialized swarm to handle domain-specific logic.
             </p>
           </motion.div>
 
@@ -213,7 +213,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-8 flex flex-col md:flex-row justify-between items-center gap-10">
           <div className="flex items-center gap-4 opacity-50">
             <Brain size={24} className="text-primary" />
-            <span className="font-display font-bold text-xl">Vibe Hub</span>
+            <span className="font-display font-bold text-xl">Selina</span>
           </div>
           <div className="flex gap-12 label-large text-on-surface-variant">
             <a href="#" className="hover:text-primary transition-colors">Documentation</a>

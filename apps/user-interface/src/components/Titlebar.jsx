@@ -36,11 +36,11 @@ export default function Titlebar({ onOpenSettings }) {
             <Cpu size={22} className="text-on-primary" />
           </Surface>
           <div className="flex flex-col">
-            <span className="headline-small font-black tracking-tighter text-on-surface leading-none">
-              VIBE HUB
+            <span className="headline-small font-black tracking-tighter text-on-surface leading-none uppercase">
+              SELINA
             </span>
             <span className="label-small font-bold tracking-[0.3em] text-primary uppercase opacity-60">
-              Neural_Core
+              Swarm_Mind
             </span>
           </div>
         </div>

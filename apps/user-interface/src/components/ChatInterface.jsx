@@ -120,7 +120,7 @@ export default function ChatInterface({ onSend }) {
           </Surface>
           <div className="flex flex-col">
             <h3 className="label-large font-bold text-on-surface uppercase tracking-[0.2em]">
-              {neuralStatus.expert}_PROTOCOL
+              SELINA_{neuralStatus.expert}_PROTOCOL
             </h3>
             <span className="label-small text-primary opacity-60 font-mono flex items-center gap-2">
               <span className="w-1 h-1 bg-current rounded-full" />
