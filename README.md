@@ -4,7 +4,7 @@
 
 ### *Powered by **Selina** — The Autonomous Neural Swarm*
 
-![Selina](https://raw.githubusercontent.com/vibe-platform/vibe-hub/main/docs/assets/selina.png)
+<img src="docs/assets/selina.png" alt="Selina — Neural Swarm Core" width="360"/>
 
 > *"I don't write code. I **think** in systems, **reason** in architectures, and **execute** in milliseconds."*
 > — **Selina**, Neural Swarm Core
