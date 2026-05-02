@@ -1,9 +1,9 @@
 import React from 'react';
 import { GitBranch, Globe, Shield, Cpu, Wifi } from 'lucide-react';
-import { useStore } from '../store/useStore';
-import AgentNeuralStatus from './AgentNeuralStatus';
-import { Surface } from './ui/Surface';
-import { Chip } from './ui/Chip';
+import { useStore } from '../../../store/useStore';
+import AgentNeuralStatus from '../../swarm/components/NeuralStatus';
+import { Surface } from './Surface';
+import { Chip } from './Chip';
 import { motion } from 'framer-motion';
 
 /**

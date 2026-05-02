@@ -1,9 +1,9 @@
 import React from 'react';
 import { Settings, Sidebar as SidebarIcon, MessageSquare, Cpu, Layers, Sun, Moon } from 'lucide-react';
-import { useStore } from '../store/useStore';
-import { IconButton } from './ui/IconButton';
-import { Surface } from './ui/Surface';
-import { Chip } from './ui/Chip';
+import { useStore } from '../../../store/useStore';
+import { IconButton } from './IconButton';
+import { Surface } from './Surface';
+import { Chip } from './Chip';
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**

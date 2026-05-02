@@ -1,11 +1,11 @@
 import React, { useMemo } from 'react';
 import { Eye, Zap, Code, FileCode, GitPullRequest, ChevronRight, X, Check } from 'lucide-react';
 import ReactDiffViewer from 'react-diff-viewer-continued';
-import { useStore } from '../store/useStore';
+import { useStore } from '../../../store/useStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Surface } from './ui/Surface';
-import { Button } from './ui/Button';
-import { IconButton } from './ui/IconButton';
+import { Surface } from '../../shared/components/Surface';
+import { Button } from '../../shared/components/Button';
+import { IconButton } from '../../shared/components/IconButton';
 
 /**
  * DiffViewer — Material 3 Surgical Projection

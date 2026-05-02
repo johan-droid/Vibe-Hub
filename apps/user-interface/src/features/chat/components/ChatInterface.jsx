@@ -4,10 +4,10 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useStore } from '../store/useStore';
-import { Surface } from './ui/Surface';
-import { IconButton } from './ui/IconButton';
-import { Button } from './ui/Button';
+import { useStore } from '../../../store/useStore';
+import { Surface } from '../../shared/components/Surface';
+import { IconButton } from '../../shared/components/IconButton';
+import { Button } from '../../shared/components/Button';
 
 /**
  * ChatInterface — Material 3 Intelligence Conduit
@@ -34,7 +34,52 @@ export default function ChatInterface({ onSend }) {
     setInput('');
   };
 
-  const MessageBubble = useMemo(() => ({ content, role }) => {
+  const ThoughtSection = ({ thoughts }) => {
+    const [isExpanded, setIsExpanded] = useState(true);
+    if (!thoughts || thoughts.length === 0) return null;
+
+    return (
+      <div className="mb-4 w-full">
+        <button 
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/5 border border-primary/10 hover:bg-primary/10 transition-colors group"
+        >
+          <Brain size={10} className="text-primary opacity-60" />
+          <span className="text-[9px] font-mono font-black text-primary uppercase tracking-widest">Neural_Monologue</span>
+          <motion.div animate={{ rotate: isExpanded ? 90 : 0 }}>
+             <Code size={8} className="text-primary opacity-40" />
+          </motion.div>
+        </button>
+        
+        <AnimatePresence>
+          {isExpanded && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden mt-2 ml-4 pl-4 border-l border-primary/10"
+            >
+              <div className="space-y-1.5">
+                {thoughts.map((t, i) => (
+                  <motion.div 
+                    key={i}
+                    initial={{ x: -10, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    className="flex items-center gap-2 text-[10px] font-mono text-on-surface-variant opacity-40 hover:opacity-100 transition-opacity"
+                  >
+                    <div className="w-1 h-1 rounded-full bg-primary/40" />
+                    <span className="leading-tight">{typeof t === 'string' ? t : t.content}</span>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
+
+  const MessageBubble = useMemo(() => ({ content, role, thoughts = [] }) => {
     const isUser = role === 'user';
     return (
       <div className={`flex flex-col gap-3 max-w-[92%] ${isUser ? "items-end ml-auto" : "items-start mr-auto"}`}>
@@ -52,6 +97,8 @@ export default function ChatInterface({ onSend }) {
           )}
         </div>
         
+        {!isUser && <ThoughtSection thoughts={thoughts} />}
+
         <Surface
           elevation={isUser ? 2 : 1}
           shape="xl"
@@ -154,13 +201,13 @@ export default function ChatInterface({ onSend }) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.4, ease: [0.2, 0, 0, 1] }}
             >
-              <MessageBubble content={m.content} role={m.role} />
+              <MessageBubble content={m.content} role={m.role} thoughts={m.thoughts || []} />
             </motion.div>
           ))}
           
           {streamingMessage && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <MessageBubble content={streamingMessage} role="assistant" />
+              <MessageBubble content={streamingMessage} role="assistant" thoughts={useStore.getState().agentThoughts} />
             </motion.div>
           )}
 

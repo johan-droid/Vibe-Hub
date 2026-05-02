@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback, memo } from 'react';
 import { Terminal as TermIcon, Trash2, ChevronDown, Circle, Play } from 'lucide-react';
-import { useStore } from '../store/useStore';
+import { useStore } from '../../../store/useStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Surface } from './ui/Surface';
-import { IconButton } from './ui/IconButton';
-import { Button } from './ui/Button';
+import { Surface } from '../../shared/components/Surface';
+import { IconButton } from '../../shared/components/IconButton';
+import { Button } from '../../shared/components/Button';
 
 // ─── M3-Aligned ANSI Color Map ───────────────────────────────────────────────
 const ANSI_CLASSES = {

@@ -1,8 +1,8 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useStore } from '../store/useStore';
+import { useStore } from '../../../store/useStore';
 import { Brain, Search, PenTool, Terminal, ShieldCheck, Loader2, MessageSquare, Palette, Sparkles, Activity } from 'lucide-react';
-import { Surface } from './ui/Surface';
+import { Surface } from '../../shared/components/Surface';
 
 /**
  * AgentNeuralStatus — Material 3 Orchestration Indicator

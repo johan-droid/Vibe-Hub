@@ -4,8 +4,8 @@ import {
   FileImage, FileArchive, ChevronRight, Search, Loader2, GitBranch,
   CircleDot, PenLine, Lock
 } from 'lucide-react';
-import { useStore } from '../store/useStore';
-import { Surface } from './ui/Surface';
+import { useStore } from '../../../store/useStore';
+import { Surface } from '../../shared/components/Surface';
 
 // ─── Pure Icon Mapping ────────────────────────────────────────────────────────
 const FILE_ICONS = {

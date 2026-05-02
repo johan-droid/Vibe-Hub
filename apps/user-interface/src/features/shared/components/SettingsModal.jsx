@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { X, Globe, Lock, ShieldCheck, Cpu, Palette, Box, Trash2, LogOut, Settings as SettingsIcon } from 'lucide-react';
-import { useStore } from '../store/useStore';
+import { useStore } from '../../../store/useStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Surface } from './ui/Surface';
-import { Button } from './ui/Button';
-import { IconButton } from './ui/IconButton';
+import { Surface } from './Surface';
+import { Button } from './Button';
+import { IconButton } from './IconButton';
 
 /**
  * SettingsModal — Material 3 Command Center

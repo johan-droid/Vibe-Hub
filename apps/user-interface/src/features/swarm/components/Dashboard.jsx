@@ -1,9 +1,10 @@
 import React from 'react';
 import { Cpu, Zap, Activity, Brain, Server, Globe, ActivitySquare, ShieldCheck } from 'lucide-react';
-import { useStore } from '../store/useStore';
-import { BentoGrid, BentoCard } from './ui/BentoGrid';
-import { Surface } from './ui/Surface';
+import { useStore } from '../../../store/useStore';
+import { BentoGrid, BentoCard } from '../../shared/components/BentoGrid';
+import { Surface } from '../../shared/components/Surface';
 import { motion } from 'framer-motion';
+import SwarmVisualizer from './SwarmVisualizer';
 
 /**
  * IntelligenceDashboard — Material 3 Bento Showcase
@@ -114,32 +115,8 @@ export default function IntelligenceDashboard() {
         ))}
       </BentoGrid>
       
-      <Surface elevation={2} shape="2xl" className="p-8 border border-outline-variant/20 bg-surface-container-low relative overflow-hidden group">
-        <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity duration-700">
-           <ActivitySquare size={120} />
-        </div>
-        <div className="relative z-10 flex flex-col gap-4 max-w-xl">
-           <div className="flex items-center gap-3">
-              <Surface shape="full" className="w-8 h-8 flex items-center justify-center bg-primary/10">
-                <ShieldCheck size={18} className="text-primary" />
-              </Surface>
-              <span className="label-large font-bold uppercase tracking-[0.2em] text-on-surface">Active Cluster Protocol</span>
-           </div>
-           <p className="body-large text-on-surface-variant leading-relaxed opacity-70">
-             The neural swarm is currently operating in high-performance mode. All pathways are optimized for 
-             zero-latency mutation processing and real-time semantic indexing.
-           </p>
-           <div className="flex gap-4 mt-2">
-              <div className="flex items-center gap-2 label-small text-primary font-bold uppercase tracking-widest">
-                 <div className="w-1.5 h-1.5 rounded-full bg-current" />
-                 AST_Indexing_Enabled
-              </div>
-              <div className="flex items-center gap-2 label-small text-secondary font-bold uppercase tracking-widest">
-                 <div className="w-1.5 h-1.5 rounded-full bg-current" />
-                 Secure_VFS_Link
-              </div>
-           </div>
-        </div>
+      <Surface elevation={2} shape="2xl" className="h-[400px] border border-outline-variant/20 bg-surface-container-low overflow-hidden">
+        <SwarmVisualizer />
       </Surface>
     </div>
   );

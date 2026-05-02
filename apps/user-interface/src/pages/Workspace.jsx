@@ -3,129 +3,44 @@ import { Navigate } from 'react-router-dom';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileCode2, LayoutGrid, Terminal as TerminalIcon, Sparkles } from 'lucide-react';
-import FileTree from '../components/FileTree';
-import ChatInterface from '../components/ChatInterface';
-import DiffViewer from '../components/DiffViewer';
-import Terminal from '../components/Terminal';
-import SettingsModal from '../components/SettingsModal';
-import Titlebar from '../components/Titlebar';
-import StatusBar from '../components/StatusBar';
-import IntelligenceDashboard from '../components/IntelligenceDashboard';
+import { FileCode2, LayoutGrid, Terminal as TerminalIcon, Sparkles, X, Search as SearchIcon, Activity } from 'lucide-react';
 import { useAgent } from '../hooks/useAgent';
 import { useStore } from '../store/useStore';
-import { Surface } from '../components/ui/Surface';
+
+// Layout & UI
+import Titlebar from '../features/shared/components/Titlebar';
+import StatusBar from '../features/shared/components/StatusBar';
+import SettingsModal from '../features/shared/components/SettingsModal';
+import { Surface } from '../features/shared/components/Surface';
+import { ResizeHandle } from '../features/shared/components/ResizeHandle';
+import { NavIcon } from '../features/shared/components/NavIcon';
+import { NeuralProjection } from '../features/shared/components/NeuralProjection';
+
+// Feature Components (Static)
+import SidebarFileTree from '../features/editor/components/SidebarFileTree';
+import ChatInterface from '../features/chat/components/ChatInterface';
+import { EditorTabs } from '../features/editor/components/EditorTabs';
+import { FileViewer } from '../features/editor/components/FileViewer';
+
+// Feature Components (Lazy Load for Performance)
+const DiffViewer = React.lazy(() => import('../features/editor/components/DiffViewer'));
+const Terminal = React.lazy(() => import('../features/editor/components/Terminal'));
+const IntelligenceDashboard = React.lazy(() => import('../features/swarm/components/Dashboard'));
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
-const SIDEBAR_W = 340;   
-const CHAT_W    = 460;   
+const NAV_RAIL_W = 64;
+const MIN_SIDEBAR_W = 200;
+const MAX_SIDEBAR_W = 600;
+const MIN_CHAT_W = 300;
+const MAX_CHAT_W = 800;
 const MIN_TERM_H = 140;  
 const MAX_TERM_H = 700;  
 const DEFAULT_TERM_H = 300;
+const DEFAULT_SIDEBAR_W = 320;
+const DEFAULT_CHAT_W = 440;
 
-// ─── Resize Handle ───────────────────────────────────────────────────────────
-function ResizeHandle({ direction = 'vertical', onDrag, className = '' }) {
-  const isDragging = useRef(false);
-  const origin = useRef(0);
-
-  const onPointerDown = useCallback((e) => {
-    e.preventDefault();
-    isDragging.current = true;
-    origin.current = direction === 'vertical' ? e.clientY : e.clientX;
-    e.currentTarget.setPointerCapture(e.pointerId);
-  }, [direction]);
-
-  const onPointerMove = useCallback((e) => {
-    if (!isDragging.current) return;
-    const current = direction === 'vertical' ? e.clientY : e.clientX;
-    const delta = current - origin.current;
-    origin.current = current;
-    onDrag(delta);
-  }, [direction, onDrag]);
-
-  const onPointerUp = useCallback(() => {
-    isDragging.current = false;
-  }, []);
-
-  return (
-    <div
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      className={
-        `group shrink-0 relative z-30 transition-all duration-300 select-none 
-        ${direction === 'vertical' ? 'h-1 w-full cursor-ns-resize' : 'w-1 h-full cursor-ew-resize'} ${className}`
-      }
-    >
-      <div className={`absolute inset-0 m-auto bg-outline-variant/10 group-hover:bg-primary/40 transition-colors ${direction === 'vertical' ? 'h-[1px] w-full' : 'w-[1px] h-full'}`} />
-      <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-primary/5 ${direction === 'vertical' ? 'h-4 -top-1.5' : 'w-4 -left-1.5'}`} />
-    </div>
   );
 }
-
-// ─── File Viewer ──────────────────────────────────────────────────────────────
-const FileViewer = React.memo(function FileViewer({ path, content }) {
-  const language = React.useMemo(() => {
-    if (!path) return 'text';
-    const ext = path.split('.').pop()?.toLowerCase();
-    const MAP = { js: 'javascript', jsx: 'jsx', ts: 'typescript', tsx: 'tsx',
-                  json: 'json', css: 'css', scss: 'scss', md: 'markdown',
-                  sh: 'bash', py: 'python', html: 'html', go: 'go', rs: 'rust' };
-    return MAP[ext] ?? 'text';
-  }, [path]);
-
-  if (!content) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center gap-8 bg-surface-container-lowest/50">
-        <Surface elevation={3} shape="3xl" className="p-12 bg-surface-container-highest relative group overflow-hidden border border-outline-variant/20 shadow-2xl">
-           <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
-           <LayoutGrid size={64} className="text-primary transition-transform duration-1000 group-hover:rotate-12 group-hover:scale-110" />
-        </Surface>
-        <div className="flex flex-col items-center gap-3">
-          <h2 className="headline-medium font-black tracking-tighter text-on-surface uppercase italic">
-            Neural_Core_Active
-          </h2>
-          <p className="label-large text-on-surface-variant font-bold opacity-40 uppercase tracking-[0.4em] flex items-center gap-3">
-            <Sparkles size={16} />
-            Await_Input_Stream
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="h-full flex flex-col overflow-hidden bg-surface-container-lowest">
-      <div className="h-14 border-b border-outline-variant/20 flex items-center px-8 gap-4 bg-surface-container-low/30 backdrop-blur-2xl shrink-0">
-        <FileCode2 size={18} className="text-primary opacity-60" />
-        <div className="flex flex-col">
-          <span className="label-medium font-bold text-on-surface tracking-tight truncate max-w-md">{path.split('/').pop()}</span>
-          <span className="text-[8px] font-mono text-on-surface-variant opacity-40 uppercase tracking-widest">{path}</span>
-        </div>
-      </div>
-      <div className="flex-1 overflow-auto scrollbar-none">
-        <SyntaxHighlighter
-          language={language}
-          style={vscDarkPlus}
-          showLineNumbers
-          wrapLines={false}
-          customStyle={{
-            margin: 0,
-            padding: '3rem',
-            background: 'transparent',
-            fontSize: '13px',
-            lineHeight: '1.9',
-            fontFamily: 'JetBrains Mono, monospace',
-            minHeight: '100%',
-          }}
-          lineNumberStyle={{ color: 'hsl(var(--outline-variant))', opacity: 0.2, minWidth: '4em', paddingRight: '3em', textAlign: 'right' }}
-        >
-          {content}
-        </SyntaxHighlighter>
-      </div>
-    </div>
-  );
-});
 
 // ─── Workspace ─────────────────────────────────────────────────────────────────
 export default function Workspace() {
@@ -137,6 +52,9 @@ export default function Workspace() {
     activeFileContent, activeFilePath,
   } = useStore();
 
+  const [sidebarMode, setSidebarMode] = useState('explorer'); // 'explorer', 'swarm', 'search'
+  const [sidebarW, setSidebarW] = useState(DEFAULT_SIDEBAR_W);
+  const [chatW, setChatW] = useState(DEFAULT_CHAT_W);
   const [terminalH, setTerminalH] = useState(DEFAULT_TERM_H);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const { sendPrompt } = useAgent();
@@ -144,6 +62,14 @@ export default function Workspace() {
   if (!user && !localStorage.getItem('vibe_token')) {
     return <Navigate to="/" replace />;
   }
+
+  const onSidebarDrag = useCallback((delta) => {
+    setSidebarW((w) => Math.max(MIN_SIDEBAR_W, Math.min(MAX_SIDEBAR_W, w + delta)));
+  }, []);
+
+  const onChatDrag = useCallback((delta) => {
+    setChatW((w) => Math.max(MIN_CHAT_W, Math.min(MAX_CHAT_W, w - delta)));
+  }, []);
 
   const onTerminalDrag = useCallback((delta) => {
     setTerminalH((h) => Math.max(MIN_TERM_H, Math.min(MAX_TERM_H, h - delta)));
@@ -154,34 +80,84 @@ export default function Workspace() {
       <Titlebar onOpenSettings={() => setIsSettingsOpen(true)} />
 
       <div className="flex-1 flex overflow-hidden min-h-0 bg-surface">
-        {/* LEFT: Explorer & Metrics (Bento Style) */}
-        <AnimatePresence initial={false}>
-          {!sidebarCollapsed && (
-            <motion.div
-              initial={{ width: 0, opacity: 0, x: -30, filter: 'blur(8px)' }}
-              animate={{ width: SIDEBAR_W, opacity: 1, x: 0, filter: 'blur(0px)' }}
-              exit={{ width: 0, opacity: 0, x: -30, filter: 'blur(8px)' }}
-              transition={{ type: 'spring', damping: 28, stiffness: 220 }}
-              className="flex flex-col shrink-0 overflow-hidden border-r border-outline-variant/20 bg-surface-container-low"
-            >
-              <div className="flex-1 min-h-0">
-                <FileTree />
-              </div>
-              <div className="h-[48%] min-h-[340px] border-t border-outline-variant/20 overflow-hidden bg-surface-container-lowest/50">
-                <IntelligenceDashboard />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* LEFT: Nav Rail & Sidebar */}
+        <div className="flex shrink-0 h-full">
+          {/* Nav Rail */}
+          <Surface 
+            elevation={1} 
+            className="w-[64px] flex flex-col items-center py-6 gap-6 border-r border-outline-variant/10 bg-surface-container-lowest z-40"
+          >
+            <NavIcon 
+              icon={LayoutGrid} 
+              active={sidebarMode === 'explorer'} 
+              onClick={() => { setSidebarMode('explorer'); setSidebarCollapsed(false); }}
+            />
+            <NavIcon 
+              icon={Activity} 
+              active={sidebarMode === 'swarm'} 
+              onClick={() => { setSidebarMode('swarm'); setSidebarCollapsed(false); }}
+            />
+            <NavIcon 
+              icon={SearchIcon} 
+              active={sidebarMode === 'search'} 
+              onClick={() => { setSidebarMode('search'); setSidebarCollapsed(false); }}
+            />
+            <div className="mt-auto">
+               <NavIcon icon={Sparkles} />
+            </div>
+          </Surface>
+
+          <AnimatePresence initial={false}>
+            {!sidebarCollapsed && (
+              <motion.div
+                initial={{ width: 0, opacity: 0 }}
+                animate={{ width: sidebarW, opacity: 1 }}
+                exit={{ width: 0, opacity: 0 }}
+                transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                className="flex flex-col shrink-0 overflow-hidden border-r border-outline-variant/20 bg-surface-container-low relative"
+              >
+                <div className="flex-1 min-h-0">
+                  <React.Suspense fallback={<div className="h-full bg-surface-container-low animate-pulse" />}>
+                    {sidebarMode === 'explorer' && <SidebarFileTree />}
+                    {sidebarMode === 'swarm' && <IntelligenceDashboard />}
+                    {sidebarMode === 'search' && (
+                      <div className="p-8 flex flex-col items-center justify-center h-full opacity-20 gap-4">
+                        <SearchIcon size={32} />
+                        <span className="label-small font-bold uppercase tracking-widest">Global_Search_Pending</span>
+                      </div>
+                    )}
+                  </React.Suspense>
+                </div>
+                {sidebarMode === 'explorer' && (
+                  <div className="h-[35%] min-h-[240px] border-t border-outline-variant/20 overflow-hidden bg-surface-container-lowest/50">
+                    <IntelligenceDashboard />
+                  </div>
+                )}
+                
+                <ResizeHandle 
+                  direction="horizontal" 
+                  onDrag={onSidebarDrag} 
+                  className="absolute right-0 top-0 h-full w-1.5 hover:bg-primary/20" 
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         {/* CENTER: Editor & Terminal */}
         <main className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-surface-container-lowest relative z-10">
-          <div className="flex-1 min-h-0 relative shadow-inner">
-            {activeTab === 'diff' ? (
-              <DiffViewer onApply={() => {}} onDiscard={() => {}} />
-            ) : (
-              <FileViewer path={activeFilePath} content={activeFileContent} />
-            )}
+          <div className="flex-1 min-h-0 relative flex flex-col bg-surface-container-lowest shadow-inner">
+            <EditorTabs />
+            <div className="flex-1 min-h-0 relative">
+              <NeuralProjection />
+              <React.Suspense fallback={<div className="h-full bg-surface-container-lowest animate-pulse" />}>
+                {activeTab === 'diff' ? (
+                  <DiffViewer onApply={() => {}} onDiscard={() => {}} />
+                ) : (
+                  <FileViewer path={activeFilePath} content={activeFileContent} />
+                )}
+              </React.Suspense>
+            </div>
           </div>
 
           <ResizeHandle direction="vertical" onDrag={onTerminalDrag} />
@@ -204,7 +180,9 @@ export default function Workspace() {
                </div>
             </div>
             <div className="h-[calc(100%-40px)]">
-              <Terminal />
+              <React.Suspense fallback={<div className="h-full bg-black/40 animate-pulse" />}>
+                <Terminal />
+              </React.Suspense>
             </div>
           </Surface>
         </main>
@@ -213,12 +191,17 @@ export default function Workspace() {
         <AnimatePresence initial={false}>
           {!chatCollapsed && (
             <motion.div
-              initial={{ width: 0, opacity: 0, x: 30, filter: 'blur(8px)' }}
-              animate={{ width: CHAT_W, opacity: 1, x: 0, filter: 'blur(0px)' }}
-              exit={{ width: 0, opacity: 0, x: 30, filter: 'blur(8px)' }}
-              transition={{ type: 'spring', damping: 28, stiffness: 220 }}
-              className="shrink-0 border-l border-outline-variant/20 overflow-hidden bg-surface-container-lowest shadow-[-20px_0_40px_-20px_rgba(0,0,0,0.2)]"
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: chatW, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              className="shrink-0 border-l border-outline-variant/20 overflow-hidden bg-surface-container-lowest shadow-[-20px_0_40px_-20px_rgba(0,0,0,0.2)] relative"
             >
+              <ResizeHandle 
+                direction="horizontal" 
+                onDrag={onChatDrag} 
+                className="absolute left-0 top-0 h-full w-1.5 hover:bg-primary/20" 
+              />
               <ChatInterface onSend={sendPrompt} />
             </motion.div>
           )}

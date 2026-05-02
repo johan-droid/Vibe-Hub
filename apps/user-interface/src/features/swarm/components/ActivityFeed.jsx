@@ -1,8 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Terminal, PenTool, GitBranch, Search, AlertCircle, CheckCircle2, Zap, Activity } from 'lucide-react';
-import { useStore } from '../store/useStore';
-import { Surface } from './ui/Surface';
+import { useStore } from '../../../store/useStore';
+import { Surface } from '../../shared/components/Surface';
 
 /**
  * ActivityFeed — Material 3 Telemetry Stream

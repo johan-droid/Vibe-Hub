@@ -49,6 +49,7 @@ export const useStore = create(
 
       // VFS & Code State
       vfsTree: [],
+      openFiles: [], // Array<{ path, content, dirty }>
       activeFilePath: null,
       activeFileContent: null,
       diffData: null, // { path, oldValue, newValue }
@@ -97,11 +98,43 @@ export const useStore = create(
 
       // VFS & Code
       setVfsTree: (tree) => set({ vfsTree: tree }),
-      setActiveFile: (path, content) => set({ 
-        activeFilePath: path, 
-        activeFileContent: content, 
-        activeTab: 'editor' 
+      
+      openFile: (path, content) => set((state) => {
+        const isAlreadyOpen = state.openFiles.find(f => f.path === path);
+        const newOpenFiles = isAlreadyOpen 
+          ? state.openFiles 
+          : [...state.openFiles, { path, content, dirty: false }];
+        
+        return { 
+          openFiles: newOpenFiles,
+          activeFilePath: path, 
+          activeFileContent: content, 
+          activeTab: 'editor' 
+        };
       }),
+
+      closeFile: (path) => set((state) => {
+        const newOpenFiles = state.openFiles.filter(f => f.path !== path);
+        let nextPath = state.activeFilePath;
+        let nextContent = state.activeFileContent;
+
+        if (state.activeFilePath === path) {
+          const lastFile = newOpenFiles[newOpenFiles.length - 1];
+          nextPath = lastFile?.path || null;
+          nextContent = lastFile?.content || null;
+        }
+
+        return {
+          openFiles: newOpenFiles,
+          activeFilePath: nextPath,
+          activeFileContent: nextContent,
+          activeTab: nextPath ? 'editor' : state.activeTab
+        };
+      }),
+
+      setActiveFile: (path, content) => {
+        useStore.getState().openFile(path, content);
+      },
       setDiffData: (diff) => set({ diffData: diff, activeTab: 'diff' }),
 
       // BUG #10 FIX: O(1) append with 2000-line eviction.

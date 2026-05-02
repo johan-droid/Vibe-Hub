@@ -45,6 +45,11 @@
     --radius-lg: 0.75rem;
     --radius-md: 0.5rem;
     --radius-sm: 0.25rem;
+
+    /* --- Glassmorphism 2.0 Tokens --- */
+    --glass-blur: 24px;
+    --glass-opacity: 0.7;
+    --glass-border: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   [data-theme='light'] {
@@ -122,7 +127,12 @@
 
   /* Glass Effects */
   .glass {
-    @apply backdrop-blur-2xl bg-surface-container/40 border border-on-surface/[0.05];
+    @apply backdrop-blur-[var(--glass-blur)] bg-surface-container-lowest/70 border border-white/5 shadow-xl relative overflow-hidden;
+  }
+  
+  .glass::after {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none;
   }
 
   /* M3 Typography */
@@ -171,4 +181,22 @@
   .emphasized { transition-timing-function: cubic-bezier(0.2, 0, 0, 1); }
   .ease-emphasized { transition-timing-function: cubic-bezier(0.2, 0, 0, 1); }
   .ease-standard { transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
+
+  @keyframes scan {
+    from { transform: translateY(-100%); }
+    to { transform: translateY(100%); }
+  }
+
+  @keyframes scan-reverse {
+    from { transform: translateY(100%); }
+    to { transform: translateY(-100%); }
+  }
+
+  .animate-scan {
+    animation: scan 4s linear infinite;
+  }
+
+  .animate-scan-reverse {
+    animation: scan-reverse 4s linear infinite;
+  }
 }

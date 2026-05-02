@@ -7,9 +7,9 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { api } from '../services/api';
-import { Surface } from '../components/ui/Surface';
-import { Button } from '../components/ui/Button';
-import { BentoGrid, BentoCard } from '../components/ui/BentoGrid';
+import { Surface } from '../features/shared/components/Surface';
+import { Button } from '../features/shared/components/Button';
+import { BentoGrid, BentoCard } from '../features/shared/components/BentoGrid';
 
 const SwarmBackground = () => (
   <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
