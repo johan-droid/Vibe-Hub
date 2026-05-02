@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import { upsertUser } from '../db.js';
 import { generateToken } from './middleware.js';
 
@@ -13,6 +14,14 @@ const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
  * Redirect user to Google's consent screen
  */
 router.get('/google', (req, res) => {
+  const state = crypto.randomBytes(32).toString('hex');
+  res.cookie('google_oauth_state', state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 15 * 60 * 1000, // 15 minutes
+  });
+
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID,
     redirect_uri: process.env.GOOGLE_REDIRECT_URI,
@@ -20,6 +29,7 @@ router.get('/google', (req, res) => {
     scope: 'openid email profile',
     access_type: 'offline',
     prompt: 'consent',
+    state,
   });
   res.redirect(`${GOOGLE_AUTH_URL}?${params}`);
 });
@@ -29,8 +39,19 @@ router.get('/google', (req, res) => {
  * Exchange authorization code for tokens, then create/update user
  */
 router.get('/google/callback', async (req, res) => {
-  const { code } = req.query;
+  const { code, state } = req.query;
+  const cookieState = req.cookies?.google_oauth_state || (req.headers.cookie
+    ?.split('; ')
+    .find(row => row.startsWith('google_oauth_state='))
+    ?.split('=')[1]);
+
   if (!code) return res.status(400).json({ error: 'Missing authorization code.' });
+  if (!state || !cookieState || state !== cookieState) {
+    return res.status(403).json({ error: 'Invalid OAuth state.' });
+  }
+
+  // Clear state cookie
+  res.clearCookie('google_oauth_state');
 
   try {
     // Exchange code for tokens
