@@ -6,7 +6,7 @@ services:
     region: oregon
     plan: free
     rootDir: apps/server-bridge
-    buildCommand: npm install
+    buildCommand: npm install --legacy-peer-deps
     startCommand: node index.js
     envVars:
       - key: NODE_ENV
@@ -53,7 +53,7 @@ services:
     name: vibe-hub-ui
     runtime: static
     rootDir: apps/user-interface
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --legacy-peer-deps && npm run build
     staticPublishPath: dist
     envVars:
       - key: VITE_API_BASE
