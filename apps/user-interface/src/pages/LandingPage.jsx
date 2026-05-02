@@ -43,8 +43,6 @@ export default function LandingPage() {
   
   const navigate = useNavigate();
   const user = useStore(s => s.user);
-  const navigate = useNavigate();
-  const user = useStore(s => s.user);
 
   const handleLaunch = (provider = 'google') => {
     if (localStorage.getItem('vibe_token')) {
