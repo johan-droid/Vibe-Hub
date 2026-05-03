@@ -22,10 +22,10 @@ if (missingVars.length > 0) {
  * Redirect user to GitHub's consent screen
  */
 router.get('/github', (req, res) => {
-  if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
+  if (missingVars.length > 0) {
     return res.status(500).json({
       error: 'OAuth not configured',
-      message: 'GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET environment variables must be set'
+      message: `Missing required environment variables: ${missingVars.join(', ')}`
     });
   }
 
@@ -51,8 +51,11 @@ router.get('/github', (req, res) => {
  * Exchange code for access token, fetch user profile
  */
 router.get('/github/callback', async (req, res) => {
-  if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
-    return res.status(500).json({ error: 'GitHub OAuth is not configured on the server.' });
+  if (missingVars.length > 0) {
+    return res.status(500).json({
+      error: 'OAuth not configured',
+      message: `Missing required environment variables: ${missingVars.join(', ')}`
+    });
   }
 
   const { code, state } = req.query;

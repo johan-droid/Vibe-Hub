@@ -21,10 +21,10 @@ if (missingVars.length > 0) {
  * Redirect user to Google's consent screen
  */
 router.get('/google', (req, res) => {
-  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+  if (missingVars.length > 0) {
     return res.status(500).json({
       error: 'OAuth not configured',
-      message: 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables must be set'
+      message: `Missing required environment variables: ${missingVars.join(', ')}`
     });
   }
 
@@ -53,8 +53,11 @@ router.get('/google', (req, res) => {
  * Exchange authorization code for tokens, then create/update user
  */
 router.get('/google/callback', async (req, res) => {
-  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-    return res.status(500).json({ error: 'Google OAuth is not configured on the server.' });
+  if (missingVars.length > 0) {
+    return res.status(500).json({
+      error: 'OAuth not configured',
+      message: `Missing required environment variables: ${missingVars.join(', ')}`
+    });
   }
 
   const { code, state } = req.query;
