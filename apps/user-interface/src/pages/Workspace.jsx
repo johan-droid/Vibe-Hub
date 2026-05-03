@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { LayoutGrid, Terminal as TerminalIcon, Sparkles, Search as SearchIcon, Activity, ShieldAlert } from 'lucide-react';
 import { useAgent } from '../hooks/useAgent';
 import { useStore } from '../store/useStore';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 
 // Layout & UI
 import Titlebar from '../features/shared/components/Titlebar';
@@ -45,11 +46,14 @@ export default function Workspace() {
     sidebarCollapsed,
     setSidebarCollapsed,
     chatCollapsed,
+    setChatCollapsed,
     activeTab,
     activeFileContent, activeFilePath,
   } = useStore();
 
-  const [sidebarMode, setSidebarMode] = useState('explorer'); // 'explorer', 'swarm', 'search'
+  const [sidebarMode, setSidebarMode] = useState('explorer'); // 'explorer', 'swarm', 'search', 'security'
+  const [mobileView, setMobileView] = useState('editor'); // 'sidebar', 'editor', 'chat', 'terminal'
+  const isMobile = useMediaQuery('(max-width: 768px)');
   const [sidebarW, setSidebarW] = useState(DEFAULT_SIDEBAR_W);
   const [chatW, setChatW] = useState(DEFAULT_CHAT_W);
   const [terminalH, setTerminalH] = useState(DEFAULT_TERM_H);
@@ -82,45 +86,71 @@ export default function Workspace() {
           {/* Nav Rail */}
           <Surface 
             elevation={1} 
-            className="w-[64px] flex flex-col items-center py-6 gap-6 border-r border-outline-variant/10 bg-surface-container-lowest z-40"
+            className="fixed bottom-0 inset-x-0 h-16 flex-row md:relative md:w-[64px] md:h-auto flex md:flex-col items-center md:py-6 justify-around md:justify-start gap-2 md:gap-6 border-t md:border-t-0 md:border-r border-outline-variant/10 bg-surface-container-lowest z-40"
           >
             <NavIcon 
               icon={LayoutGrid} 
               active={sidebarMode === 'explorer'} 
-              onClick={() => { setSidebarMode('explorer'); setSidebarCollapsed(false); }}
+              onClick={() => { setSidebarMode('explorer'); setSidebarCollapsed(false); if (isMobile) setMobileView('sidebar'); }}
               ariaLabel="Explorer"
             />
             <NavIcon 
               icon={Activity} 
               active={sidebarMode === 'swarm'} 
-              onClick={() => { setSidebarMode('swarm'); setSidebarCollapsed(false); }}
+              onClick={() => { setSidebarMode('swarm'); setSidebarCollapsed(false); if (isMobile) setMobileView('sidebar'); }}
               ariaLabel="Swarm Dashboard"
             />
             <NavIcon 
               icon={SearchIcon} 
               active={sidebarMode === 'search'} 
-              onClick={() => { setSidebarMode('search'); setSidebarCollapsed(false); }}
+              onClick={() => { setSidebarMode('search'); setSidebarCollapsed(false); if (isMobile) setMobileView('sidebar'); }}
               ariaLabel="Global Search"
             />
             <NavIcon
               icon={ShieldAlert}
               active={sidebarMode === 'security'}
-              onClick={() => { setSidebarMode('security'); setSidebarCollapsed(false); }}
+              onClick={() => { setSidebarMode('security'); setSidebarCollapsed(false); if (isMobile) setMobileView('sidebar'); }}
               ariaLabel="Security Audit"
             />
-            <div className="mt-auto">
+
+            {isMobile && (
+              <NavIcon
+                icon={TerminalIcon}
+                active={mobileView === 'terminal'}
+                onClick={() => setMobileView('terminal')}
+                ariaLabel="Terminal"
+              />
+            )}
+            {isMobile && (
+              <NavIcon
+                icon={Sparkles}
+                active={mobileView === 'chat'}
+                onClick={() => { setMobileView('chat'); setChatCollapsed(false); }}
+                ariaLabel="Chat"
+              />
+            )}
+            {isMobile && (
+              <NavIcon
+                icon={LayoutGrid}
+                active={mobileView === 'editor'}
+                onClick={() => setMobileView('editor')}
+                ariaLabel="Editor"
+              />
+            )}
+
+            <div className="mt-auto hidden md:block">
                <NavIcon icon={Sparkles} ariaLabel="AI Assistant" />
             </div>
           </Surface>
 
           <AnimatePresence initial={false}>
-            {!sidebarCollapsed && (
+            {(!sidebarCollapsed && (!isMobile || mobileView === 'sidebar')) && (
               <motion.div
                 initial={{ width: 0, opacity: 0 }}
-                animate={{ width: sidebarW, opacity: 1 }}
+                animate={{ width: isMobile ? '100vw' : sidebarW, opacity: 1 }}
                 exit={{ width: 0, opacity: 0 }}
                 transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                className="flex flex-col shrink-0 overflow-hidden border-r border-outline-variant/20 bg-surface-container-low relative"
+                className="flex flex-col shrink-0 overflow-hidden border-r border-outline-variant/20 bg-surface-container-low relative z-30 md:z-auto absolute md:static inset-0 md:inset-auto h-[calc(100%-4rem)] md:h-full bg-surface"
               >
                 <div className="flex-1 min-h-0">
                   <React.Suspense fallback={<div className="h-full bg-surface-container-low animate-pulse" />}>
@@ -144,7 +174,7 @@ export default function Workspace() {
                 <ResizeHandle 
                   direction="horizontal" 
                   onDrag={onSidebarDrag} 
-                  className="absolute right-0 top-0 h-full w-1.5 hover:bg-primary/20" 
+                  className="absolute right-0 top-0 h-full w-1.5 hover:bg-primary/20 hidden md:block"
                 />
               </motion.div>
             )}
@@ -152,8 +182,8 @@ export default function Workspace() {
         </div>
 
         {/* CENTER: Editor & Terminal */}
-        <main className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-surface-container-lowest relative z-10">
-          <div className="flex-1 min-h-0 relative flex flex-col bg-surface-container-lowest shadow-inner">
+        <main className={`flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-surface-container-lowest relative z-10 ${(isMobile && mobileView !== 'editor' && mobileView !== 'terminal') ? 'hidden' : ''}`}>
+          <div className={`flex-1 min-h-0 relative flex flex-col bg-surface-container-lowest shadow-inner ${(isMobile && mobileView === 'terminal') ? 'hidden' : ''}`}>
             <EditorTabs />
             <div className="flex-1 min-h-0 relative">
               <NeuralProjection />
@@ -167,13 +197,13 @@ export default function Workspace() {
             </div>
           </div>
 
-          <ResizeHandle direction="vertical" onDrag={onTerminalDrag} />
+          <div className="hidden md:block"><ResizeHandle direction="vertical" onDrag={onTerminalDrag} /></div>
           
           <Surface 
             elevation={1} 
             shape="none" 
-            className="shrink-0 overflow-hidden border-t border-outline-variant/20 bg-surface-container-low"
-            style={{ height: terminalH }}
+            className={`shrink-0 overflow-hidden border-t border-outline-variant/20 bg-surface-container-low ${(isMobile && mobileView !== 'terminal') ? 'hidden' : ''}`}
+            style={{ height: isMobile ? '100%' : terminalH }}
           >
             <div className="h-10 px-8 flex items-center justify-between bg-surface-container-high/40 border-b border-outline-variant/10">
                <div className="flex items-center gap-3">
@@ -196,18 +226,18 @@ export default function Workspace() {
 
         {/* RIGHT: Chat Interface */}
         <AnimatePresence initial={false}>
-          {!chatCollapsed && (
+          {(!chatCollapsed && (!isMobile || mobileView === 'chat')) && (
             <motion.div
               initial={{ width: 0, opacity: 0 }}
-              animate={{ width: chatW, opacity: 1 }}
+              animate={{ width: isMobile ? '100vw' : chatW, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-              className="shrink-0 border-l border-outline-variant/20 overflow-hidden bg-surface-container-lowest shadow-[-20px_0_40px_-20px_rgba(0,0,0,0.2)] relative"
+              className="shrink-0 border-l border-outline-variant/20 overflow-hidden bg-surface-container-lowest shadow-[-20px_0_40px_-20px_rgba(0,0,0,0.2)] relative z-30 md:z-auto absolute md:static inset-0 md:inset-auto h-[calc(100%-4rem)] md:h-full bg-surface"
             >
               <ResizeHandle 
                 direction="horizontal" 
                 onDrag={onChatDrag} 
-                className="absolute left-0 top-0 h-full w-1.5 hover:bg-primary/20" 
+                className="absolute left-0 top-0 h-full w-1.5 hover:bg-primary/20 hidden md:block"
               />
               <ChatInterface onSend={sendPrompt} />
             </motion.div>
@@ -215,7 +245,7 @@ export default function Workspace() {
         </AnimatePresence>
       </div>
 
-      <StatusBar />
+      {!isMobile && <StatusBar />}
 
       <SettingsModal
         isOpen={isSettingsOpen}
