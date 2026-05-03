@@ -1,7 +1,7 @@
-const Parser = require('tree-sitter');
-const JavaScript = require('tree-sitter-javascript');
-const fs = require('fs/promises');
-const path = require('path');
+import Parser from 'tree-sitter';
+import JavaScript from 'tree-sitter-javascript';
+import fs from 'fs/promises';
+import path from 'path';
 
 class SemanticGraphBuilder {
   constructor() {
@@ -55,4 +55,4 @@ class SemanticGraphBuilder {
   }
 }
 
-module.exports = new SemanticGraphBuilder();
+export default new SemanticGraphBuilder();

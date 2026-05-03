@@ -1,12 +1,13 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-const fs = require('fs').promises;
-const path = require('path');
-const { interpret } = require('xstate');
-const agentMachine = require('./state_machine');
-const { selectSkillProfile } = require('./skill-graph.js');
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { interpret } from 'xstate';
+import agentMachine from './state_machine.js';
+import { selectSkillProfile } from './skill-graph.js';
 
 // Resolve directory for skill files
-const __dirname = path.dirname(__filename);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SKILLS_DIR = path.join(__dirname, 'skills');
 
 /**
@@ -203,4 +204,4 @@ async function handleCodeRequest(req, res) {
     }
 }
 
-module.exports = { Router, router, handleCodeRequest };
+export { Router, router, handleCodeRequest };

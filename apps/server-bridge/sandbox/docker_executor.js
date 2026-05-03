@@ -1,8 +1,8 @@
-const { exec } = require('child_process');
-const util = require('util');
-const fs = require('fs/promises');
-const path = require('path');
-const execPromise = util.promisify(exec);
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import fs from 'fs/promises';
+import path from 'path';
+const execPromise = promisify(exec);
 
 class SandboxExecutor {
   /**
@@ -48,4 +48,4 @@ class SandboxExecutor {
   }
 }
 
-module.exports = SandboxExecutor;
+export default SandboxExecutor;

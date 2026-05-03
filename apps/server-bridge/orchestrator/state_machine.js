@@ -1,8 +1,8 @@
-const { createMachine, assign } = require('xstate');
-const OrgContextBuilder = require('../org_core/context_builder');
-const UserContextBuilder = require('../user_env/context_builder');
-const semanticGraphBuilder = require('../memory/loader');
-const SandboxExecutor = require('../sandbox/docker_executor');
+import { createMachine, assign } from 'xstate';
+import OrgContextBuilder from '../org_core/context_builder.js';
+import UserContextBuilder from '../user_env/context_builder.js';
+import semanticGraphBuilder from '../memory/loader.js';
+import SandboxExecutor from '../sandbox/docker_executor.js';
 
 const agentMachine = createMachine({
   id: 'SaaSCodingAgent',
@@ -127,4 +127,4 @@ const agentMachine = createMachine({
   }
 });
 
-module.exports = agentMachine;
+export default agentMachine;

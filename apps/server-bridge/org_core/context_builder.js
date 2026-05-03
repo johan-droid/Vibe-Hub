@@ -1,5 +1,5 @@
-const fs = require('fs/promises');
-const path = require('path');
+import fs from 'fs/promises';
+import path from 'path';
 
 class OrgContextBuilder {
   static async buildGlobalConstraints() {
@@ -31,4 +31,4 @@ class OrgContextBuilder {
   }
 }
 
-module.exports = OrgContextBuilder;
+export default OrgContextBuilder;

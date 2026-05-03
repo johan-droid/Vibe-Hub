@@ -1,5 +1,5 @@
-const fs = require('fs/promises');
-const path = require('path');
+import fs from 'fs/promises';
+import path from 'path';
 
 class UserContextBuilder {
   static async buildUserPreferences(userId) {
@@ -28,4 +28,4 @@ class UserContextBuilder {
   }
 }
 
-module.exports = UserContextBuilder;
+export default UserContextBuilder;

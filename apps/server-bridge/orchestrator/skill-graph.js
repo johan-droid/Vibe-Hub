@@ -272,7 +272,7 @@ function listSkillGraph() {
   return CS_SKILL_NODES.map(({ id, label, expertDomain, bridges }) => ({ id, label, expertDomain, bridges }));
 }
 
-module.exports = {
+export {
   CS_SKILL_NODES,
   SKILL_NODE_BY_ID,
   tokenizePrompt,
