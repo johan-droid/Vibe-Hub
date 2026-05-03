@@ -5,6 +5,7 @@
 import './load-env.js';
 import express            from 'express';
 import cors               from 'cors';
+import cookieParser       from 'cookie-parser';
 import { createServer }   from 'http';
 import { WebSocketServer } from 'ws';
 import { v4 as uuid }     from 'uuid';
@@ -30,6 +31,9 @@ const port   = process.env.PORT || 3001;
 // Restrict CORS to the UI origin in production; allow all in dev.
 const UI_ORIGIN = process.env.UI_ORIGIN || true;
 app.use(cors({ origin: UI_ORIGIN, credentials: true }));
+
+// Parse cookies for OAuth state validation
+app.use(cookieParser());
 
 // 5 MB JSON cap — large enough for paste-in files, prevents body-flood DoS.
 app.use(express.json({ limit: '5mb' }));
