@@ -9,6 +9,7 @@
 
 import { createMachine, createActor, assign } from 'xstate';
 import { v4 as uuid } from 'uuid';
+import { codeValidator } from '../sandbox/index.js';
 
 // ─── DAG Node Structure ───────────────────────────────────────────────────────
 
@@ -391,7 +392,49 @@ export class StateMachineTaskManager {
       },
 
       onVerify: async (node) => {
-        // Run build/test verification
+        // V6: Docker sandbox verification for true isolation
+        const useSandbox = process.env.USE_DOCKER_SANDBOX === 'true';
+        
+        if (useSandbox && node.action.name === 'write_file' || node.action.name === 'edit_file') {
+          try {
+            // Get project path from orchestrator
+            const projectPath = this.orchestrator.projectPath || process.cwd();
+            
+            // Collect code changes from this branch
+            const codeChanges = {};
+            const branchPath = this.rollbackSystem.getBranchPath();
+            for (const n of branchPath) {
+              if (n.action.name === 'write_file' || n.action.name === 'edit_file') {
+                const filePath = n.action.args.path;
+                const content = n.action.args.content;
+                if (filePath && content) {
+                  codeChanges[filePath] = content;
+                }
+              }
+            }
+            
+            // Run sandbox validation
+            const validation = await codeValidator.validate({
+              projectPath,
+              codeChanges,
+              testType: 'build'
+            });
+            
+            if (!validation.success && validation.formattedError) {
+              node.errorLog.push(validation.formattedError);
+            }
+            
+            return { 
+              passed: validation.success, 
+              output: validation.logs,
+              error: validation.formattedError 
+            };
+          } catch (err) {
+            // Fallback to simple verification
+          }
+        }
+        
+        // Fallback: Run build/test via tool call
         try {
           const buildResult = await this.callbacks.onToolCall('run_command', {
             command: 'npm',
