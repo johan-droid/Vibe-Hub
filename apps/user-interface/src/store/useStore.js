@@ -36,7 +36,6 @@ export const useStore = create(
         expert: 'core', // 'core', 'react', 'debugging', 'planning', etc.
         phase: 'idle',  // 'idle', 'classifying', 'executing', 'streaming'
         lastAction: '',
-        waitingForGitHub: false,
       },
 
       // Agent state for AgentNeuralStatus
@@ -155,15 +154,7 @@ export const useStore = create(
       clearTerminal: () => set({ terminalOutput: [] }),
 
       // Agent status (used by useAgent.js and AgentNeuralStatus)
-      setAgentStatus: (state, message) => set((prev) => {
-        const nextState = { agentState: state, statusMessage: message || '' };
-        if (state === 'waitingForGitHub') {
-          nextState.neuralStatus = { ...prev.neuralStatus, waitingForGitHub: true };
-        } else if (state === 'idle') {
-          nextState.neuralStatus = { ...prev.neuralStatus, waitingForGitHub: false };
-        }
-        return nextState;
-      }),
+      setAgentStatus: (state, message) => set({ agentState: state, statusMessage: message || '' }),
       setEffortLevel: (l) => set({ effortLevel: l }),
 
       // Thoughts & Logs

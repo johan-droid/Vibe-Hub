@@ -42,10 +42,10 @@ export default function IntelligenceDashboard() {
       progress: 15
     },
     { 
-      label: 'GH Runners',
-      value: neuralStatus.waitingForGitHub ? 'WAITING' : 'READY',
-      sub: 'Action Nodes',
-      icon: Server,
+      label: 'Cores',
+      value: '16/16',
+      sub: 'Active Nodes',
+      icon: Cpu,
       color: 'text-tertiary',
       span: 1,
       progress: 100

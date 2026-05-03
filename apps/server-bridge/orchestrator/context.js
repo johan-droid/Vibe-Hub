@@ -4,32 +4,11 @@
  * Provides a persistent context store that is shared across expert transitions.
  * Prevents context loss when shifting from Planning -> Coding -> Debugging.
  */
-/**
- * A simple LRU Cache to prevent memory leaks in AST and File caches.
- */
-class LRUCache extends Map {
-  constructor(maxSize = 50) {
-    super();
-    this.maxSize = maxSize;
-  }
-
-  set(key, value) {
-    if (super.has(key)) {
-      super.delete(key);
-    } else if (this.size >= this.maxSize) {
-      // Remove oldest (first item in insertion order)
-      const firstKey = this.keys().next().value;
-      if (firstKey) super.delete(firstKey);
-    }
-    return super.set(key, value);
-  }
-}
-
 export class SharedContext {
   constructor() {
     this.history = []; // Unified conversation history
-    this.astCache = new LRUCache(100); // path -> symbols/structure
-    this.fileCache = new LRUCache(50); // path -> content snippets
+    this.astCache = new Map(); // path -> symbols/structure
+    this.fileCache = new Map(); // path -> content snippets
     this.sessionState = {
       currentGoal: null,
       completedSteps: [],
