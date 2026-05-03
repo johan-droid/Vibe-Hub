@@ -39,7 +39,6 @@ export class VFSContainer {
   async boot() {
     if (this.instance) return;
     this.instance = await WebContainer.boot();
-    console.log('[VFS] WebContainer booted.');
   }
 
   async executeTool(name, args) {
@@ -111,10 +110,8 @@ export class VFSContainer {
         author: { name: 'Selina AI', email: 'ai@selina.internal' },
         message: message || 'AI Safety Checkpoint',
       });
-      console.log(`[VFS] Checkpoint created: ${sha.slice(0, 7)}`);
       return sha;
     } catch (err) {
-      console.warn('[VFS] Checkpoint failed (repo might not be initialized):', err.message);
       return null;
     }
   }

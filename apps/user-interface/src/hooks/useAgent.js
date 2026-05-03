@@ -4,26 +4,12 @@ import { VFSContainer } from '../vfs/container.js';
 import { useStore } from '../store/useStore';
 
 /**
- * useAgent (v3.1) — Connects the Brain v3 to the client-side WebContainer.
- *
- * Bug Fixes in v3.1:
- * #7 — Removed destructuring of non-existent store actions `addClarification`
- *      and `addPlan`. Calling a non-function from a socket event handler crashed
- *      the entire listener and left the WebSocket in a broken state for the session.
- *
- * #8 — Named all socket event handlers so they can be passed to socket.off()
- *      in the useEffect cleanup. Previously, listeners were anonymous arrow functions
- *      stored nowhere — socket.off() had no reference to remove them. On hot-reload
- *      or auth state changes (which remount the component), each mount stacked new
- *      listeners on top of old ones, causing every event to fire N times.
+ * useAgent — Connects the Brain to the client-side WebContainer.
  */
 export function useAgent() {
   const socketRef = useRef(null);
   const vfsRef    = useRef(null);
 
-  // BUG #7 FIX: Only destructure actions that actually exist in the store.
-  // `addClarification` and `addPlan` were never defined — calling them threw
-  // TypeError which crashed the socket message handler irreversibly.
   const {
     addMessage, addThought, setThinking,
     setDiffData, setVfsTree, setStreamingMessage,
@@ -83,9 +69,6 @@ export function useAgent() {
         return result;
       });
 
-      // BUG #8 FIX: All event handlers must be named so useEffect cleanup can
-      // call socket.off(event, handler) with the exact same reference.
-      // Anonymous lambdas cannot be removed — socket.off() compares by reference.
       const onThought     = (msg) => addThought(msg);
       const onThinking    = (val) => setThinking(val);
       const onStateChange = ({ state, message }) =>
@@ -115,8 +98,6 @@ export function useAgent() {
           isConflictWarning: true,
         });
 
-      // BUG #7 FIX: Clarification and plan data are embedded in addMessage()
-      // with isClarification/isPlan flags — no separate store action needed.
       const onClarification = (data) => {
         addMessage({
           role:            'assistant',

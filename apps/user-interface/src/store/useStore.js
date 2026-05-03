@@ -20,7 +20,7 @@ export const useStore = create(
       sidebarCollapsed: false,
       chatCollapsed: false,
       terminalHeight: 256,
-      activeTab: 'diff',
+      activeTab: 'editor',
       theme: 'dark', // Always dark
 
       // --- AGENT CORE STATE (Volatile) ---
@@ -43,12 +43,7 @@ export const useStore = create(
       agentState: 'idle',
       statusMessage: '',
       effortLevel: 'standard',
-      // BUG #10 FIX: terminalOutput was an ever-growing string appended on every
-      // sandbox stdout chunk. On a 60s timeout at 1000 lines/sec it accumulates
-      // ~60MB in React state, with Zustand triggering a full re-render per chunk.
-      // Changed to a capped circular line buffer (2000 lines max). Terminal.jsx
-      // joins lines with '\n' on render instead of storing the joined string.
-      terminalOutput: [], // Array<string>, max MAX_TERMINAL_LINES entries
+      terminalOutput: [],
 
       // VFS & Code State
       vfsStatus: 'idle',
@@ -86,9 +81,6 @@ export const useStore = create(
         };
       }),
 
-      // BUG #9 companion fix: stamp each message with a stable uuid so
-      // AnimatePresence in ChatInterface.jsx can use m.id as the React key.
-      // Index-based keys cause full remount of all historical messages on insert.
       addMessage: (msg) => set((state) => ({
         messages: [...state.messages, { id: uuid(), ...msg }]
       })),
@@ -133,7 +125,7 @@ export const useStore = create(
           openFiles: newOpenFiles,
           activeFilePath: nextPath,
           activeFileContent: nextContent,
-          activeTab: nextPath ? 'editor' : state.activeTab
+          activeTab: nextPath ? 'editor' : (state.diffData ? 'diff' : 'editor')
         };
       }),
 
@@ -142,8 +134,6 @@ export const useStore = create(
       },
       setDiffData: (diff) => set({ diffData: diff, activeTab: 'diff' }),
 
-      // BUG #10 FIX: O(1) append with 2000-line eviction.
-      // Terminal.jsx must join with '\n': const text = terminalOutput.join('\n');
       appendTerminalOutput: (d) => set((s) => {
         const MAX_LINES = 2_000;
         const newLines = typeof d === 'string' ? d.split('\n') : [String(d)];

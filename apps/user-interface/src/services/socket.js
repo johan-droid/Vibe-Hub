@@ -22,7 +22,6 @@ export class SwarmSocket {
     this.ws = new WebSocket(`${wsBase}/ws?token=${this.token}`);
 
     this.ws.onopen = () => {
-      console.log('[Socket] Connected to Brain v3.');
       this.emit('connected');
     };
 
@@ -100,12 +99,11 @@ export class SwarmSocket {
     };
 
     this.ws.onclose = (e) => {
-      console.log('[Socket] Disconnected:', e.code, e.reason);
       this.emit('disconnected');
     };
 
-    this.ws.onerror = (err) => {
-      console.error('[Socket] Error:', err);
+    this.ws.onerror = () => {
+      // Error handled by disconnect
     };
   }
 
