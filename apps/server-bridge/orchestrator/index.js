@@ -145,6 +145,7 @@ export class AgentOrchestrator {
       if (emitState) emitState('thinking', 'Identifying target expertise...');
       const { domain } = await this.router.route(prompt);
       const expert = this.experts[domain] || this.experts.code;
+      expert.effortLevel = effortLevel;
       
       if (emitState) emitState('thinking', `Projecting expertise to the ${domain}Expert...`);
 
@@ -203,6 +204,7 @@ export class AgentOrchestrator {
           if (emitState) emitState('debating', 'Peer review in progress...');
           
           const reviewPrompt = `PRIME PROMPT: ${prompt}\nACTIONS: ${JSON.stringify(finalResult.toolCalls)}\nTHOUGHTS: ${finalResult.thoughts}\nAudit these actions. If logic flaws exist, return REVIEW_FAILED. If perfect, return REVIEW_PASSED.`;
+          this.experts.reviewer.effortLevel = effortLevel;
           const reviewResult = await this.experts.reviewer.execute(reviewPrompt, "Pedantic Auditor", async () => {}, (t) => onThought(`[Reviewer] ${t}`), () => {}, () => {}, onMemoryUpdateInternal, emitState, onStream);
 
           if (reviewResult.content.includes('REVIEW_FAILED')) {

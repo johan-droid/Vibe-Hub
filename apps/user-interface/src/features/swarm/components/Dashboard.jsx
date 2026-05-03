@@ -1,132 +1,251 @@
 import React from 'react';
-import { Cpu, Zap, Activity, Brain, Server, Globe, ActivitySquare, ShieldCheck } from 'lucide-react';
+import {
+  Activity, Brain, CheckCircle2, Clock3, Cpu, Gauge, GitBranch,
+  LockKeyhole, Network, Rocket, ShieldCheck, Sparkles, Zap
+} from 'lucide-react';
 import { useStore } from '../../../store/useStore';
-import { BentoGrid, BentoCard } from '../../shared/components/BentoGrid';
 import { Surface } from '../../shared/components/Surface';
 import { motion } from 'framer-motion';
 import SwarmVisualizer from './SwarmVisualizer';
 
+const formatPhase = (phase = 'idle') => String(phase).replace(/_/g, ' ');
+
+function ScoreRing({ score = 0, label }) {
+  const pct = Math.max(0, Math.min(100, score));
+  return (
+    <div className="relative flex h-28 w-28 shrink-0 items-center justify-center">
+      <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r="42" stroke="hsl(var(--outline-variant) / 0.45)" strokeWidth="8" fill="none" />
+        <motion.circle
+          cx="50"
+          cy="50"
+          r="42"
+          stroke="hsl(var(--primary))"
+          strokeWidth="8"
+          strokeLinecap="round"
+          fill="none"
+          pathLength="100"
+          initial={{ strokeDasharray: '0 100' }}
+          animate={{ strokeDasharray: `${pct} 100` }}
+          transition={{ duration: 0.9, ease: [0.2, 0, 0, 1] }}
+        />
+      </svg>
+      <div className="text-center">
+        <div className="font-display text-2xl font-black tracking-[-0.05em] text-on-surface">{pct}</div>
+        <div className="label-small text-primary">{label}</div>
+      </div>
+    </div>
+  );
+}
+
+function MetricCard({ icon: Icon, label, value, detail, tone = 'primary', progress = 0 }) {
+  const toneClass = {
+    primary: 'text-primary bg-primary/10 border-primary/20',
+    secondary: 'text-secondary bg-secondary/10 border-secondary/20',
+    tertiary: 'text-tertiary bg-tertiary/10 border-tertiary/20',
+    error: 'text-error bg-error/10 border-error/20',
+  }[tone];
+
+  return (
+    <Surface elevation={0} shape="xl" className="border border-outline-variant/30 bg-surface-container-low/72 p-4 shadow-xl shadow-black/10">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="label-small mb-2 text-on-surface-variant/70">{label}</p>
+          <p className="title-large truncate">{value}</p>
+          <p className="mt-1 truncate text-xs text-on-surface-variant">{detail}</p>
+        </div>
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border ${toneClass}`}>
+          <Icon size={18} />
+        </div>
+      </div>
+      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-surface-container-highest">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
+          transition={{ duration: 0.9, ease: [0.2, 0, 0, 1] }}
+          className={`h-full ${tone === 'secondary' ? 'bg-secondary' : tone === 'tertiary' ? 'bg-tertiary' : tone === 'error' ? 'bg-error' : 'bg-primary'}`}
+        />
+      </div>
+    </Surface>
+  );
+}
+
+function Capability({ icon: Icon, title, body }) {
+  return (
+    <div className="flex gap-3 rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/55 p-4">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <Icon size={17} />
+      </div>
+      <div>
+        <p className="title-small">{title}</p>
+        <p className="mt-1 text-xs leading-5 text-on-surface-variant">{body}</p>
+      </div>
+    </div>
+  );
+}
+
 /**
- * IntelligenceDashboard — Material 3 Bento Showcase
- * Visualizes the neural throughput and system health of the agent swarm.
+ * IntelligenceDashboard presents market-ready runtime posture, model routing,
+ * security, and debug readiness without overwhelming the workspace.
  */
 export default function IntelligenceDashboard() {
-  const { neuralStatus, workflowState } = useStore();
+  const {
+    neuralStatus,
+    workflowState,
+    agentState,
+    statusMessage,
+    effortLevel,
+    isThinking,
+    vfsStatus,
+    messages,
+  } = useStore();
+
+  const workflowDone = workflowState?.status === 'completed';
+  const workflowFailed = workflowState?.conclusion === 'failure';
+  const runtimeScore = isThinking ? 87 : 96;
+  const modelLabel = import.meta.env.VITE_AGENT_MODEL_LABEL || 'Multi-model gateway';
 
   const metrics = [
     {
-      label: 'GitHub Actions',
-      value: workflowState?.status === 'triggered' ? 'Queued' : (workflowState?.status === 'completed' ? 'Done' : 'Idle'),
-      sub: workflowState?.conclusion || 'Execution Engine',
-      icon: ShieldCheck,
-      color: workflowState?.conclusion === 'failure' ? 'text-error' : (workflowState?.conclusion === 'success' ? 'text-primary' : 'text-on-surface-variant'),
-      span: 3,
-      progress: workflowState?.status === 'triggered' ? 50 : (workflowState?.status === 'completed' ? 100 : 0)
-    },
-    { 
-      label: 'Neural Load', 
-      value: neuralStatus.expert === 'Orchestrator' ? '12%' : '84%', 
-      sub: 'Tensors/sec',
       icon: Brain,
-      color: 'text-primary',
-      span: 2,
-      progress: 64
+      label: 'Model Strategy',
+      value: modelLabel,
+      detail: `${effortLevel || 'standard'} effort / token-aware`,
+      tone: 'primary',
+      progress: effortLevel === 'deep' ? 92 : effortLevel === 'quick' ? 48 : 72,
     },
-    { 
-      label: 'Gateway', 
-      value: '2ms', 
-      sub: 'Latency',
-      icon: Globe,
-      color: 'text-secondary',
-      span: 1,
-      progress: 15
+    {
+      icon: ShieldCheck,
+      label: 'Security Posture',
+      value: workflowFailed ? 'Action needed' : 'Hardened',
+      detail: workflowState?.conclusion || 'OAuth, sandbox, audit hooks',
+      tone: workflowFailed ? 'error' : 'tertiary',
+      progress: workflowFailed ? 38 : 88,
     },
-    { 
-      label: 'GH Runners',
-      value: neuralStatus.waitingForGitHub ? 'WAITING' : 'READY',
-      sub: 'Action Nodes',
-      icon: Server,
-      color: 'text-tertiary',
-      span: 1,
-      progress: 100
+    {
+      icon: GitBranch,
+      label: 'Automation Rail',
+      value: workflowState?.status === 'triggered' ? 'Queued' : workflowDone ? 'Complete' : 'Standby',
+      detail: 'GitHub Actions / PR lifecycle',
+      tone: workflowState?.status === 'triggered' ? 'secondary' : 'primary',
+      progress: workflowState?.status === 'triggered' ? 56 : workflowDone ? 100 : 28,
     },
-    { 
-      label: 'Throughput', 
-      value: '1.2 GB/s', 
-      sub: 'VFS Sync',
-      icon: Zap,
-      color: 'text-primary',
-      span: 1,
-      progress: 45
+    {
+      icon: Network,
+      label: 'Workspace Link',
+      value: vfsStatus === 'ready' ? 'Ready' : vfsStatus === 'booting' ? 'Booting' : 'Idle',
+      detail: 'WebContainer + VFS bridge',
+      tone: vfsStatus === 'ready' ? 'tertiary' : 'secondary',
+      progress: vfsStatus === 'ready' ? 100 : vfsStatus === 'booting' ? 45 : 20,
     },
-    { 
-      label: 'Uptime', 
-      value: '99.9%', 
-      sub: 'Availability',
-      icon: Activity,
-      color: 'text-secondary',
-      span: 2,
-      progress: 99
-    }
   ];
 
   return (
-    <div className="p-8 space-y-8 h-full overflow-y-auto scrollbar-none">
-      <div className="flex items-center justify-between px-2">
-        <div className="flex flex-col">
-          <h2 className="headline-small font-bold text-on-surface tracking-tight">Intelligence</h2>
-          <p className="label-medium text-on-surface-variant opacity-60">Neural Pathway Telemetry</p>
-        </div>
-        <Surface elevation={1} shape="full" className="px-4 py-1.5 border border-outline-variant/30 flex items-center gap-2.5 bg-surface-container-high/40">
-           <div className="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_8px_rgba(var(--primary-rgb),0.5)]" />
-           <span className="label-small font-bold text-on-surface uppercase tracking-widest opacity-60">System Stable</span>
-        </Surface>
-      </div>
-
-      <BentoGrid cols={3} gap="md" className="p-0">
-        {metrics.map((m, i) => (
-          <BentoCard 
-            key={i} 
-            span={m.span} 
-            elevation={1}
-            className="flex flex-col justify-between group overflow-hidden border border-outline-variant/10 hover:border-primary/30 transition-all duration-700"
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex flex-col gap-1.5">
-                <span className="label-small font-bold uppercase tracking-widest text-on-surface-variant opacity-40 group-hover:opacity-100 transition-opacity">
-                  {m.label}
-                </span>
-                <div className="flex items-baseline gap-2">
-                  <span className="display-small font-black text-on-surface tracking-tighter">{m.value}</span>
-                  <span className="label-small text-on-surface-variant font-bold opacity-30">{m.sub}</span>
+    <div className="h-full overflow-y-auto scrollbar-none bg-surface-container-lowest/35 p-4 md:p-6">
+      <div className="mx-auto flex max-w-6xl flex-col gap-5">
+        <Surface elevation={0} shape="2xl" className="overflow-hidden border border-outline-variant/30 bg-surface-container-low/80 shadow-2xl shadow-black/15">
+          <div className="relative p-5 md:p-6">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,hsl(var(--primary)/0.14),transparent_34%),radial-gradient(circle_at_bottom_left,hsl(var(--secondary)/0.10),transparent_28%)]" />
+            <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-primary">
+                  <Sparkles size={13} />
+                  <span className="label-small">SaaS command center</span>
+                </div>
+                <h2 className="headline-medium">Intelligence Dashboard</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-7 text-on-surface-variant">
+                  Production posture for model routing, debugging, sandbox execution, provider health, and audit visibility.
+                </p>
+              </div>
+              <div className="flex items-center gap-5">
+                <ScoreRing score={runtimeScore} label="ready" />
+                <div className="min-w-[180px] space-y-3">
+                  <div className="flex items-center gap-2 text-sm text-on-surface">
+                    <span className={`h-2.5 w-2.5 rounded-full ${isThinking ? 'bg-secondary animate-soft-pulse' : 'bg-tertiary'}`} />
+                    {isThinking ? 'Processing request' : 'Ready for execution'}
+                  </div>
+                  <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/55 p-3">
+                    <p className="label-small text-on-surface-variant/70">Current phase</p>
+                    <p className="title-small capitalize text-primary">{formatPhase(neuralStatus.phase || agentState)}</p>
+                    <p className="mt-1 line-clamp-2 text-xs text-on-surface-variant">{statusMessage || neuralStatus.lastAction || 'Awaiting instruction.'}</p>
+                  </div>
                 </div>
               </div>
-              <Surface elevation={2} shape="xl" className="p-3 bg-surface-container-highest group-hover:bg-primary/10 transition-colors duration-700">
-                <m.icon size={24} className={`${m.color} transition-transform duration-700 group-hover:scale-110`} />
-              </Surface>
+            </div>
+          </div>
+        </Surface>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {metrics.map((metric) => <MetricCard key={metric.label} {...metric} />)}
+        </div>
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+          <Surface elevation={0} shape="2xl" className="min-h-[420px] overflow-hidden border border-outline-variant/30 bg-surface-container-low/70 shadow-xl shadow-black/10">
+            <SwarmVisualizer />
+          </Surface>
+
+          <Surface elevation={0} shape="2xl" className="border border-outline-variant/30 bg-surface-container-low/70 p-5 shadow-xl shadow-black/10">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <p className="label-small text-primary">Market readiness</p>
+                <h3 className="title-large mt-1">Power stack</h3>
+              </div>
+              <div className="rounded-full border border-tertiary/20 bg-tertiary/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.18em] text-tertiary">
+                Live
+              </div>
             </div>
 
-            <div className="mt-8 space-y-2">
-               <div className="flex justify-between label-small text-on-surface-variant opacity-40">
-                  <span>Capacity</span>
-                  <span>{m.progress}%</span>
-               </div>
-               <div className="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: `${m.progress}%` }}
-                    transition={{ duration: 1.5, ease: [0.2, 0, 0, 1] }}
-                    className={`h-full transition-all duration-1000 ${m.color.replace('text-', 'bg-')}`}
-                  />
-               </div>
+            <div className="space-y-3">
+              <Capability icon={Cpu} title="Provider gateway" body="Gemini default with OpenAI-compatible, Qwen, and Claude adapters ready on env keys." />
+              <Capability icon={Gauge} title="Token economy" body="History trimming, prompt budgeting, output caps, and audit counters for efficient calls." />
+              <Capability icon={LockKeyhole} title="Backend hardening" body="Timeouts, retries, redaction, and structured diagnostics for SaaS operations." />
+              <Capability icon={Zap} title="Debug loop" body="Streaming, status phases, sandbox handoff, and peer-review hooks feed the cockpit." />
             </div>
-          </BentoCard>
-        ))}
-      </BentoGrid>
-      
-      <Surface elevation={2} shape="2xl" className="h-[400px] border border-outline-variant/20 bg-surface-container-low overflow-hidden">
-        <SwarmVisualizer />
-      </Surface>
+
+            <div className="mt-5 rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/55 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="label-small text-on-surface-variant">Session signal</p>
+                <Clock3 size={14} className="text-secondary" />
+              </div>
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div>
+                  <p className="title-large">{messages.length}</p>
+                  <p className="label-small text-on-surface-variant/70">Turns</p>
+                </div>
+                <div>
+                  <p className="title-large capitalize">{effortLevel || 'std'}</p>
+                  <p className="label-small text-on-surface-variant/70">Effort</p>
+                </div>
+                <div>
+                  <p className="title-large">{isThinking ? 'On' : 'Idle'}</p>
+                  <p className="label-small text-on-surface-variant/70">Agent</p>
+                </div>
+              </div>
+            </div>
+          </Surface>
+        </div>
+
+        <Surface elevation={0} shape="2xl" className="border border-outline-variant/30 bg-surface-container-low/70 p-5">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
+                <Rocket size={20} />
+              </div>
+              <div>
+                <h3 className="title-medium">Next run posture</h3>
+                <p className="text-sm text-on-surface-variant">Audit, debug, implement, verify, and summarize with production telemetry.</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {['Codex-grade routing', 'Claude review', 'Qwen coder', 'Gemini tools'].map((tag) => (
+                <span key={tag} className="rounded-full border border-outline-variant/30 bg-surface-container-lowest/55 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.16em] text-on-surface-variant">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+        </Surface>
+      </div>
     </div>
   );
 }

@@ -27,6 +27,7 @@ export function useAgent() {
   const {
     addMessage, addThought, setThinking,
     setDiffData, setVfsTree, setStreamingMessage,
+    setVfsStatus,
   } = useStore();
 
   const token = localStorage.getItem('selina_token');
@@ -36,6 +37,7 @@ export function useAgent() {
 
     const vfs = new VFSContainer();
     vfsRef.current = vfs;
+    setVfsStatus?.('booting');
 
     vfs.boot().then(() => {
       vfs.getTree('.').then(tree => setVfsTree(tree));
@@ -88,7 +90,7 @@ export function useAgent() {
       const onThinking    = (val) => setThinking(val);
       const onStateChange = ({ state, message }) =>
         useStore.getState().setAgentStatus(state, message);
-      const onStreamChunk = ({ delta }) => {
+      const onStreamChunk = (delta) => {
         setStreamingMessage((prev) => (prev || '') + delta);
       };
 
@@ -155,7 +157,13 @@ export function useAgent() {
           useStore.getState().setWorkflowState({ status: 'completed', conclusion: msg.conclusion, url: msg.url });
           useStore.getState().appendTerminalOutput(`\x1b[36m[GitHub]\x1b[0m Workflow ${msg.workflow} completed with conclusion: ${msg.conclusion}`);
       };
+      const onTaskEvent = (msg) => {
+        if (msg.type === 'task_status' || msg.type === 'queue:update') {
+          useStore.getState().setWorkflowState({ status: 'queue', ...msg });
+        }
+      };
       socket.on('github_workflow_completed', onGithubWorkflow);
+      socket.on('task_event', onTaskEvent);
 
       socket.connect();
 
@@ -174,9 +182,13 @@ export function useAgent() {
         socket.off('clarification',    onClarification);
         socket.off('plan',             onPlan);
         socket.off('github_workflow_completed', onGithubWorkflow);
+        socket.off('task_event',       onTaskEvent);
         socket.disconnect();
         socketRef.current = null;
       };
+    }).catch((err) => {
+      setVfsStatus?.('error');
+      addMessage({ role: 'system', content: `Workspace boot failed: ${err.message}` });
     });
   }, [token]);
   // Note: Zustand set-actions (addMessage etc.) are stable references —

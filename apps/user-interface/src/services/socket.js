@@ -16,7 +16,7 @@ export class SwarmSocket {
 
   connect() {
     const wsBase = import.meta.env.VITE_WS_BASE || (import.meta.env.PROD
-      ? 'wss://selina-bridge.onrender.com'
+      ? 'wss://vibe-hub-bridge.onrender.com'
       : `ws://${window.location.hostname}:3001`);
     
     this.ws = new WebSocket(`${wsBase}/ws?token=${this.token}`);
@@ -40,6 +40,10 @@ export class SwarmSocket {
 
         case 'result':
           this.emit('result', msg.content);
+          break;
+
+        case 'stream_chunk':
+          this.emit('stream_chunk', msg.delta || '');
           break;
 
         case 'thinking':
@@ -73,9 +77,22 @@ export class SwarmSocket {
         case 'state_change':
           this.emit('state_change', { state: msg.state, message: msg.message });
           break;
+
+        case 'status':
+          this.emit('state_change', { state: msg.state, message: msg.message });
+          break;
+
         case 'terminal_output':
           this.emit('terminal_output', msg.data);
           break;
+
+        case 'task_added':
+        case 'task_status':
+        case 'queue:update':
+        case 'queue:done':
+          this.emit('task_event', msg);
+          break;
+
         case 'conflict_warning':
           this.emit('conflict_warning', { risk: msg.risk });
           break;

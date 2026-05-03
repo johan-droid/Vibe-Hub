@@ -19,6 +19,7 @@ import { TaskManager }           from './orchestrator/task-manager.js';
 import { githubService }         from './github/index.js';
 import { creativeService }       from './creative/index.js';
 import { uiVariantService }      from './creative/generate-ui-variant.js';
+import { modelService }          from './orchestrator/models.js';
 
 // ─── Express + HTTP server ────────────────────────────────────────────────────
 
@@ -59,6 +60,11 @@ app.get('/health', (_req, res) => {
 app.get('/api/me', requireAuth, (req, res) => {
   const { id, email, name, avatar_url, provider } = req.user;
   res.json({ id, email, name, avatarUrl: avatar_url, provider });
+});
+
+// Runtime diagnostics for SaaS observability. Secrets are never returned.
+app.get('/api/runtime/diagnostics', requireAuth, (_req, res) => {
+  res.json(modelService.diagnostics());
 });
 
 // ── GitHub webhooks ───────────────────────────────────────────────────────────
