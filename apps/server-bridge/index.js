@@ -81,6 +81,23 @@ app.post('/api/github/webhook', async (req, res) => {
     console.log(`[GitHub] PR #${payload.number} opened in ${payload.repository?.full_name}`);
   }
 
+  if (event === 'workflow_run' && payload.action === 'completed') {
+      const { workflow_run } = payload;
+      console.log(`[GitHub] Workflow ${workflow_run.name} completed with conclusion: ${workflow_run.conclusion}`);
+
+      // Broadcast to all active sessions (since we aren't mapping repos to sessions yet)
+      for (const [sessionId, session] of sessions) {
+          if (session.ws.readyState === session.ws.OPEN) {
+              session.ws.send(JSON.stringify({
+                  type: 'github_workflow_completed',
+                  workflow: workflow_run.name,
+                  conclusion: workflow_run.conclusion,
+                  url: workflow_run.html_url
+              }));
+          }
+      }
+  }
+
   res.status(200).send('OK');
 });
 
@@ -269,6 +286,12 @@ wss.on('connection', (ws, req) => {
 
         case 'github_create_codespace':
           return JSON.stringify(await githubService.createCodespace({ ...args, installationId, token }));
+
+        case 'github_trigger_workflow':
+          return JSON.stringify(await githubService.triggerWorkflow({ ...args, installationId, token }));
+
+        case 'github_get_codeql_alerts':
+          return JSON.stringify(await githubService.getCodeQLAlerts({ ...args, installationId, token }));
 
         default:
           throw new Error(`GitHub tool not implemented: ${name}`);
