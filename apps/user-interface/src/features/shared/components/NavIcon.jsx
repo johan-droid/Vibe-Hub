@@ -5,10 +5,12 @@ import { motion } from 'framer-motion';
  * NavIcon — Rail Navigation Anchor
  * High-fidelity interaction point for technical rail navigation.
  */
-export function NavIcon({ icon: Icon, active = false, onClick }) {
+export function NavIcon({ icon: Icon, active = false, onClick, ariaLabel }) {
   return (
     <button 
       onClick={onClick}
+      aria-label={ariaLabel}
+      title={ariaLabel}
       className={`
         relative w-12 h-12 flex items-center justify-center rounded-xl transition-all duration-500 group
         ${active ? 'bg-primary shadow-lg shadow-primary/20' : 'hover:bg-surface-container-highest'}

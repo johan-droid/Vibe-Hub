@@ -88,24 +88,28 @@ export default function Workspace() {
               icon={LayoutGrid} 
               active={sidebarMode === 'explorer'} 
               onClick={() => { setSidebarMode('explorer'); setSidebarCollapsed(false); }}
+              ariaLabel="Explorer"
             />
             <NavIcon 
               icon={Activity} 
               active={sidebarMode === 'swarm'} 
               onClick={() => { setSidebarMode('swarm'); setSidebarCollapsed(false); }}
+              ariaLabel="Swarm Dashboard"
             />
             <NavIcon 
               icon={SearchIcon} 
               active={sidebarMode === 'search'} 
               onClick={() => { setSidebarMode('search'); setSidebarCollapsed(false); }}
+              ariaLabel="Global Search"
             />
             <NavIcon
               icon={ShieldAlert}
               active={sidebarMode === 'security'}
               onClick={() => { setSidebarMode('security'); setSidebarCollapsed(false); }}
+              ariaLabel="Security Audit"
             />
             <div className="mt-auto">
-               <NavIcon icon={Sparkles} />
+               <NavIcon icon={Sparkles} ariaLabel="AI Assistant" />
             </div>
           </Surface>
 

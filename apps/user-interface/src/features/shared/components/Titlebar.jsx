@@ -92,6 +92,8 @@ export default function Titlebar({ onOpenSettings }) {
             variant="standard"
             size="md"
             className="text-on-surface-variant hover:text-primary transition-transform duration-700 hover:rotate-45"
+            aria-label="Toggle Theme"
+            title="Toggle Theme"
           />
           <div className="w-px h-4 bg-outline-variant/30 mx-1" />
           <IconButton 
@@ -100,6 +102,8 @@ export default function Titlebar({ onOpenSettings }) {
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             variant="tonal"
             size="md"
+            aria-label="Toggle Sidebar"
+            title="Toggle Sidebar"
           />
           <IconButton 
             icon={MessageSquare} 
@@ -107,6 +111,8 @@ export default function Titlebar({ onOpenSettings }) {
             onClick={() => setChatCollapsed(!chatCollapsed)}
             variant="tonal"
             size="md"
+            aria-label="Toggle Chat"
+            title="Toggle Chat"
           />
           <div className="w-px h-6 bg-outline-variant/30 mx-3" />
           <IconButton 
@@ -115,6 +121,8 @@ export default function Titlebar({ onOpenSettings }) {
             variant="standard"
             size="lg"
             className="bg-surface-container-highest/50 hover:rotate-90 transition-transform duration-700"
+            aria-label="Settings"
+            title="Settings"
           />
         </div>
       </div>

@@ -254,10 +254,7 @@ export class VFSContainer {
           if (entry.isDirectory()) {
             await walk(fullPath);
           } else {
-            if (filePattern) {
-              const escapedFilePattern = filePattern.replace(/[.+?^${}()|[\]\\]/g, (m) => '\\' + m).replace(/\*/g, '.*');
-              if (!fullPath.match(new RegExp(escapedFilePattern))) return;
-            }
+            if (filePattern && !fullPath.match(new RegExp(filePattern.split('*').map(s => s.replace(/[.*+?^${}()|[\]\\]/g, (m) => '\\' + m)).join('.*')))) return;
 
             try {
               const content = await this.instance.fs.readFile(fullPath, 'utf-8');
