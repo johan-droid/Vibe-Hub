@@ -4,39 +4,39 @@
 
 @layer base {
   :root {
-    --primary: 188 92% 55%;
-    --on-primary: 206 38% 8%;
-    --primary-container: 190 62% 16%;
-    --on-primary-container: 187 100% 88%;
+    --primary: 159 53% 28%;
+    --on-primary: 44 46% 96%;
+    --primary-container: 152 38% 88%;
+    --on-primary-container: 159 46% 18%;
 
-    --secondary: 35 92% 62%;
-    --on-secondary: 34 45% 10%;
-    --secondary-container: 33 55% 15%;
-    --on-secondary-container: 38 100% 86%;
+    --secondary: 28 67% 47%;
+    --on-secondary: 40 45% 96%;
+    --secondary-container: 34 67% 88%;
+    --on-secondary-container: 28 52% 18%;
 
-    --tertiary: 152 58% 54%;
-    --on-tertiary: 152 42% 8%;
-    --tertiary-container: 154 45% 15%;
-    --on-tertiary-container: 148 82% 86%;
+    --tertiary: 210 34% 36%;
+    --on-tertiary: 42 40% 96%;
+    --tertiary-container: 206 38% 88%;
+    --on-tertiary-container: 210 34% 19%;
 
     --error: 4 83% 62%;
     --on-error: 0 0% 100%;
     --error-container: 3 54% 17%;
     --on-error-container: 6 100% 88%;
 
-    --surface-dim: 220 29% 5%;
-    --surface: 220 26% 7%;
-    --surface-bright: 219 19% 16%;
-    --surface-container-lowest: 222 34% 4%;
-    --surface-container-low: 220 29% 7%;
-    --surface-container: 220 24% 10%;
-    --surface-container-high: 219 21% 14%;
-    --surface-container-highest: 218 18% 18%;
+    --surface-dim: 38 31% 88%;
+    --surface: 42 41% 96%;
+    --surface-bright: 0 0% 100%;
+    --surface-container-lowest: 38 48% 98%;
+    --surface-container-low: 39 38% 94%;
+    --surface-container: 38 30% 90%;
+    --surface-container-high: 37 25% 84%;
+    --surface-container-highest: 36 20% 78%;
 
-    --on-surface: 42 24% 93%;
-    --on-surface-variant: 218 12% 68%;
-    --outline: 218 13% 38%;
-    --outline-variant: 218 15% 22%;
+    --on-surface: 158 17% 12%;
+    --on-surface-variant: 156 7% 37%;
+    --outline: 40 10% 62%;
+    --outline-variant: 38 17% 82%;
 
     --radius-full: 9999px;
     --radius-2xl: 1.5rem;
@@ -44,7 +44,7 @@
     --radius-lg: 0.75rem;
     --radius-md: 0.5rem;
     --radius-sm: 0.25rem;
-    --glass-blur: 28px;
+    --glass-blur: 16px;
   }
 
   [data-theme='light'] {
@@ -91,24 +91,24 @@
   ::selection { @apply bg-primary/20 text-primary; }
   ::-webkit-scrollbar { @apply w-2 h-2; }
   ::-webkit-scrollbar-track { @apply bg-transparent; }
-  ::-webkit-scrollbar-thumb { @apply rounded-full bg-white/10 hover:bg-white/20; }
+  ::-webkit-scrollbar-thumb { @apply rounded-full bg-black/15 hover:bg-black/25; }
 }
 
 @layer components {
   .app-chrome {
-    @apply border border-outline-variant/40 bg-surface-container-low/80 shadow-2xl shadow-black/30 backdrop-blur-2xl;
+    @apply border border-outline-variant/70 bg-white shadow-xl shadow-black/10;
   }
 
   .premium-panel {
-    @apply border border-outline-variant/35 bg-surface-container/80 shadow-xl shadow-black/20 backdrop-blur-xl;
+    @apply border border-outline-variant/70 bg-white shadow-lg shadow-black/5;
   }
 
   .hairline-panel {
-    @apply border border-outline-variant/25 bg-surface-container-low/70;
+    @apply border border-outline-variant/70 bg-white;
   }
 
   .glass {
-    @apply border border-white/10 bg-surface-container-low/75 shadow-2xl shadow-black/25 backdrop-blur-[var(--glass-blur)];
+    @apply border border-outline-variant/70 bg-white/85 shadow-lg shadow-black/5 backdrop-blur-[var(--glass-blur)];
   }
 
   .bento-grid {
@@ -120,7 +120,7 @@
     @apply premium-panel relative overflow-hidden rounded-[var(--radius-xl)] p-6 transition duration-500 ease-emphasized;
   }
 
-  .bento-card:hover { @apply -translate-y-1 border-primary/30 bg-surface-container-high/90; }
+  .bento-card:hover { @apply -translate-y-0.5 border-primary/30 bg-white; }
 
   .display-large { @apply font-display text-6xl md:text-7xl font-black tracking-[-0.07em]; }
   .display-medium { @apply font-display text-4xl md:text-6xl font-black tracking-[-0.06em]; }

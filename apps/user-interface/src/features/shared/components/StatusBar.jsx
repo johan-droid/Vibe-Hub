@@ -16,7 +16,7 @@ export default function StatusBar() {
     <Surface
       elevation={1}
       shape="none"
-      className="flex h-10 items-center justify-between border-t border-outline-variant/20 bg-surface-container-low/90 px-6 text-xs text-on-surface-variant backdrop-blur-2xl"
+      className="flex h-10 items-center justify-between border-t border-[#e3d8c5] bg-[#fffaf2] px-6 text-xs text-[#62675f]"
     >
       <div className="flex h-full items-center gap-5">
         <StatusItem icon={GitBranch} label="main" sublabel="branch" color="text-primary" />
@@ -31,7 +31,7 @@ export default function StatusBar() {
       <div className="flex h-full items-center gap-6">
         <AgentNeuralStatus compact />
         <div className="flex items-center gap-2">
-          <Wifi size={14} className="text-primary" />
+          <Wifi size={14} className="text-[#1f6f5b]" />
           <span>{vfsStatus || 'idle'}</span>
         </div>
       </div>
@@ -43,8 +43,8 @@ function StatusItem({ icon: Icon, label, sublabel, color = 'text-on-surface-vari
   return (
     <div className="flex h-full items-center gap-2">
       <Icon size={14} className={`${color} opacity-70`} />
-      <span className="font-semibold text-on-surface-variant">{label}</span>
-      {sublabel && <span className="text-on-surface-variant/45">{sublabel}</span>}
+      <span className="font-semibold text-[#62675f]">{label}</span>
+      {sublabel && <span className="text-[#8a867c]">{sublabel}</span>}
     </div>
   );
 }

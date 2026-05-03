@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Activity,
   AlertCircle,
+  ArrowRight,
   Bot,
   CheckCircle2,
   Clock3,
@@ -11,29 +12,22 @@ import {
   FileCode2,
   GitBranch,
   Gauge,
-  KeyRound,
   Layers3,
-  ListChecks,
-  LockKeyhole,
   MessageSquare,
-  Network,
   RefreshCw,
   Route,
   Search,
+  Server,
   ShieldCheck,
   TerminalSquare,
-  UserCircle,
   Wifi,
-  Wrench,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
 import { useBackendSignals, flattenSkillGraph } from '../../../hooks/useBackendSignals';
 import { useStore } from '../../../store/useStore';
-import { Surface } from '../../shared/components/Surface';
 import ActivityFeed from './ActivityFeed';
 import SecurityAudit from '../../security/components/SecurityAudit';
 
-const DASHBOARD_PAGES = {
+const PAGES = {
   overview: 'Overview',
   activity: 'Activity',
   runtime: 'Runtime',
@@ -42,20 +36,17 @@ const DASHBOARD_PAGES = {
 };
 
 function titleCase(value = '') {
-  return String(value || '')
-    .replace(/[_-]/g, ' ')
-    .replace(/\b\w/g, (match) => match.toUpperCase());
+  return String(value || '').replace(/[_-]/g, ' ').replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
 function formatDuration(seconds) {
   if (!Number.isFinite(seconds)) return 'Not reported';
-  const totalSeconds = Math.max(0, Math.floor(seconds));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const secs = totalSeconds % 60;
-
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  if (minutes > 0) return `${minutes}m ${secs}s`;
+  const total = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hours) return `${hours}h ${minutes}m`;
+  if (minutes) return `${minutes}m ${secs}s`;
   return `${secs}s`;
 }
 
@@ -64,438 +55,338 @@ function formatBytes(bytes) {
   const units = ['B', 'KB', 'MB', 'GB'];
   let value = bytes;
   let unit = 0;
-
   while (value >= 1024 && unit < units.length - 1) {
     value /= 1024;
     unit += 1;
   }
-
   return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
-function relativeSync(date) {
-  if (!date) return 'Not synced yet';
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function getThoughtText(thought) {
-  if (typeof thought === 'string') return thought;
-  return thought?.content || thought?.message || '';
-}
-
-function flattenTree(nodes = []) {
+function flattenFiles(nodes = []) {
   const files = [];
   const visit = (node) => {
     if (!node) return;
-    if (node.isDir || node.type === 'directory') {
-      (node.children || []).forEach(visit);
-    } else {
-      files.push(node);
-    }
+    if (node.isDir || node.type === 'directory') (node.children || []).forEach(visit);
+    else files.push(node);
   };
   nodes.forEach(visit);
   return files;
 }
 
-function ShellButton({ children, active, onClick }) {
+function Panel({ children, className = '' }) {
+  return <section className={`rounded-[28px] border border-[#e3d8c5] bg-white shadow-[0_20px_60px_-45px_rgba(27,32,26,0.45)] ${className}`}>{children}</section>;
+}
+
+function SoftButton({ children, active, onClick }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-        active
-          ? 'bg-on-surface text-surface-container-lowest shadow-lg shadow-black/20'
-          : 'border border-outline-variant/40 bg-surface-container-low/70 text-on-surface-variant hover:border-outline hover:text-on-surface'
-      }`}
+      className={`rounded-full px-4 py-2 text-sm font-semibold transition ${active ? 'bg-[#1f6f5b] text-white' : 'bg-white text-[#5d6259] ring-1 ring-[#e3d8c5] hover:text-[#17201b]'}`}
     >
       {children}
     </button>
   );
 }
 
-function StatusPill({ children, tone = 'neutral', icon: Icon }) {
-  const toneClass = {
-    neutral: 'border-outline-variant/35 bg-surface-container-low text-on-surface-variant',
-    good: 'border-tertiary/25 bg-tertiary/10 text-tertiary',
-    warn: 'border-secondary/25 bg-secondary/10 text-secondary',
-    bad: 'border-error/30 bg-error/10 text-error',
-    info: 'border-primary/25 bg-primary/10 text-primary',
-  }[tone];
-
+function Pill({ children, tone = 'neutral', icon: Icon }) {
+  const tones = {
+    neutral: 'bg-[#f5efe3] text-[#5d6259] ring-[#e3d8c5]',
+    good: 'bg-[#e7f4eb] text-[#1f6f5b] ring-[#c5e2ce]',
+    warn: 'bg-[#fff2d9] text-[#946020] ring-[#ead6a9]',
+    bad: 'bg-[#fee7e2] text-[#a33b2f] ring-[#efc3ba]',
+    info: 'bg-[#e6eef4] text-[#315f7b] ring-[#c9d9e4]',
+  };
   return (
-    <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${toneClass}`}>
+    <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${tones[tone]}`}>
       {Icon && <Icon size={13} />}
       {children}
     </span>
   );
 }
 
-function DataCard({ icon: Icon, label, value, detail, tone = 'info', action }) {
-  const iconClass = {
-    info: 'bg-primary/10 text-primary border-primary/20',
-    good: 'bg-tertiary/10 text-tertiary border-tertiary/20',
-    warn: 'bg-secondary/10 text-secondary border-secondary/20',
-    bad: 'bg-error/10 text-error border-error/25',
+function Metric({ icon: Icon, label, value, detail, tone = 'info', action }) {
+  const toneClass = {
+    info: 'bg-[#e6eef4] text-[#315f7b]',
+    good: 'bg-[#e7f4eb] text-[#1f6f5b]',
+    warn: 'bg-[#fff2d9] text-[#946020]',
+    bad: 'bg-[#fee7e2] text-[#a33b2f]',
   }[tone];
 
   return (
-    <Surface elevation={0} shape="2xl" className="border border-outline-variant/25 bg-surface-container-low/80 p-5 shadow-xl shadow-black/10">
+    <Panel className="p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-on-surface-variant">{label}</p>
-          <p className="mt-3 truncate font-display text-2xl font-semibold tracking-[-0.04em] text-on-surface">{value}</p>
-          <p className="mt-2 text-sm leading-6 text-on-surface-variant">{detail}</p>
+          <p className="text-xs font-semibold text-[#6c6f68]">{label}</p>
+          <p className="mt-3 truncate text-2xl font-semibold tracking-[-0.04em] text-[#17201b]">{value}</p>
+          <p className="mt-2 text-sm leading-6 text-[#62675f]">{detail}</p>
         </div>
-        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${iconClass}`}>
+        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${toneClass}`}>
           <Icon size={20} />
         </div>
       </div>
       {action && <div className="mt-5">{action}</div>}
-    </Surface>
+    </Panel>
   );
 }
 
-function SectionCard({ eyebrow, title, children, action, className = '' }) {
+function Row({ icon: Icon, title, body, meta }) {
   return (
-    <Surface elevation={0} shape="2xl" className={`border border-outline-variant/25 bg-surface-container-low/80 p-5 shadow-xl shadow-black/10 ${className}`}>
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          {eyebrow && <p className="mb-2 text-xs font-semibold text-primary">{eyebrow}</p>}
-          <h3 className="font-display text-2xl font-semibold tracking-[-0.04em] text-on-surface">{title}</h3>
-        </div>
-        {action}
+    <div className="flex gap-4 rounded-2xl border border-[#eadfce] bg-[#fbf7ef] p-4">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#1f6f5b] ring-1 ring-[#e3d8c5]">
+        <Icon size={18} />
       </div>
-      {children}
-    </Surface>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <p className="font-semibold text-[#17201b]">{title}</p>
+          {meta && <span className="text-xs font-semibold text-[#7b776d]">{meta}</span>}
+        </div>
+        <p className="mt-1 text-sm leading-6 text-[#62675f]">{body}</p>
+      </div>
+    </div>
   );
 }
 
-function EmptyState({ icon: Icon, title, body, action }) {
+function EmptyState({ icon: Icon, title, body }) {
   return (
-    <div className="flex min-h-[220px] flex-col items-center justify-center rounded-3xl border border-dashed border-outline-variant/35 bg-surface-container-lowest/45 p-8 text-center">
-      <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-outline-variant/30 bg-surface-container text-primary">
+    <div className="flex min-h-[220px] flex-col items-center justify-center rounded-3xl border border-dashed border-[#dfd2bf] bg-[#fbf7ef] p-8 text-center">
+      <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-[#1f6f5b] ring-1 ring-[#e3d8c5]">
         <Icon size={22} />
       </div>
-      <h4 className="title-medium">{title}</h4>
-      <p className="mt-2 max-w-md text-sm leading-6 text-on-surface-variant">{body}</p>
-      {action && <div className="mt-5">{action}</div>}
+      <h4 className="text-lg font-semibold text-[#17201b]">{title}</h4>
+      <p className="mt-2 max-w-md text-sm leading-6 text-[#62675f]">{body}</p>
     </div>
   );
 }
 
-function DashboardNav({ page }) {
+function Header({ page, signals, user, providerLabel, online }) {
   const navigate = useNavigate();
+  const displayName = user?.name?.split(' ')[0] || user?.email || 'there';
 
   return (
-    <div className="flex flex-wrap gap-2">
-      {Object.entries(DASHBOARD_PAGES).map(([id, label]) => (
-        <ShellButton key={id} active={page === id} onClick={() => navigate(id === 'overview' ? '/dashboard' : `/dashboard/${id}`)}>
-          {label}
-        </ShellButton>
-      ))}
-    </div>
-  );
-}
-
-function Header({ page, signals, user, providerLabel, isBackendOnline }) {
-  return (
-    <Surface elevation={0} shape="2xl" className="overflow-hidden border border-outline-variant/25 bg-surface-container-low/85 p-5 shadow-2xl shadow-black/15 md:p-6">
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+    <div className="rounded-[34px] border border-[#e3d8c5] bg-[#fffaf2] p-5 shadow-[0_24px_80px_-55px_rgba(27,32,26,0.55)] md:p-7">
+      <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0">
-          <div className="mb-4 flex flex-wrap gap-2">
-            <StatusPill tone={isBackendOnline ? 'good' : 'warn'} icon={Wifi}>
-              Backend {isBackendOnline ? 'online' : 'checking'}
-            </StatusPill>
-            <StatusPill tone="info" icon={Cpu}>{providerLabel}</StatusPill>
-            <StatusPill tone="neutral" icon={Clock3}>Synced {relativeSync(signals.lastSyncedAt)}</StatusPill>
+          <div className="mb-5 flex flex-wrap gap-2">
+            <Pill tone={online ? 'good' : 'warn'} icon={Wifi}>Backend {online ? 'online' : 'checking'}</Pill>
+            <Pill tone="info" icon={Cpu}>{providerLabel}</Pill>
+            <Pill icon={Clock3}>{signals.lastSyncedAt ? `Synced ${signals.lastSyncedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Not synced yet'}</Pill>
           </div>
-          <h1 className="font-display text-4xl font-semibold tracking-[-0.06em] text-on-surface md:text-5xl">
-            {page === 'overview' ? `Welcome back${user?.name ? `, ${user.name.split(' ')[0]}` : ''}` : DASHBOARD_PAGES[page]}
+          <p className="text-sm font-semibold text-[#8a6a33]">Selina workspace</p>
+          <h1 className="mt-2 max-w-4xl text-4xl font-semibold tracking-[-0.065em] text-[#17201b] md:text-6xl">
+            {page === 'overview' ? `Good to see you, ${displayName}` : PAGES[page]}
           </h1>
-          <p className="mt-4 max-w-3xl text-base leading-8 text-on-surface-variant">
-            Selina now shows what is actually connected: your session, local workspace, backend runtime, model gateway, and skill graph. No theatre, just the signals you need before asking the agent to work.
+          <p className="mt-4 max-w-3xl text-base leading-8 text-[#5d6259]">
+            A clear view of what is connected, what has changed, and what Selina can safely do next.
           </p>
           {signals.error && (
-            <div className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-error/30 bg-error/10 px-4 py-3 text-sm text-on-error-container">
+            <div className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-[#fee7e2] px-4 py-3 text-sm font-medium text-[#a33b2f] ring-1 ring-[#efc3ba]">
               <AlertCircle size={16} />
               {signals.error}
             </div>
           )}
         </div>
-        <DashboardNav page={page} />
+
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(PAGES).map(([id, label]) => (
+            <SoftButton key={id} active={page === id} onClick={() => navigate(id === 'overview' ? '/dashboard' : `/dashboard/${id}`)}>
+              {label}
+            </SoftButton>
+          ))}
+        </div>
       </div>
-    </Surface>
+    </div>
   );
 }
 
-function OverviewPage({ signals, store, providerLabel, providerConfig, skillNodes, fileCount, isBackendOnline }) {
+function Overview({ store, signals, providerLabel, providerConfig, skills, files }) {
   const navigate = useNavigate();
-  const latestThoughts = store.agentThoughts.slice(-3).map(getThoughtText).filter(Boolean).reverse();
+  const recentThoughts = store.agentThoughts.slice(-3).map((item) => item?.content || item?.message || item).filter(Boolean).reverse();
 
   return (
     <div className="grid gap-5">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <DataCard
-          icon={UserCircle}
-          label="Signed in as"
-          value={store.user?.name || 'Authenticated user'}
-          detail={store.user?.email || 'OAuth session restored from the backend.'}
-          tone="good"
-        />
-        <DataCard
-          icon={FileCode2}
-          label="Workspace"
-          value={`${fileCount} files`}
-          detail={store.vfsStatus === 'ready' ? 'Local file tree is available in the explorer.' : `VFS is ${store.vfsStatus || 'idle'}. Open the workbench to boot it.`}
-          tone={store.vfsStatus === 'ready' ? 'good' : 'warn'}
-          action={<button onClick={() => navigate('/dashboard/editor')} className="text-sm font-semibold text-primary hover:text-on-surface">Open workbench</button>}
-        />
-        <DataCard
-          icon={Cpu}
-          label="Model gateway"
-          value={providerLabel}
-          detail={providerConfig?.configured === false ? 'Provider key is missing in the backend environment.' : providerConfig?.model || 'Waiting for diagnostics.'}
-          tone={providerConfig?.configured === false ? 'bad' : 'info'}
-          action={<button onClick={() => navigate('/dashboard/runtime')} className="text-sm font-semibold text-primary hover:text-on-surface">View runtime</button>}
-        />
-        <DataCard
-          icon={Route}
-          label="Skill graph"
-          value={`${skillNodes.length} skills`}
-          detail={skillNodes.length ? 'Backend routing topology is loaded.' : 'Skill graph has not been returned yet.'}
-          tone={skillNodes.length ? 'good' : 'warn'}
-          action={<button onClick={() => navigate('/dashboard/skills')} className="text-sm font-semibold text-primary hover:text-on-surface">Inspect skills</button>}
-        />
+        <Metric icon={MessageSquare} label="Conversation" value={`${store.messages.length} turns`} detail={store.messages.length ? 'Chat history is active for this session.' : 'No prompt has been sent yet.'} tone="info" />
+        <Metric icon={FileCode2} label="Workspace" value={`${files.length} files`} detail={store.vfsStatus === 'ready' ? 'Local file tree is ready.' : `File system is ${store.vfsStatus || 'idle'}.`} tone={store.vfsStatus === 'ready' ? 'good' : 'warn'} action={<button onClick={() => navigate('/dashboard/editor')} className="inline-flex items-center gap-2 text-sm font-semibold text-[#1f6f5b]">Open workbench <ArrowRight size={14} /></button>} />
+        <Metric icon={Cpu} label="Model" value={providerLabel} detail={providerConfig?.configured === false ? 'Backend key missing.' : providerConfig?.model || 'Waiting for runtime diagnostics.'} tone={providerConfig?.configured === false ? 'bad' : 'good'} />
+        <Metric icon={Route} label="Skill routes" value={`${skills.length} skills`} detail={skills.length ? 'Backend skill graph is available.' : 'Skill graph is not loaded yet.'} tone={skills.length ? 'good' : 'warn'} />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-        <SectionCard eyebrow="Current work" title="What Selina knows right now">
+        <Panel className="p-5 md:p-6">
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-[#8a6a33]">Current work</p>
+              <h2 className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-[#17201b]">What Selina has to work with</h2>
+            </div>
+            <Pill tone={signals.loading ? 'warn' : 'good'}>{signals.loading ? 'Refreshing' : 'Ready'}</Pill>
+          </div>
           <div className="grid gap-3 md:grid-cols-2">
-            <SignalRow icon={MessageSquare} label="Conversation" value={`${store.messages.length} messages`} detail={store.messages.length ? 'The chat history is available to the session.' : 'No prompt has been sent in this session yet.'} />
-            <SignalRow icon={Activity} label="Agent stream" value={`${store.agentThoughts.length} events`} detail={store.agentThoughts.length ? 'Recent agent activity is visible in the activity page.' : 'The agent has not emitted activity yet.'} />
-            <SignalRow icon={TerminalSquare} label="Terminal" value={`${store.terminalOutput.length} lines`} detail={store.terminalOutput.length ? 'Runtime output is available for debugging.' : 'No terminal output has been captured yet.'} />
-            <SignalRow icon={GitBranch} label="Workflow" value={titleCase(store.workflowState?.status || 'Standby')} detail={store.workflowState?.url || 'No GitHub workflow event has arrived.'} />
+            <Row icon={Activity} title="Activity stream" body={store.agentThoughts.length ? 'Agent events are being recorded.' : 'No agent events yet.'} meta={`${store.agentThoughts.length} events`} />
+            <Row icon={TerminalSquare} title="Terminal evidence" body={store.terminalOutput.length ? 'Runtime output is available.' : 'No terminal output captured yet.'} meta={`${store.terminalOutput.length} lines`} />
+            <Row icon={GitBranch} title="Workflow" body={store.workflowState?.url || 'No GitHub workflow event has arrived.'} meta={titleCase(store.workflowState?.status || 'standby')} />
+            <Row icon={ShieldCheck} title="Session" body={store.user?.email || 'OAuth session is restored locally.'} meta={store.user?.provider ? titleCase(store.user.provider) : 'Protected'} />
           </div>
-        </SectionCard>
+        </Panel>
 
-        <SectionCard
-          eyebrow="Start here"
-          title="Useful next actions"
-          action={<StatusPill tone={isBackendOnline ? 'good' : 'warn'}>{signals.loading ? 'Refreshing' : 'Ready'}</StatusPill>}
-        >
-          <div className="space-y-3">
-            <ActionItem icon={FileCode2} title="Open the workbench" body="Use the explorer, editor, terminal, and Selina chat together." onClick={() => navigate('/dashboard/editor')} />
-            <ActionItem icon={Gauge} title="Check runtime health" body="Confirm model keys, memory, uptime, and recent provider events." onClick={() => navigate('/dashboard/runtime')} />
-            <ActionItem icon={Layers3} title="Review skill routing" body="See which computer-science skills the backend exposes to the agent." onClick={() => navigate('/dashboard/skills')} />
+        <Panel className="p-5 md:p-6">
+          <p className="text-sm font-semibold text-[#8a6a33]">Start here</p>
+          <h2 className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-[#17201b]">Useful next steps</h2>
+          <div className="mt-5 space-y-3">
+            <button onClick={() => navigate('/dashboard/editor')} className="w-full text-left"><Row icon={FileCode2} title="Open the workbench" body="Use files, terminal, and chat together." /></button>
+            <button onClick={() => navigate('/dashboard/runtime')} className="w-full text-left"><Row icon={Gauge} title="Check runtime" body="Review provider keys, uptime, memory, and audit events." /></button>
+            <button onClick={() => navigate('/dashboard/skills')} className="w-full text-left"><Row icon={Layers3} title="Inspect skills" body="See the real backend routing graph." /></button>
           </div>
-        </SectionCard>
+        </Panel>
       </div>
 
-      <SectionCard eyebrow="Recent activity" title="Latest session movement" action={<button onClick={() => navigate('/dashboard/activity')} className="text-sm font-semibold text-primary hover:text-on-surface">Open activity</button>}>
-        {latestThoughts.length ? (
+      <Panel className="p-5 md:p-6">
+        <div className="mb-5 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-[#8a6a33]">Recent movement</p>
+            <h2 className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-[#17201b]">Latest activity</h2>
+          </div>
+          <button onClick={() => navigate('/dashboard/activity')} className="text-sm font-semibold text-[#1f6f5b]">View feed</button>
+        </div>
+        {recentThoughts.length ? (
           <div className="space-y-3">
-            {latestThoughts.map((thought, index) => (
-              <div key={`${thought}-${index}`} className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/50 p-4 text-sm leading-6 text-on-surface-variant">
-                {thought}
-              </div>
-            ))}
+            {recentThoughts.map((thought, index) => <div key={`${thought}-${index}`} className="rounded-2xl bg-[#fbf7ef] p-4 text-sm leading-6 text-[#5d6259] ring-1 ring-[#eadfce]">{thought}</div>)}
           </div>
         ) : (
-          <EmptyState icon={Bot} title="No agent activity yet" body="Ask Selina to inspect the repository, explain a file, or run a small change. This panel will fill from the live websocket stream." />
+          <EmptyState icon={Bot} title="No activity yet" body="Ask Selina to inspect the repository or explain a file. Real agent events will appear here." />
         )}
-      </SectionCard>
+      </Panel>
     </div>
-  );
-}
-
-function SignalRow({ icon: Icon, label, value, detail }) {
-  return (
-    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/45 p-4">
-      <div className="mb-3 flex items-center gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <Icon size={17} />
-        </div>
-        <div>
-          <p className="text-xs font-semibold text-on-surface-variant">{label}</p>
-          <p className="title-small">{value}</p>
-        </div>
-      </div>
-      <p className="text-sm leading-6 text-on-surface-variant">{detail}</p>
-    </div>
-  );
-}
-
-function ActionItem({ icon: Icon, title, body, onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group flex w-full gap-4 rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/45 p-4 text-left transition hover:border-primary/35 hover:bg-surface-container"
-    >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary group-hover:bg-primary/15">
-        <Icon size={18} />
-      </div>
-      <div>
-        <p className="title-small">{title}</p>
-        <p className="mt-1 text-sm leading-6 text-on-surface-variant">{body}</p>
-      </div>
-    </button>
   );
 }
 
 function ActivityPage({ store }) {
   return (
     <div className="grid min-h-[620px] gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
-      <Surface elevation={0} shape="2xl" className="overflow-hidden border border-outline-variant/25 bg-surface-container-low/80 shadow-xl shadow-black/10">
-        <ActivityFeed />
-      </Surface>
-
-      <SectionCard eyebrow="Session detail" title="What the feed is reading">
-        <div className="space-y-3">
-          <SignalRow icon={MessageSquare} label="Messages" value={store.messages.length} detail="User and assistant turns stored in the local session." />
-          <SignalRow icon={Activity} label="Agent thoughts" value={store.agentThoughts.length} detail="Planning, tool calls, and status updates received through the websocket." />
-          <SignalRow icon={TerminalSquare} label="Terminal lines" value={store.terminalOutput.length} detail="Shell output captured while Selina works." />
+      <Panel className="overflow-hidden"><ActivityFeed /></Panel>
+      <Panel className="p-5 md:p-6">
+        <p className="text-sm font-semibold text-[#8a6a33]">Session detail</p>
+        <h2 className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-[#17201b]">What the feed reads</h2>
+        <div className="mt-5 space-y-3">
+          <Row icon={MessageSquare} title="Messages" body="User and assistant turns stored in local session state." meta={store.messages.length} />
+          <Row icon={Activity} title="Agent events" body="Thoughts, tool calls, plans, and status changes." meta={store.agentThoughts.length} />
+          <Row icon={TerminalSquare} title="Terminal" body="Shell output captured while Selina works." meta={store.terminalOutput.length} />
         </div>
-      </SectionCard>
+      </Panel>
     </div>
   );
 }
 
-function RuntimePage({ signals, providerStatus, activeProvider, activeProviderConfig, auditTail }) {
+function Runtime({ signals, providerStatus, activeProvider, activeProviderConfig, auditTail }) {
   const providers = ['gemini', 'openai', 'qwen', 'anthropic'];
 
   return (
     <div className="grid gap-5">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <DataCard icon={Wifi} label="Backend status" value={titleCase(signals.health?.status || 'Unknown')} detail={`Version ${signals.health?.version || 'not reported'}`} tone={signals.health?.status === 'active' ? 'good' : 'warn'} />
-        <DataCard icon={Clock3} label="Uptime" value={formatDuration(signals.health?.uptime)} detail="Reported by the Express bridge health endpoint." tone="info" />
-        <DataCard icon={Database} label="Memory" value={formatBytes(signals.health?.memory)} detail="Heap usage reported by the bridge process." tone="warn" />
-        <DataCard icon={Cpu} label="Active provider" value={activeProvider.toUpperCase()} detail={activeProviderConfig?.model || 'Model not reported'} tone={activeProviderConfig?.configured === false ? 'bad' : 'good'} />
+        <Metric icon={Wifi} label="Backend" value={titleCase(signals.health?.status || 'Unknown')} detail={`Version ${signals.health?.version || 'not reported'}`} tone={signals.health?.status === 'active' ? 'good' : 'warn'} />
+        <Metric icon={Clock3} label="Uptime" value={formatDuration(signals.health?.uptime)} detail="Reported by /health." />
+        <Metric icon={Database} label="Memory" value={formatBytes(signals.health?.memory)} detail="Bridge heap usage." tone="warn" />
+        <Metric icon={Cpu} label="Active provider" value={activeProvider.toUpperCase()} detail={activeProviderConfig?.model || 'Model not reported'} tone={activeProviderConfig?.configured === false ? 'bad' : 'good'} />
       </div>
 
-      <SectionCard eyebrow="Provider gateway" title="Configured model adapters">
-        <div className="grid gap-3 md:grid-cols-2">
+      <Panel className="p-5 md:p-6">
+        <p className="text-sm font-semibold text-[#8a6a33]">Provider gateway</p>
+        <h2 className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-[#17201b]">Model adapters</h2>
+        <div className="mt-5 grid gap-3 md:grid-cols-2">
           {providers.map((provider) => {
             const config = providerStatus?.[provider] || {};
-            const isActive = provider === activeProvider;
             const configured = Boolean(config.configured);
+            const active = provider === activeProvider;
             return (
-              <div key={provider} className={`rounded-2xl border p-4 ${isActive ? 'border-primary/35 bg-primary/10' : 'border-outline-variant/25 bg-surface-container-lowest/45'}`}>
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-container text-primary">
-                      <Cpu size={17} />
-                    </div>
-                    <div>
-                      <p className="title-small">{titleCase(provider)}</p>
-                      <p className="text-xs text-on-surface-variant">{config.model || 'No model selected'}</p>
-                    </div>
+              <div key={provider} className={`rounded-2xl p-4 ring-1 ${active ? 'bg-[#e7f4eb] ring-[#bcdcc8]' : 'bg-[#fbf7ef] ring-[#eadfce]'}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-[#17201b]">{titleCase(provider)}</p>
+                    <p className="mt-1 text-sm text-[#62675f]">{config.model || 'No model selected'}</p>
                   </div>
-                  <StatusPill tone={configured ? 'good' : 'bad'}>{configured ? 'Configured' : 'Missing key'}</StatusPill>
+                  <Pill tone={configured ? 'good' : 'bad'}>{configured ? 'Configured' : 'Missing key'}</Pill>
                 </div>
-                {config.baseUrl && <p className="truncate text-xs text-on-surface-variant">{config.baseUrl}</p>}
+                {config.baseUrl && <p className="mt-3 truncate text-xs text-[#7b776d]">{config.baseUrl}</p>}
               </div>
             );
           })}
         </div>
-      </SectionCard>
+      </Panel>
 
-      <SectionCard eyebrow="Audit trail" title="Recent provider events">
-        {auditTail.length ? (
-          <div className="space-y-3">
-            {auditTail.slice().reverse().map((event, index) => (
-              <div key={`${event.ts}-${index}`} className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/45 p-4">
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <StatusPill tone={event.ok === false ? 'bad' : 'good'} icon={event.ok === false ? AlertCircle : CheckCircle2}>{event.kind || 'event'}</StatusPill>
-                  <span className="text-xs text-on-surface-variant">{event.ts ? new Date(event.ts).toLocaleString() : 'No timestamp'}</span>
+      <Panel className="p-5 md:p-6">
+        <p className="text-sm font-semibold text-[#8a6a33]">Audit trail</p>
+        <h2 className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-[#17201b]">Recent model events</h2>
+        <div className="mt-5">
+          {auditTail.length ? (
+            <div className="space-y-3">
+              {auditTail.slice().reverse().map((event, index) => (
+                <div key={`${event.ts}-${index}`} className="rounded-2xl bg-[#fbf7ef] p-4 ring-1 ring-[#eadfce]">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <Pill tone={event.ok === false ? 'bad' : 'good'} icon={event.ok === false ? AlertCircle : CheckCircle2}>{event.kind || 'event'}</Pill>
+                    <span className="text-xs text-[#7b776d]">{event.ts ? new Date(event.ts).toLocaleString() : 'No timestamp'}</span>
+                  </div>
+                  <p className="text-sm leading-6 text-[#62675f]">Provider {event.provider || 'unknown'} {event.model ? `using ${event.model}` : ''}{Number.isFinite(event.durationMs) ? ` finished in ${event.durationMs}ms` : ''}.</p>
+                  {event.error && <p className="mt-2 text-sm text-[#a33b2f]">{event.error}</p>}
                 </div>
-                <p className="text-sm leading-6 text-on-surface-variant">
-                  Provider {event.provider || 'unknown'} {event.model ? `using ${event.model}` : ''}{Number.isFinite(event.durationMs) ? ` finished in ${event.durationMs}ms` : ''}.
-                </p>
-                {event.error && <p className="mt-2 text-sm text-error">{event.error}</p>}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState icon={ListChecks} title="No provider events yet" body="Once Selina calls a model, timeout/retry/token estimates and redacted provider diagnostics will appear here." />
-        )}
-      </SectionCard>
+              ))}
+            </div>
+          ) : <EmptyState icon={Server} title="No model events yet" body="Once Selina calls a provider, redacted diagnostics will appear here." />}
+        </div>
+      </Panel>
     </div>
   );
 }
 
-function SkillsPage({ skillNodes }) {
+function Skills({ skillNodes }) {
   const [query, setQuery] = useState('');
-  const visibleNodes = useMemo(() => {
+  const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return skillNodes;
     return skillNodes.filter((node) => `${node.label} ${node.expertDomain} ${node.id}`.toLowerCase().includes(q));
   }, [query, skillNodes]);
-
   const domains = useMemo(() => {
-    const counts = new Map();
-    skillNodes.forEach((node) => counts.set(node.expertDomain, (counts.get(node.expertDomain) || 0) + 1));
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    const map = new Map();
+    skillNodes.forEach((node) => map.set(node.expertDomain, (map.get(node.expertDomain) || 0) + 1));
+    return [...map.entries()].sort((a, b) => b[1] - a[1]);
   }, [skillNodes]);
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]">
-      <SectionCard eyebrow="Routing map" title="Skill coverage">
-        <div className="space-y-3">
-          {domains.map(([domain, count]) => (
-            <div key={domain} className="flex items-center justify-between rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/45 px-4 py-3">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Route size={17} />
-                </div>
-                <span className="title-small">{titleCase(domain)}</span>
-              </div>
-              <StatusPill tone="info">{count} skills</StatusPill>
-            </div>
-          ))}
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)]">
+      <Panel className="p-5 md:p-6">
+        <p className="text-sm font-semibold text-[#8a6a33]">Routing map</p>
+        <h2 className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-[#17201b]">Skill coverage</h2>
+        <div className="mt-5 space-y-3">
+          {domains.map(([domain, count]) => <Row key={domain} icon={Route} title={titleCase(domain)} body="Available backend specialist lane." meta={`${count} skills`} />)}
         </div>
-      </SectionCard>
-
-      <SectionCard
-        eyebrow="Backend skill graph"
-        title="Available specialist routes"
-        action={
-          <div className="relative min-w-[220px]">
-            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search skills"
-              className="h-10 w-full rounded-full border border-outline-variant/35 bg-surface-container-lowest pl-9 pr-4 text-sm text-on-surface outline-none transition focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
-            />
+      </Panel>
+      <Panel className="p-5 md:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-[#8a6a33]">Backend graph</p>
+            <h2 className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-[#17201b]">Specialist routes</h2>
           </div>
-        }
-      >
-        {visibleNodes.length ? (
-          <div className="grid gap-3 md:grid-cols-2">
-            {visibleNodes.map((node) => (
-              <div key={node.id} className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/45 p-4">
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div>
-                    <p className="title-small">{node.label}</p>
-                    <p className="mt-1 text-xs text-on-surface-variant">{titleCase(node.expertDomain)} lane</p>
-                  </div>
-                  <StatusPill tone="neutral">{node.bridges?.length || 0} bridges</StatusPill>
+          <div className="relative min-w-[240px]">
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#8a867c]" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search skills" className="h-11 w-full rounded-full bg-[#fbf7ef] pl-10 pr-4 text-sm text-[#17201b] outline-none ring-1 ring-[#e3d8c5] focus:ring-2 focus:ring-[#1f6f5b]" />
+          </div>
+        </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-2">
+          {visible.length ? visible.map((node) => (
+            <div key={node.id} className="rounded-2xl bg-[#fbf7ef] p-4 ring-1 ring-[#eadfce]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-[#17201b]">{node.label}</p>
+                  <p className="mt-1 text-sm text-[#62675f]">{titleCase(node.expertDomain)} lane</p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {(node.bridges || []).slice(0, 4).map((bridge) => (
-                    <span key={bridge} className="rounded-full border border-outline-variant/25 bg-surface-container px-2.5 py-1 text-xs text-on-surface-variant">
-                      {titleCase(bridge)}
-                    </span>
-                  ))}
-                </div>
+                <Pill>{node.bridges?.length || 0} bridges</Pill>
               </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState icon={Search} title="No matching skill" body="Try searching for frontend, backend, security, database, DevOps, testing, or AI." />
-        )}
-      </SectionCard>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {(node.bridges || []).slice(0, 4).map((bridge) => <span key={bridge} className="rounded-full bg-white px-2.5 py-1 text-xs text-[#62675f] ring-1 ring-[#e3d8c5]">{titleCase(bridge)}</span>)}
+              </div>
+            </div>
+          )) : <EmptyState icon={Search} title="No matching skill" body="Try frontend, backend, security, data, DevOps, or testing." />}
+        </div>
+      </Panel>
     </div>
   );
 }
@@ -507,49 +398,30 @@ export default function IntelligenceDashboard({ page = 'overview' }) {
   const activeProvider = providerStatus.activeProvider || 'gemini';
   const activeProviderConfig = providerStatus[activeProvider] || providerStatus.gemini || {};
   const providerLabel = `${titleCase(activeProvider)}${activeProviderConfig?.model ? ` / ${activeProviderConfig.model}` : ''}`;
-  const skillNodes = flattenSkillGraph(signals.skills?.graph);
+  const skills = flattenSkillGraph(signals.skills?.graph);
   const auditTail = Array.isArray(signals.diagnostics?.auditTail) ? signals.diagnostics.auditTail : [];
-  const files = flattenTree(store.vfsTree);
-  const currentPage = DASHBOARD_PAGES[page] ? page : 'overview';
-  const isBackendOnline = signals.health?.status === 'active';
+  const files = flattenFiles(store.vfsTree);
+  const currentPage = PAGES[page] ? page : 'overview';
+  const online = signals.health?.status === 'active';
 
   return (
-    <div className="h-full overflow-y-auto bg-surface-container-lowest p-4 text-on-surface md:p-6">
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35 }}
-        className="mx-auto flex max-w-7xl flex-col gap-5"
-      >
-        <Header page={currentPage} signals={signals} user={store.user} providerLabel={providerLabel} isBackendOnline={isBackendOnline} />
+    <div className="h-full overflow-y-auto bg-[#f6f0e6] p-4 text-[#17201b] md:p-6">
+      <div className="mx-auto flex max-w-7xl flex-col gap-5">
+        <Header page={currentPage} signals={signals} user={store.user} providerLabel={providerLabel} online={online} />
 
         {signals.loading && !signals.lastSyncedAt && (
-          <div className="flex items-center gap-3 rounded-2xl border border-outline-variant/25 bg-surface-container-low/80 px-4 py-3 text-sm text-on-surface-variant">
-            <RefreshCw size={16} className="animate-spin text-primary" />
+          <div className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-sm text-[#62675f] ring-1 ring-[#e3d8c5]">
+            <RefreshCw size={16} className="animate-spin text-[#1f6f5b]" />
             Loading live backend signals...
           </div>
         )}
 
-        {currentPage === 'overview' && (
-          <OverviewPage
-            signals={signals}
-            store={store}
-            providerLabel={providerLabel}
-            providerConfig={activeProviderConfig}
-            skillNodes={skillNodes}
-            fileCount={files.length}
-            isBackendOnline={isBackendOnline}
-          />
-        )}
+        {currentPage === 'overview' && <Overview store={store} signals={signals} providerLabel={providerLabel} providerConfig={activeProviderConfig} skills={skills} files={files} />}
         {currentPage === 'activity' && <ActivityPage store={store} />}
-        {currentPage === 'runtime' && <RuntimePage signals={signals} providerStatus={providerStatus} activeProvider={activeProvider} activeProviderConfig={activeProviderConfig} auditTail={auditTail} />}
-        {currentPage === 'skills' && <SkillsPage skillNodes={skillNodes} />}
-        {currentPage === 'security' && (
-          <Surface elevation={0} shape="2xl" className="min-h-[620px] overflow-hidden border border-outline-variant/25 bg-surface-container-low/80 shadow-xl shadow-black/10">
-            <SecurityAudit signals={signals} />
-          </Surface>
-        )}
-      </motion.div>
+        {currentPage === 'runtime' && <Runtime signals={signals} providerStatus={providerStatus} activeProvider={activeProvider} activeProviderConfig={activeProviderConfig} auditTail={auditTail} />}
+        {currentPage === 'skills' && <Skills skillNodes={skills} />}
+        {currentPage === 'security' && <Panel className="overflow-hidden"><SecurityAudit signals={signals} /></Panel>}
+      </div>
     </div>
   );
 }

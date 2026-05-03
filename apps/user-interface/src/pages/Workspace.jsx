@@ -118,7 +118,7 @@ export default function Workspace() {
 
   if (isDashboardMode) {
     return (
-      <div className="flex h-screen w-screen flex-col overflow-hidden bg-surface-container-lowest text-on-surface font-sans selection:bg-primary/20 selection:text-primary">
+      <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#f6f0e6] text-[#17201b] font-sans selection:bg-[#dbeadd] selection:text-[#1f6f5b]">
         <Titlebar onOpenSettings={() => setIsSettingsOpen(true)} />
 
         <main className="relative z-10 min-h-0 flex-1 overflow-hidden">
@@ -133,10 +133,10 @@ export default function Workspace() {
   }
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-surface-container-lowest text-on-surface font-sans selection:bg-primary/20 selection:text-primary">
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#f6f0e6] text-[#17201b] font-sans selection:bg-[#dbeadd] selection:text-[#1f6f5b]">
       <Titlebar onOpenSettings={() => setIsSettingsOpen(true)} />
 
-      <div className="relative flex min-h-0 flex-1 overflow-hidden bg-surface-container-lowest/80">
+        <div className="relative flex min-h-0 flex-1 overflow-hidden bg-[#f6f0e6]">
         <div className="flex h-full shrink-0">
           <Surface
             elevation={0}

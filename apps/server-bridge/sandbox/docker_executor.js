@@ -20,11 +20,15 @@ class SandboxExecutor {
       await fs.mkdir(sandboxDir, { recursive: true });
       await fs.writeFile(filePath, codeToTest);
 
-      // 2. Execute in an ephemeral Alpine Node container
+      // 2. Execute in an ephemeral Alpine Node container with resource constraints
       // --rm: Container is immediately purged upon exit
       // --network none: Cuts off internet access to prevent malicious execution
+      // --memory 256m: Limit memory to prevent memory exhaustion attacks
+      // --cpus 0.5: Limit CPU to prevent crypto mining / CPU exhaustion
+      // --pids-limit 50: Prevent fork bombs
+      // --read-only: Make root filesystem read-only
       // -v: Mounts only the specific test file
-      const command = `docker run --rm --network none -v "${filePath}:/app/${fileName}" -w /app node:18-alpine node ${fileName}`;
+      const command = `docker run --rm --network none --memory 256m --cpus 0.5 --pids-limit 50 --read-only -v "${filePath}:/app/${fileName}" -w /app node:18-alpine node ${fileName}`;
       
       // Enforce a strict 10-second timeout to kill infinite loops
       const { stdout, stderr } = await execPromise(command, { timeout: 10000 });

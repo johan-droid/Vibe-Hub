@@ -58,27 +58,27 @@ export default function Titlebar({ onOpenSettings }) {
     <Surface
       elevation={0}
       shape="none"
-      className="z-50 flex h-16 items-center justify-between border-b border-outline-variant/30 bg-surface-container-lowest px-4 text-on-surface shadow-lg shadow-black/20 md:px-6"
+      className="z-50 flex h-16 items-center justify-between border-b border-[#e3d8c5] bg-[#fffaf2] px-4 text-[#17201b] shadow-[0_8px_30px_-28px_rgba(27,32,26,0.5)] md:px-6"
     >
       <div className="flex min-w-0 items-center gap-4 md:gap-6">
         <button type="button" onClick={() => goTo(NAV_ITEMS[0])} className="flex min-w-0 items-center gap-3 text-left">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 text-primary">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#1f6f5b] text-white">
             <Bot size={20} />
           </div>
           <div className="hidden min-w-0 sm:block">
             <div className="flex items-center gap-2">
               <span className="title-small leading-none">Selina</span>
-              <span className="h-1.5 w-1.5 rounded-full bg-tertiary" />
+              <span className="h-1.5 w-1.5 rounded-full bg-[#d8892f]" />
             </div>
-            <span className="mt-1 block truncate text-xs font-medium text-on-surface-variant">
+            <span className="mt-1 block truncate text-xs font-medium text-[#6c6f68]">
               {user?.name || user?.email || 'Agent workspace'}
             </span>
           </div>
         </button>
 
-        <div className="hidden h-8 w-px bg-outline-variant/35 md:block" />
+        <div className="hidden h-8 w-px bg-[#e3d8c5] md:block" />
 
-        <div className="hidden items-center gap-1 rounded-full border border-outline-variant/30 bg-surface-container-low p-1 xl:flex">
+        <div className="hidden items-center gap-1 rounded-full bg-[#f4ecdf] p-1 ring-1 ring-[#e3d8c5] xl:flex">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = isActivePath(location.pathname, item.path) || (item.tab === activeTab && item.path === '/dashboard/editor' && activeTab === 'editor');
@@ -89,8 +89,8 @@ export default function Titlebar({ onOpenSettings }) {
                 onClick={() => goTo(item)}
                 className={`flex h-9 items-center gap-2 rounded-full px-3 text-sm font-semibold transition ${
                   active
-                    ? 'bg-on-surface text-surface-container-lowest'
-                    : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+                    ? 'bg-[#17201b] text-white'
+                    : 'text-[#5d6259] hover:bg-white hover:text-[#17201b]'
                 }`}
               >
                 <Icon size={14} />
@@ -114,7 +114,7 @@ export default function Titlebar({ onOpenSettings }) {
           onClick={toggleTheme}
           variant="standard"
           size="md"
-          className="text-on-surface-variant hover:text-primary"
+          className="text-[#5d6259] hover:text-[#1f6f5b]"
           aria-label="Toggle theme"
           title="Toggle theme"
         />
@@ -141,7 +141,7 @@ export default function Titlebar({ onOpenSettings }) {
           onClick={onOpenSettings}
           variant="standard"
           size="md"
-          className="border border-outline-variant/30 bg-surface-container-low hover:text-primary"
+          className="border border-[#e3d8c5] bg-white hover:text-[#1f6f5b]"
           aria-label="Settings"
           title="Settings"
         />

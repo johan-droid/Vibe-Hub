@@ -102,11 +102,10 @@ const footerGroups = [
 
 function AmbientBackground() {
   return (
-    <div className="fixed inset-0 -z-10 overflow-hidden bg-surface-container-lowest">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_15%,hsl(var(--primary)/0.18),transparent_30%),radial-gradient(circle_at_82%_12%,hsl(var(--secondary)/0.14),transparent_26%),linear-gradient(180deg,hsl(var(--surface-container-lowest)),hsl(var(--surface))_52%,hsl(var(--surface-container-lowest)))]" />
-      <div className="absolute left-[5%] top-24 h-80 w-80 rounded-full bg-primary/10 blur-[130px] animate-drift" />
-      <div className="absolute bottom-32 right-[8%] h-96 w-96 rounded-full bg-secondary/10 blur-[150px] animate-drift [animation-delay:3s]" />
-      <div className="absolute inset-0 opacity-[0.045] [background-image:linear-gradient(to_right,#fff_1px,transparent_1px),linear-gradient(to_bottom,#fff_1px,transparent_1px)] [background-size:64px_64px]" />
+    <div className="fixed inset-0 -z-10 overflow-hidden bg-[#f6f0e6]">
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,#fffaf2_0%,#f6f0e6_48%,#efe5d5_100%)]" />
+      <div className="absolute -left-24 top-24 h-80 w-80 rounded-full bg-[#dbeadd] blur-[120px]" />
+      <div className="absolute bottom-20 right-0 h-96 w-96 rounded-full bg-[#f8deb7] blur-[140px]" />
     </div>
   );
 }
@@ -116,7 +115,7 @@ function BrandMark({ size = 'md' }) {
   const iconSize = size === 'lg' ? 27 : 22;
 
   return (
-    <div className={`${sizes} flex items-center justify-center border border-primary/25 bg-primary/10 text-primary shadow-lg shadow-primary/10`}>
+    <div className={`${sizes} flex items-center justify-center bg-[#1f6f5b] text-white shadow-lg shadow-black/10`}>
       <Brain size={iconSize} />
     </div>
   );
@@ -124,7 +123,7 @@ function BrandMark({ size = 'md' }) {
 
 function WorkflowSwitcher({ activeWorkflow, setActiveWorkflow }) {
   return (
-    <div className="grid gap-2 rounded-[1.5rem] border border-outline-variant/35 bg-surface-container-low/70 p-2 sm:grid-cols-4">
+    <div className="grid gap-2 rounded-[1.5rem] bg-white p-2 shadow-lg shadow-black/5 ring-1 ring-[#e3d8c5] sm:grid-cols-4">
       {workflows.map((workflow) => {
         const Icon = workflow.icon;
         const isActive = workflow.id === activeWorkflow.id;
@@ -132,9 +131,9 @@ function WorkflowSwitcher({ activeWorkflow, setActiveWorkflow }) {
           <button
             key={workflow.id}
             onClick={() => setActiveWorkflow(workflow)}
-            className={`relative flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition ${isActive ? 'text-primary' : 'text-on-surface-variant hover:text-on-surface'}`}
+            className={`relative flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition ${isActive ? 'text-[#1f6f5b]' : 'text-[#62675f] hover:text-[#17201b]'}`}
           >
-            {isActive && <motion.span layoutId="workflow-pill" className="absolute inset-0 rounded-2xl border border-primary/25 bg-primary/10" />}
+            {isActive && <motion.span layoutId="workflow-pill" className="absolute inset-0 rounded-2xl bg-[#e7f4eb] ring-1 ring-[#bcdcc8]" />}
             <Icon size={16} className="relative z-10" />
             <span className="relative z-10">{workflow.label}</span>
           </button>

@@ -12,7 +12,9 @@ import { createServer }   from 'http';
 import { WebSocketServer } from 'ws';
 import { Server as SocketIOServer } from 'socket.io';
 import { v4 as uuid }     from 'uuid';
-import { logger }         from './utils/logger.js';
+import { logger, requestContext } from './utils/logger.js';
+import { codeRequestSchema, vfsCommitSchema, validateRequest } from './utils/validation.js';
+import { handleCodeRequest, handleCommitRequest, handleGetPendingFiles, handleGetVfsStats } from './orchestrator/router.js';
 
 import { initDB }                from './db.js';
 import { requireAuth, verifyToken } from './auth/middleware.js';
@@ -189,6 +191,16 @@ app.post('/api/github/webhook', async (req, res) => {
 
   res.status(200).send('OK');
 });
+
+// ── Agent Orchestration (V6 XState) ───────────────────────────────────────────
+// Main endpoint for AI code generation with rollback and VFS approval
+app.post('/api/code', requireAuth, validateRequest(codeRequestSchema), handleCodeRequest);
+
+// ── Virtual File System API ───────────────────────────────────────────────────
+// Secure commit endpoint with user approval gate
+app.post('/api/fs/commit', requireAuth, validateRequest(vfsCommitSchema), handleCommitRequest);
+app.get('/api/fs/pending', requireAuth, handleGetPendingFiles);
+app.get('/api/fs/stats', requireAuth, handleGetVfsStats);
 
 // ── GitHub Copilot Extension endpoint ─────────────────────────────────────────
 // Copilot Extensions use the OpenAI streaming chat completions protocol.
