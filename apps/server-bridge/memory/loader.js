@@ -1,5 +1,6 @@
 import pool from '../db.js';
 import { embeddingsService } from './embeddings.js';
+import { ASTGraphStore, HybridContextRetriever } from './ast-graph.js';
 
 /**
  * Load memory for a project: user-written memory.md + auto-learned brain journal + semantic memory.
@@ -147,5 +148,72 @@ export async function appendBrainJournal(userId, projectName, entry) {
     }
   } catch (err) {
     // Failed to append journal
+  }
+}
+
+/**
+ * V6: Hybrid Memory Retrieval — AST-first, embeddings fallback
+ * ============================================================
+ * Strategy: 100% AST-first for code structure, embeddings only if AST sparse.
+ * 
+ * @param {string} userId
+ * @param {string} projectName
+ * @param {string} targetFilePath - File being modified
+ * @param {string} targetFunctionName - Function being modified (optional)
+ * @param {string} query - Semantic query for fallback (optional)
+ */
+export async function loadMemoryHybrid(userId, projectName, targetFilePath, targetFunctionName = null, query = null) {
+  try {
+    // 1. Base memory (same as v4)
+    const baseMemory = await loadMemory(userId, projectName, query);
+    
+    // 2. V6: AST-first structural memory
+    let astContext = null;
+    try {
+      const astGraph = await ASTGraphStore.loadProject(projectName);
+      if (astGraph) {
+        const retriever = new HybridContextRetriever(astGraph, embeddingsService);
+        const results = await retriever.getContext(targetFilePath, targetFunctionName, query);
+        astContext = HybridContextRetriever.formatContext(results);
+      }
+    } catch (astErr) {
+      // AST not available, will rely on embeddings
+    }
+    
+    // 3. Semantic fallback if AST sparse
+    let semanticContext = null;
+    if (!astContext || astContext.length < 100) {
+      // Already loaded in baseMemory.brainJournal, but we can supplement
+      const semanticResult = await loadMemory(userId, projectName, query);
+      if (semanticResult.brainJournal.length > 0) {
+        semanticContext = `=== RELATED MEMORIES ===\n${semanticResult.brainJournal.map(j => j.content || j).join('\n')}`;
+      }
+    }
+    
+    return {
+      ...baseMemory,
+      astContext,      // Exact dependencies from AST
+      semanticContext, // Fuzzy matches from embeddings (fallback only)
+      strategy: 'ast-first'
+    };
+  } catch (err) {
+    // Fall back to base memory
+    const base = await loadMemory(userId, projectName, query);
+    return { ...base, astContext: null, semanticContext: null, strategy: 'fallback' };
+  }
+}
+
+/**
+ * Parse and store AST for a file
+ */
+export async function indexFileAST(projectName, filePath, content) {
+  try {
+    const { ASTParser, ASTGraphStore } = await import('./ast-graph.js');
+    const parser = new ASTParser();
+    const graph = parser.parseFile(filePath, content);
+    await ASTGraphStore.save(projectName, filePath, graph);
+    return { success: true, nodes: graph.nodes.size };
+  } catch (err) {
+    return { success: false, error: err.message };
   }
 }

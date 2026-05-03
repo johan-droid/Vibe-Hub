@@ -120,6 +120,19 @@ export async function initDB(retries = 5) {
 
       CREATE INDEX IF NOT EXISTS idx_user_preferences_user ON user_preferences(user_id);
       CREATE INDEX IF NOT EXISTS idx_user_preferences_type ON user_preferences(preference_type);
+
+      -- V6: AST Graph Storage for structural memory
+      CREATE TABLE IF NOT EXISTS ast_graphs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        project_name VARCHAR(255) NOT NULL,
+        file_path TEXT NOT NULL,
+        graph_json JSONB NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(project_name, file_path)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_ast_graphs_project ON ast_graphs(project_name);
+      CREATE INDEX IF NOT EXISTS idx_ast_graphs_file ON ast_graphs(file_path);
     `);
   } catch (err) {
     if (retries > 0) {
