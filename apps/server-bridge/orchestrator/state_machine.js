@@ -3,7 +3,7 @@ import OrgContextBuilder from '../org_core/context_builder.js';
 import UserContextBuilder from '../user_env/context_builder.js';
 import semanticGraphBuilder from '../memory/loader.js';
 import SandboxExecutor from '../sandbox/docker_executor.js';
-import { PromptOrchestrator } from './context.js';
+import llmClient from './llm_client.js';
 
 const agentMachine = createMachine({
   id: 'SaaSCodingAgent',
@@ -70,30 +70,25 @@ const agentMachine = createMachine({
 
     drafting_code: {
       invoke: {
+        // Execute the live API call using the current machine context
         src: async (context) => {
-          // Build structured prompts using the orchestrator
-          const systemPrompt = PromptOrchestrator.buildSystemPrompt(context.orgContext, context.userContext);
-          const taskPrompt = PromptOrchestrator.buildTaskPrompt(
-            context.taskPrompt, 
-            context.astGraph, 
-            context.sandboxError
+          return await llmClient.generateCode(
+            context.orgContext,
+            context.userContext,
+            context.taskPrompt,
+            context.astGraph,
+            context.sandboxError // Will be null on first pass, populated on rollbacks
           );
-
-          // Log prompts for debugging (remove in production)
-          console.log('[System Prompt]', systemPrompt.substring(0, 200) + '...');
-          console.log('[Task Prompt]', taskPrompt.substring(0, 200) + '...');
-
-          // Here you would make the actual LLM API call
-          // For now, return placeholder code for testing
-          // const rawGeneratedCode = await callYourLLMAPI(systemPrompt, taskPrompt);
-          
-          return "// Generated code would go here\n// For now, this is placeholder code for testing"; 
         },
         onDone: {
           target: 'sandboxing',
           actions: assign({ generatedCode: (context, event) => event.data })
         },
-        onError: 'rollback'
+        onError: {
+          target: 'fatal_failure',
+          // Log the error. If the API fails, the machine halts.
+          actions: (context, event) => console.error("API Failure:", event.data)
+        }
       }
     },
 
