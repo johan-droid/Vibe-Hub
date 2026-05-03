@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { 
   Brain, Sparkles, ArrowRight, Cpu, Zap, Shield, GitBranch, 
-  MessageSquare, Layout, Terminal, Code2, Globe, Database
+  MessageSquare, Layout, Terminal, Code2, Globe, Database, Github
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
@@ -10,6 +10,16 @@ import { api } from '../services/api';
 import { Surface } from '../features/shared/components/Surface';
 import { Button } from '../features/shared/components/Button';
 import { BentoGrid, BentoCard } from '../features/shared/components/BentoGrid';
+
+
+const GoogleIcon = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+  </svg>
+);
 
 const SwarmBackground = () => (
   <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
@@ -71,11 +81,6 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <div className="lg:hidden flex items-center mr-auto ml-4">
-            <Button variant="text" size="sm" onClick={() => {}} className="px-2">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-            </Button>
-          </div>
           <div className="hidden lg:flex items-center gap-8">
             {['Capabilities', 'Intelligence', 'Protocol'].map(item => (
               <a key={item} href={`#${item.toLowerCase()}`} className="text-xs font-mono font-bold uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors">
@@ -85,8 +90,8 @@ export default function LandingPage() {
           </div>
 
           <div className="flex items-center gap-4">
-            <Button variant="text" size="sm" className="hidden sm:flex" onClick={() => handleLaunch('google')}>Sign In</Button>
-            <Button variant="filled" size="sm" onClick={() => handleLaunch()}>Launch IDE</Button>
+            <Button variant="filled" size="sm" leadingIcon={Github} className="hidden sm:flex border-outline-variant/50 bg-[#154634] text-white hover:bg-[#1d5b45]" onClick={() => handleLaunch('github')}>GitHub</Button>
+            <Button variant="filled" size="sm" leadingIcon={GoogleIcon} className="bg-[#3ba2f6] text-white hover:bg-[#2e82c5]" onClick={() => handleLaunch('google')}>Google</Button>
           </div>
         </div>
       </nav>
@@ -110,7 +115,7 @@ export default function LandingPage() {
 
           <h1 className="display-medium md:text-7xl mb-6 leading-[1.1] tracking-tight font-black">
             The Agentic <br />
-            <span className="text-gradient italic">Operating System.</span>
+            <span className="text-[#3ba2f6] italic">Operating System.</span>
           </h1>
 
           <p className="text-lg md:text-xl text-on-surface-variant max-w-xl mx-auto leading-relaxed mb-10 opacity-70">
@@ -118,11 +123,11 @@ export default function LandingPage() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Button size="lg" trailingIcon={ArrowRight} className="h-14 px-10 text-base rounded-2xl" onClick={() => handleLaunch()}>
-              Get Started
+            <Button size="lg" variant="filled" leadingIcon={Github} className="h-14 px-10 text-base rounded-2xl bg-[#154634] text-white hover:bg-[#1d5b45]" onClick={() => handleLaunch('github')}>
+              Continue with GitHub
             </Button>
-            <Button variant="outlined" size="lg" className="h-14 px-10 text-base rounded-2xl border-outline-variant/50" onClick={() => window.open('https://github.com/johan-droid/Selina-Hub', '_blank')}>
-              View Protocol
+            <Button size="lg" variant="filled" leadingIcon={GoogleIcon} className="h-14 px-10 text-base rounded-2xl bg-[#3ba2f6] text-white hover:bg-[#2e82c5]" onClick={() => handleLaunch('google')}>
+              Continue with Google
             </Button>
           </div>
         </motion.div>

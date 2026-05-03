@@ -51,9 +51,9 @@ export default function Workspace() {
     activeFileContent, activeFilePath,
   } = useStore();
 
-  const [sidebarMode, setSidebarMode] = useState('explorer'); // 'explorer', 'swarm', 'search'
+  const [sidebarMode, setSidebarMode] = useState('explorer'); // 'explorer', 'swarm', 'search', 'security'
   const [mobileView, setMobileView] = useState('editor'); // 'sidebar', 'editor', 'chat', 'terminal'
-  const isMobile = useMediaQuery('(max-width: 768px)'); // 'explorer', 'swarm', 'search'
+  const isMobile = useMediaQuery('(max-width: 768px)');
   const [sidebarW, setSidebarW] = useState(DEFAULT_SIDEBAR_W);
   const [chatW, setChatW] = useState(DEFAULT_CHAT_W);
   const [terminalH, setTerminalH] = useState(DEFAULT_TERM_H);
@@ -92,21 +92,25 @@ export default function Workspace() {
               icon={LayoutGrid} 
               active={sidebarMode === 'explorer'} 
               onClick={() => { setSidebarMode('explorer'); setSidebarCollapsed(false); if (isMobile) setMobileView('sidebar'); }}
+              ariaLabel="Explorer"
             />
             <NavIcon 
               icon={Activity} 
               active={sidebarMode === 'swarm'} 
               onClick={() => { setSidebarMode('swarm'); setSidebarCollapsed(false); if (isMobile) setMobileView('sidebar'); }}
+              ariaLabel="Swarm Dashboard"
             />
             <NavIcon 
               icon={SearchIcon} 
               active={sidebarMode === 'search'} 
               onClick={() => { setSidebarMode('search'); setSidebarCollapsed(false); if (isMobile) setMobileView('sidebar'); }}
+              ariaLabel="Global Search"
             />
             <NavIcon
               icon={ShieldAlert}
               active={sidebarMode === 'security'}
               onClick={() => { setSidebarMode('security'); setSidebarCollapsed(false); if (isMobile) setMobileView('sidebar'); }}
+              ariaLabel="Security Audit"
             />
 
             {isMobile && (
@@ -114,13 +118,15 @@ export default function Workspace() {
                 icon={TerminalIcon}
                 active={mobileView === 'terminal'}
                 onClick={() => setMobileView('terminal')}
+                ariaLabel="Terminal"
               />
             )}
             {isMobile && (
               <NavIcon
-                icon={Activity}
+                icon={Sparkles}
                 active={mobileView === 'chat'}
                 onClick={() => { setMobileView('chat'); setChatCollapsed(false); }}
+                ariaLabel="Chat"
               />
             )}
             {isMobile && (
@@ -128,11 +134,12 @@ export default function Workspace() {
                 icon={LayoutGrid}
                 active={mobileView === 'editor'}
                 onClick={() => setMobileView('editor')}
+                ariaLabel="Editor"
               />
             )}
 
-            <div className="md:mt-auto hidden md:block">
-               <NavIcon icon={Sparkles} />
+            <div className="mt-auto hidden md:block">
+               <NavIcon icon={Sparkles} ariaLabel="AI Assistant" />
             </div>
           </Surface>
 
@@ -238,7 +245,7 @@ export default function Workspace() {
         </AnimatePresence>
       </div>
 
-      <StatusBar />
+      {!isMobile && <StatusBar />}
 
       <SettingsModal
         isOpen={isSettingsOpen}
