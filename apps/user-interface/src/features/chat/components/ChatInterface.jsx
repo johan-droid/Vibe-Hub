@@ -257,6 +257,8 @@ export default function ChatInterface({ onSend }) {
                 disabled={isThinking || !input.trim()}
                 onClick={handleSend}
                 className="!h-11 !w-11 !p-0 !rounded-xl shadow-lg shadow-primary/20"
+                aria-label="Send message"
+                title="Send message"
              >
                 <Send size={18} />
              </Button>
