@@ -95,7 +95,7 @@ export const CS_SKILL_NODES = [
     expertDomain: 'debug',
     keywords: ['test', 'unit', 'integration', 'e2e', 'vitest', 'jest', 'playwright', 'coverage', 'qa', 'regression'],
     directives: ['Add tests at the lowest level that proves behavior.', 'Test failure modes, not just happy paths.'],
-    bridges: ['debugging', 'security_engineering', 'backend_engineering', 'frontend_engineering'],
+    bridges: ['observability', 'security_engineering', 'backend_engineering', 'frontend_engineering'],
   },
   {
     id: 'performance_engineering',

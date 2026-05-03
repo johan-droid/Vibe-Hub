@@ -20,6 +20,7 @@ import { githubService }         from './github/index.js';
 import { creativeService }       from './creative/index.js';
 import { uiVariantService }      from './creative/generate-ui-variant.js';
 import { modelService }          from './orchestrator/models.js';
+import { listSkillGraph }        from './orchestrator/skill-graph.js';
 
 // ─── Express + HTTP server ────────────────────────────────────────────────────
 
@@ -65,6 +66,13 @@ app.get('/api/me', requireAuth, (req, res) => {
 // Runtime diagnostics for SaaS observability. Secrets are never returned.
 app.get('/api/runtime/diagnostics', requireAuth, (_req, res) => {
   res.json(modelService.diagnostics());
+});
+
+app.get('/api/runtime/skills', requireAuth, (_req, res) => {
+  res.json({
+    mode: 'mixture-of-experts',
+    graph: listSkillGraph(),
+  });
 });
 
 // ── GitHub webhooks ───────────────────────────────────────────────────────────

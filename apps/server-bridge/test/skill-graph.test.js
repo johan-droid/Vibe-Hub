@@ -29,6 +29,11 @@ describe('CS skill graph switcher', () => {
     expect(graph.map(node => node.id)).toContain('distributed_systems');
     expect(graph.map(node => node.id)).toContain('programming_languages');
     expect(graph.map(node => node.id)).toContain('privacy_compliance');
+    for (const node of graph) {
+      for (const bridge of node.bridges || []) {
+        expect(graph.some(candidate => candidate.id === bridge)).toBe(true);
+      }
+    }
   });
 
   it('injects the bridge into system prompts under standard budget', () => {
