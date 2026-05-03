@@ -4,6 +4,7 @@ import UserContextBuilder from '../user_env/context_builder.js';
 import semanticGraphBuilder from '../memory/loader.js';
 import SandboxExecutor from '../sandbox/docker_executor.js';
 import llmClient from './llm_client.js';
+import { vfs } from '../vfs/container.js';
 
 const agentMachine = createMachine({
   id: 'SaaSCodingAgent',
@@ -132,7 +133,26 @@ const agentMachine = createMachine({
       always: 'drafting_code'
     },
 
-    success: { type: 'final' },
+    success: {
+      type: 'final',
+      entry: assign({
+        // Stage the verified code in VFS for user approval
+        stagedFile: (context) => {
+          const entry = vfs.stageFile(
+            context.targetFile,
+            context.originalCode || '', // Original content (loaded earlier)
+            context.generatedCode,
+            {
+              agentVersion: 'v6',
+              retries: context.retries,
+              sandboxVerified: true,
+              userId: context.userId
+            }
+          );
+          return entry;
+        }
+      })
+    },
     fatal_failure: { type: 'final' }
   }
 });

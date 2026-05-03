@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { interpret } from 'xstate';
 import agentMachine from './state_machine.js';
 import { selectSkillProfile } from './skill-graph.js';
+import { vfs } from '../vfs/container.js';
 
 // Resolve directory for skill files
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -150,6 +151,31 @@ ${prompt}
      * Streams state transitions via Socket.io for real-time UI updates
      */
     async executeWithStateMachine(prompt, userId, targetFile, io, socketId) {
+        // Set up VFS listener to broadcast staged files via WebSocket
+        const onFileStaged = (entry) => {
+            if (io && socketId) {
+                io.to(socketId).emit('file_staged', {
+                    filePath: entry.filePath,
+                    originalContent: entry.originalContent,
+                    proposedContent: entry.proposedContent,
+                    metadata: entry.metadata,
+                    status: entry.status,
+                    timestamp: entry.metadata.timestamp
+                });
+                console.log(`[Router] Broadcasted staged file: ${entry.filePath}`);
+            }
+        };
+        vfs.on('file_staged', onFileStaged);
+
+        // Load original file content for diff comparison
+        let originalCode = '';
+        try {
+            originalCode = await fs.readFile(targetFile, 'utf-8');
+        } catch (err) {
+            // File doesn't exist yet (new file creation)
+            originalCode = '';
+        }
+
         return new Promise((resolve, reject) => {
             const agentService = interpret(agentMachine).onTransition((state) => {
                 console.log(`Agent Status: transitioned to [${state.value}]`);
@@ -165,13 +191,20 @@ ${prompt}
                 }
                 
                 if (state.value === 'success') {
+                    // Clean up VFS listener
+                    vfs.off('file_staged', onFileStaged);
+                    
                     resolve({
                         success: true,
                         code: state.context.generatedCode,
                         astGraph: state.context.astGraph,
-                        retries: state.context.retries
+                        retries: state.context.retries,
+                        stagedFile: state.context.stagedFile
                     });
                 } else if (state.value === 'fatal_failure') {
+                    // Clean up VFS listener
+                    vfs.off('file_staged', onFileStaged);
+                    
                     reject(new Error(`Fatal failure: ${state.context.sandboxError || 'Unknown error'}`));
                 }
             });
@@ -181,7 +214,8 @@ ${prompt}
                 type: 'START_TASK', 
                 prompt, 
                 userId,
-                targetFile 
+                targetFile,
+                originalCode
             });
         });
     }
@@ -241,4 +275,93 @@ async function handleCodeRequest(req, res) {
     }
 }
 
-export { Router, router, handleCodeRequest };
+/**
+ * API endpoint to commit approved VFS changes to physical disk
+ * ONLY this endpoint performs actual fs.writeFile operations
+ */
+async function handleCommitRequest(req, res) {
+    const { filePath, approved } = req.body;
+
+    if (!filePath) {
+        return res.status(400).json({
+            success: false,
+            error: "filePath is required"
+        });
+    }
+
+    try {
+        if (!approved) {
+            // User rejected the changes - drop from VFS
+            vfs.rejectFile(filePath, 'User rejected changes');
+            return res.status(200).json({
+                success: true,
+                message: "Changes rejected. File not modified.",
+                filePath
+            });
+        }
+
+        // User approved - commit to physical disk
+        await vfs.approveFile(filePath);
+        const entry = await vfs.commitToDisk(filePath, fs);
+
+        res.status(200).json({
+            success: true,
+            message: "Changes committed to disk successfully",
+            filePath: entry.filePath,
+            committedAt: entry.metadata.committedAt
+        });
+
+    } catch (error) {
+        console.error(`[Commit] Failed to commit ${filePath}:`, error);
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            filePath
+        });
+    }
+}
+
+/**
+ * API endpoint to get pending VFS files for review
+ */
+async function handleGetPendingFiles(req, res) {
+    try {
+        const pending = vfs.getPendingFiles();
+        res.status(200).json({
+            success: true,
+            files: pending
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+}
+
+/**
+ * API endpoint to get VFS statistics
+ */
+async function handleGetVfsStats(req, res) {
+    try {
+        const stats = vfs.getStats();
+        res.status(200).json({
+            success: true,
+            stats
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+}
+
+export { 
+    Router, 
+    router, 
+    handleCodeRequest, 
+    handleCommitRequest, 
+    handleGetPendingFiles,
+    handleGetVfsStats 
+};

@@ -210,6 +210,11 @@ export class OrchestratorSocket {
       this.emit('agent_status', data);
     });
 
+    this.socket.on('file_staged', (data) => {
+      console.log('[OrchestratorSocket] File staged for review:', data.filePath);
+      this.emit('file_staged', data);
+    });
+
     this.socket.on('disconnect', (reason) => {
       console.log('[OrchestratorSocket] Disconnected:', reason);
       this.emit('disconnected', { reason });
