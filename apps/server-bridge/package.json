@@ -3,7 +3,7 @@
   "version": "3.0.0",
   "private": true,
   "main": "index.js",
-  "type": "module",
+  "type": "commonjs",
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
