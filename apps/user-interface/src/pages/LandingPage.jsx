@@ -154,68 +154,68 @@ function ProductPreview({ activeWorkflow, backendHealth }) {
 
   return (
     <motion.div variants={fadeUp} className="relative mx-auto w-full max-w-6xl">
-      <div className="absolute -inset-6 rounded-[2.5rem] bg-primary/10 blur-3xl" />
+      <div className="absolute -inset-6 rounded-[2.5rem] bg-[#dbeadd]/80 blur-3xl" />
       <div className="app-chrome relative overflow-hidden rounded-[2rem]">
-        <div className="flex h-14 items-center justify-between border-b border-outline-variant/35 px-5">
+        <div className="flex h-14 items-center justify-between border-b border-[#e3d8c5] px-5">
           <div className="flex items-center gap-2">
-            <span className="h-3 w-3 rounded-full bg-error/70" />
-            <span className="h-3 w-3 rounded-full bg-secondary/80" />
-            <span className="h-3 w-3 rounded-full bg-tertiary/80" />
+            <span className="h-3 w-3 rounded-full bg-[#d66a5c]" />
+            <span className="h-3 w-3 rounded-full bg-[#d8892f]" />
+            <span className="h-3 w-3 rounded-full bg-[#1f6f5b]" />
           </div>
-          <div className="hidden rounded-full border border-outline-variant/30 bg-surface-container-low px-4 py-1.5 text-xs font-semibold text-on-surface-variant sm:block">
-            Selina workspace map
+          <div className="hidden rounded-full bg-[#f6f0e6] px-4 py-1.5 text-xs font-semibold text-[#62675f] ring-1 ring-[#e3d8c5] sm:block">
+            Workspace preview
           </div>
-          <div className="flex items-center gap-2 text-primary">
+          <div className="flex items-center gap-2 text-[#1f6f5b]">
             <Sparkles size={14} />
             <span className="label-small">{activeWorkflow.label} mode</span>
           </div>
         </div>
 
-        <div className="grid min-h-[480px] grid-cols-1 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
-          <main className="bg-surface-container-lowest/80 p-4 md:p-6">
-            <div className="mb-4 flex flex-col gap-4 rounded-2xl border border-outline-variant/30 bg-surface-container-low px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="grid min-h-[480px] grid-cols-1 bg-[#fbf7ef] lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+          <main className="p-4 md:p-6">
+            <div className="mb-4 flex flex-col gap-4 rounded-2xl bg-white px-4 py-4 ring-1 ring-[#e3d8c5] sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="label-small text-primary">Active workflow</p>
+                <p className="text-xs font-semibold text-[#8a6a33]">Current focus</p>
                 <h3 className="title-large mt-1">{activeWorkflow.title}</h3>
               </div>
-              <span className="rounded-full border border-tertiary/25 bg-tertiary/10 px-3 py-1 text-xs font-semibold text-tertiary">
-                Practical UI
+              <span className="rounded-full bg-[#e7f4eb] px-3 py-1 text-xs font-semibold text-[#1f6f5b] ring-1 ring-[#bcdcc8]">
+                Live-ready
               </span>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               {routes.map((route) => (
-                <div key={route.label} className="rounded-2xl border border-outline-variant/30 bg-surface-container-low p-5">
-                  <route.icon size={20} className="mb-5 text-primary" />
-                  <p className="text-xs font-semibold text-on-surface-variant">{route.label}</p>
+                <div key={route.label} className="rounded-2xl bg-white p-5 ring-1 ring-[#e3d8c5]">
+                  <route.icon size={20} className="mb-5 text-[#1f6f5b]" />
+                  <p className="text-xs font-semibold text-[#62675f]">{route.label}</p>
                   <h4 className="mt-2 title-small">{route.value}</h4>
-                  <p className="mt-3 text-sm leading-6 text-on-surface-variant">{route.detail}</p>
+                  <p className="mt-3 text-sm leading-6 text-[#62675f]">{route.detail}</p>
                 </div>
               ))}
             </div>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
               {['Overview', 'Runtime', 'Skills'].map((label, index) => (
-                <div key={label} className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-4">
-                  <CheckCircle2 size={18} className={`mb-3 ${index === 1 ? 'text-primary' : 'text-tertiary'}`} />
-                  <p className="label-small text-on-surface-variant">{label}</p>
+                <div key={label} className="rounded-2xl bg-white p-4 ring-1 ring-[#e3d8c5]">
+                  <CheckCircle2 size={18} className={`mb-3 ${index === 1 ? 'text-[#315f7b]' : 'text-[#1f6f5b]'}`} />
+                  <p className="text-xs font-semibold text-[#62675f]">{label}</p>
                 </div>
               ))}
             </div>
           </main>
 
-          <aside className="border-t border-outline-variant/30 bg-surface-container-low/75 p-4 lg:border-l lg:border-t-0">
+          <aside className="border-t border-[#e3d8c5] bg-[#f6f0e6] p-4 lg:border-l lg:border-t-0">
             <div className="mb-4 flex items-center gap-3">
               <BrandMark />
               <div>
                 <p className="title-small">Selina</p>
-                <p className="label-small text-primary">Agent online</p>
+                <p className="text-xs font-semibold text-[#1f6f5b]">Ready</p>
               </div>
             </div>
             <div className="space-y-3">
-              <div className="rounded-2xl bg-surface-container p-4 text-sm leading-6 text-on-surface-variant">{activeWorkflow.summary}</div>
-              <div className="ml-auto max-w-[88%] rounded-2xl bg-primary/15 p-4 text-sm text-on-surface">What should I trust before I ask the agent to work?</div>
-              <div className="rounded-2xl bg-surface-container p-4 text-sm leading-6 text-on-surface-variant">Start with Overview for session state, Runtime for provider health, Skills for routing, and Workbench when you need files.</div>
+              <div className="rounded-2xl bg-white p-4 text-sm leading-6 text-[#62675f] ring-1 ring-[#e3d8c5]">{activeWorkflow.summary}</div>
+              <div className="ml-auto max-w-[88%] rounded-2xl bg-[#1f6f5b] p-4 text-sm text-white">What should I trust before I ask the agent to work?</div>
+              <div className="rounded-2xl bg-white p-4 text-sm leading-6 text-[#62675f] ring-1 ring-[#e3d8c5]">Start with Overview for session state, Runtime for provider health, Skills for routing, and Workbench when you need files.</div>
             </div>
           </aside>
         </div>
@@ -270,22 +270,22 @@ export default function LandingPage() {
   const openWorkspace = () => navigate('/dashboard');
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-surface-container-lowest text-on-surface selection:bg-primary/20 selection:text-primary">
+    <div className="min-h-screen overflow-x-hidden bg-[#f6f0e6] text-[#17201b] selection:bg-[#dbeadd] selection:text-[#1f6f5b]">
       <AmbientBackground />
 
-      <nav className="fixed inset-x-0 top-0 z-50 border-b border-outline-variant/30 bg-surface-container-lowest/72 backdrop-blur-2xl">
+      <nav className="fixed inset-x-0 top-0 z-50 border-b border-[#e3d8c5] bg-[#fffaf2]/90 backdrop-blur-xl">
         <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-5 md:px-8">
           <button onClick={() => navigate('/')} className="flex items-center gap-3 text-left" aria-label="Selina home">
             <BrandMark />
             <div>
               <p className="title-small leading-none">Selina</p>
-              <p className="label-small mt-1 text-primary/80">Agentic IDE</p>
+              <p className="mt-1 text-xs font-semibold text-[#1f6f5b]">Software workspace</p>
             </div>
           </button>
 
           <div className="hidden items-center gap-8 lg:flex">
             {navItems.map((item) => (
-              <a key={item} href={`#${item.toLowerCase().replaceAll(' ', '-')}`} className="label-small text-on-surface-variant transition hover:text-on-surface">
+              <a key={item} href={`#${item.toLowerCase().replaceAll(' ', '-')}`} className="text-sm font-semibold text-[#62675f] transition hover:text-[#17201b]">
                 {item}
               </a>
             ))}
@@ -293,7 +293,7 @@ export default function LandingPage() {
 
           <div className="flex items-center gap-2">
             {user && <Button variant="tonal" size="sm" onClick={openWorkspace}>Open dashboard</Button>}
-            <Button variant="outlined" size="sm" leadingIcon={Github} className="hidden border-outline-variant/50 text-on-surface sm:flex" onClick={() => handleLaunch('github')}>GitHub</Button>
+            <Button variant="outlined" size="sm" leadingIcon={Github} className="hidden border-[#d9cdbb] text-[#17201b] sm:flex" onClick={() => handleLaunch('github')}>GitHub</Button>
             <Button variant="filled" size="sm" leadingIcon={KeyRound} onClick={() => handleLaunch('google')}>Sign in</Button>
           </div>
         </div>
@@ -309,17 +309,17 @@ export default function LandingPage() {
             )}
 
             <div className="mx-auto max-w-5xl text-center">
-              <motion.div variants={fadeUp} className="mb-7 inline-flex items-center gap-3 rounded-full border border-outline-variant/40 bg-surface-container-low/70 px-4 py-2 text-on-surface-variant shadow-xl shadow-black/20 backdrop-blur-xl">
-                <span className="h-2 w-2 rounded-full bg-tertiary animate-soft-pulse" />
-                <span className="label-small">Meet Selina, your software agent</span>
+              <motion.div variants={fadeUp} className="mb-7 inline-flex items-center gap-3 rounded-full bg-white px-4 py-2 text-[#62675f] shadow-lg shadow-black/5 ring-1 ring-[#e3d8c5]">
+                <span className="h-2 w-2 rounded-full bg-[#1f6f5b]" />
+                <span className="text-xs font-semibold">Meet Selina, your software agent</span>
               </motion.div>
 
-              <motion.h1 variants={fadeUp} className="display-large mx-auto max-w-6xl leading-[0.92]">
-                Build, debug, and ship with an agent that understands the whole stack.
+              <motion.h1 variants={fadeUp} className="mx-auto max-w-6xl text-6xl font-semibold leading-[0.95] tracking-[-0.075em] md:text-7xl">
+                A calmer way to work with a coding agent.
               </motion.h1>
 
-              <motion.p variants={fadeUp} className="mx-auto mt-7 max-w-3xl text-base leading-8 text-on-surface-variant md:text-lg">
-                Selina is an agentic dashboard for coding teams that plans across disciplines, edits with context, verifies changes, and keeps the interface calm enough for real product work.
+              <motion.p variants={fadeUp} className="mx-auto mt-7 max-w-3xl text-base leading-8 text-[#5d6259] md:text-lg">
+                Selina gives you a practical workspace for prompts, files, runtime diagnostics, skill routing, and reviewable code changes. It is built to feel useful before it feels clever.
               </motion.p>
 
               <motion.div variants={fadeUp} className="mt-10 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
@@ -328,10 +328,10 @@ export default function LandingPage() {
                 <Button size="lg" variant="elevated" leadingIcon={Github} onClick={() => handleLaunch('github')} className="h-14 px-8 border border-outline-variant/40">Continue with GitHub</Button>
               </motion.div>
 
-              <motion.div variants={fadeUp} className="mt-7 flex flex-wrap justify-center gap-3 text-xs text-on-surface-variant">
-                {['Skill-switching MOE brain', 'OAuth-secured workspace', 'Debug and audit loop'].map((item) => (
-                  <span key={item} className="inline-flex items-center gap-2 rounded-full border border-outline-variant/30 bg-surface-container-low/60 px-3 py-1.5">
-                    <CheckCircle2 size={13} className="text-tertiary" /> {item}
+              <motion.div variants={fadeUp} className="mt-7 flex flex-wrap justify-center gap-3 text-xs text-[#62675f]">
+                {['Protected login', 'Runtime diagnostics', 'Review before write'].map((item) => (
+                  <span key={item} className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 ring-1 ring-[#e3d8c5]">
+                    <CheckCircle2 size={13} className="text-[#1f6f5b]" /> {item}
                   </span>
                 ))}
               </motion.div>

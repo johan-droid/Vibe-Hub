@@ -5,7 +5,14 @@ import { VitePWA } from 'vite-plugin-pwa'
 export default defineConfig({
   plugins: [
     react({ jsxRuntime: 'automatic' }),
-    VitePWA({ registerType: 'autoUpdate' })
+    VitePWA({
+      registerType: 'autoUpdate',
+      cleanupOutdatedCaches: true,
+      workbox: {
+        clientsClaim: true,
+        skipWaiting: true,
+      },
+    })
   ],
   server: {
     proxy: {
