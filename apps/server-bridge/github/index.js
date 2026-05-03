@@ -70,10 +70,8 @@ export class GitHubService {
         privateKey: this.privateKey,
         webhooks: { secret: this.webhookSecret ?? '' },
       });
-      console.log('[GitHub] App authentication initialised.');
     } else {
       this.app = null;
-      console.warn('[GitHub] No App credentials — will use PAT mode if provided at runtime.');
     }
   }
 
@@ -146,7 +144,6 @@ export class GitHubService {
       sha: baseSha,
     });
 
-    console.log(`[GitHub] Agent branch created: ${branchName} (from ${base}@${baseSha.slice(0, 7)})`);
     return { branchName, sha: baseSha };
   }
 
@@ -207,8 +204,6 @@ export class GitHubService {
         (conflictingFiles.length > 5 ? ` …and ${conflictingFiles.length - 5} more.` : '')
       : `Upstream is ${behindBy} commit(s) ahead but no file overlaps found. A clean rebase is likely possible.`;
 
-    console.log(`[GitHub] Conflict detection: behind=${behindBy}, overlapping files=${conflictingFiles.length}`);
-
     return {
       hasRisk: true,
       aheadBy,
@@ -261,7 +256,6 @@ export class GitHubService {
       });
 
       if (risk.hasRisk && risk.conflictingFiles.length > 0) {
-        console.warn(`[GitHub] PR blocked: conflict risk detected on ${head} → ${base}`);
         // Return a structured block — the orchestrator will surface this
         // to the user as a clarification request.
         return { blocked: true, risk };
@@ -275,7 +269,6 @@ export class GitHubService {
         owner, repo, title, body, head, base,
       });
 
-      console.log(`[GitHub] PR #${data.number} created: ${data.html_url}`);
       return { url: data.html_url, number: data.number };
     } catch (err) {
       // Scrub any token that may appear in an Octokit error URL

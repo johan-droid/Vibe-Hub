@@ -20,7 +20,6 @@ function loadSkill(name) {
     skillCache.set(name, content);
     return content;
   } catch {
-    console.warn(`[Skills] Skill file not found: ${name}.md`);
     return '';
   }
 }
@@ -85,7 +84,6 @@ export function buildSystemPrompt({ domain, projectTree, packageJson, userMemory
     if (!content) return false;
     const cost = estimateTokens(content);
     if (usedTokens + cost > budget) {
-      console.log(`[Skills] Skipped "${label}" (${cost} tokens, ${budget - usedTokens} remaining)`);
       return false;
     }
     sections.push(content);
@@ -136,7 +134,6 @@ export function buildSystemPrompt({ domain, projectTree, packageJson, userMemory
     }
   }
 
-  console.log(`[Skills] Loaded ${sections.length} sections, ~${usedTokens} tokens (budget: ${budget})`);
   return sections.filter(Boolean).join('\n\n---\n\n');
 }
 

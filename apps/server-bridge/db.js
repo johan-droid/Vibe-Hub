@@ -2,13 +2,9 @@ import pg from 'pg';
 
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  // BUG #12 FIX: rejectUnauthorized: false disables TLS certificate verification
-  // entirely, leaving the connection vulnerable to MITM attacks in production.
-  // Correct fix: enable verification and optionally supply a provider CA cert
-  // via DATABASE_SSL_CA (base64-encoded PEM from your Neon/Render dashboard).
   ssl: process.env.NODE_ENV === 'production'
     ? {
-        rejectUnauthorized: true, // Securely verify certificates to prevent MITM attacks
+        rejectUnauthorized: true,
         ...(process.env.DATABASE_SSL_CA && {
           ca: Buffer.from(process.env.DATABASE_SSL_CA, 'base64').toString('utf-8'),
         }),
@@ -19,8 +15,8 @@ const pool = new pg.Pool({
   connectionTimeoutMillis: 2000,
 });
 
-pool.on('error', (err) => {
-  console.error('[DB] Unexpected error on idle client:', err.message);
+pool.on('error', () => {
+  // Unexpected error on idle client
 });
 
 /**
@@ -96,14 +92,11 @@ export async function initDB(retries = 5) {
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
-    console.log('[DB] Tables initialized successfully.');
   } catch (err) {
     if (retries > 0) {
-      console.warn(`[DB] Initialization failed: ${err.message}. Retrying in 5s... (${retries} left)`);
       await new Promise(resolve => setTimeout(resolve, 5000));
       return initDB(retries - 1);
     }
-    console.error('[DB] Critical Failure: Could not initialize database after multiple attempts.');
     throw err;
   }
 }

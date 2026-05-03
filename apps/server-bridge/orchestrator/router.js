@@ -59,26 +59,20 @@ export class Router {
      * @returns {Promise<{domain: string, systemPrompt: string}>}
      */
     async route(prompt) {
-        console.log(`[Router] Processing intent for prompt: "${prompt.slice(0, 50)}..."`);
-
         const skillProfile = selectSkillProfile(prompt);
         if (skillProfile.selectedSkills.length > 0) {
-            const primary = skillProfile.selectedSkills[0];
-            console.log(`[Router] Skill graph match: ${primary.label} -> ${skillProfile.domain}`);
             return await this.getExpertConfig(skillProfile.domain, skillProfile);
         }
 
         // L1: Fast Heuristic Pass (Zero Latency)
         for (const [domain, config] of Object.entries(this.domains)) {
             if (config.triggers.some(regex => regex.test(prompt))) {
-                console.log(`[Router] L1 Match: ${domain}`);
                 return await this.getExpertConfig(domain, skillProfile);
             }
         }
 
         // L2: LLM Intent Classification (Zero-Shot)
         if (!this.ai.model) {
-            console.warn('[Router] LLM not available for L2 routing. Falling back to "code".');
             return await this.getExpertConfig('code');
         }
 
@@ -103,15 +97,12 @@ export class Router {
             const domain = result.response.text().trim().toLowerCase();
             
             if (this.domains[domain]) {
-                console.log(`[Router] L2 Match: ${domain}`);
                 return await this.getExpertConfig(domain, skillProfile);
             }
         } catch (err) {
-            console.error(`[Router] L2 classification failed: ${err.message}`);
+            // L2 classification failed
         }
 
-        // Fallback
-        console.log('[Router] Falling back to "code" expert.');
         return await this.getExpertConfig('code', skillProfile);
     }
 
@@ -127,7 +118,6 @@ export class Router {
                 const content = await fs.readFile(skillPath, 'utf-8');
                 this.skillCache.set(skillPath, content);
             } catch (err) {
-                console.warn(`[Router] Failed to load skill file: ${skillPath}. Using raw domain name.`);
                 return { domain, systemPrompt: `You are a ${domain} expert.` };
             }
         }

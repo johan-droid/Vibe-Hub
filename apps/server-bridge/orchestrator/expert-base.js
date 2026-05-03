@@ -203,8 +203,6 @@ export class EmployeeBase {
       if (emitState) emitState('reading', `Searching for symbol "${call.args.query}"...`);
     }
 
-    console.log(`[${this.constructor.name}] Tool: ${call.name}`, JSON.stringify(call.args || {}).slice(0, 200));
-
     switch (call.name) {
       case 'ask_clarification':
         if (emitState) emitState('thinking', 'Clarification required.');
@@ -256,6 +254,5 @@ export class EmployeeBase {
       { role: 'model', parts: [{ text: 'Acknowledged. I have absorbed the context snapshot and am ready to continue.' }] },
       ...this.history.slice(-4),
     ];
-    console.log('[Orchestrator] History summarized into context snapshot.');
   }
 }

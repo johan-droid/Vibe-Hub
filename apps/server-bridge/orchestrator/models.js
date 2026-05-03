@@ -146,7 +146,6 @@ export class ModelService {
 
   getGeminiClient() {
     if (!this.env.GEMINI_API_KEY) {
-      console.warn('[ModelService] GEMINI_API_KEY is not set. Gemini calls will fail if invoked.');
       return {
         getGenerativeModel: () => ({
           startChat: () => ({ sendMessageStream: () => { throw new Error('GEMINI_API_KEY missing'); } }),

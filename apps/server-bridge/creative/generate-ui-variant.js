@@ -14,7 +14,6 @@ class UIVariantService {
 
   async generateVariants({ componentType, description, designTokens, count = 3 }) {
     if (!this.apiKey) {
-      console.warn('[Creative] No API key found for UIVariantService. Returning mock variants.');
       return this.getMockVariants(componentType, count);
     }
 
@@ -59,7 +58,6 @@ Return only the JSON array.`;
       const variants = Array.isArray(parsed) ? parsed : (parsed.variants || [parsed]);
       return variants.slice(0, count);
     } catch (e) {
-      console.error('[Creative] Failed to generate UI variants:', e.message);
       return this.getMockVariants(componentType, count);
     }
   }

@@ -38,13 +38,11 @@ export class EmbeddingsService {
       } catch (err) {
         const isRetryable = err.message.includes('429') || err.message.includes('503') || err.message.includes('quota');
         if (isRetryable && retries > 0) {
-          console.warn(`[Embeddings] Error: ${err.message}. Retrying in ${delay}ms...`);
           await new Promise(r => setTimeout(r, delay));
           retries--;
           delay *= 2;
           continue;
         }
-        console.error('[Embeddings] Fatal error:', err.message);
         throw err;
       }
     }

@@ -81,26 +81,21 @@ app.post('/api/github/webhook', async (req, res) => {
   // above. We must verify the HMAC signature before processing anything.
   const signature = req.headers['x-hub-signature-256'];
   if (!signature) {
-    console.warn('[GitHub] Webhook signature missing — rejecting.');
     return res.status(403).send('Missing signature.');
   }
   const valid = await githubService.verifyWebhookSignature(req.body, signature);
 
   if (!valid) {
-    console.warn('[GitHub] Webhook signature invalid — rejecting.');
     return res.status(403).send('Invalid signature.');
   }
 
   const event   = req.headers['x-github-event'];
   const payload = JSON.parse(req.body.toString());
 
-  console.log(`[GitHub] Webhook: ${event} (${payload.action ?? 'n/a'})`);
-
   // Handle Action workflow runs (e.g. AI Sandbox results)
   if (event === 'workflow_run') {
     const workflowName = payload.workflow_run.name;
     const conclusion = payload.workflow_run.conclusion;
-    console.log(`[GitHub] Workflow ${workflowName} completed with conclusion: ${conclusion}`);
     // Notify clients that GitHub runner finished
     const wss = req.app.get('wss'); // Assume wss is attached to app
     if (wss) wss.clients.forEach(client => {
@@ -121,12 +116,11 @@ app.post('/api/github/webhook', async (req, res) => {
   // Route webhook events to the relevant open agent session (if any).
   // In a full implementation, we'd look up which session owns the repo.
   if (event === 'pull_request' && payload.action === 'opened') {
-    console.log(`[GitHub] PR #${payload.number} opened in ${payload.repository?.full_name}`);
+    // Routed to session via workflow_run handler below
   }
 
   if (event === 'workflow_run' && payload.action === 'completed') {
       const { workflow_run } = payload;
-      console.log(`[GitHub] Workflow ${workflow_run.name} completed with conclusion: ${workflow_run.conclusion}`);
 
       // Broadcast to all active sessions (since we aren't mapping repos to sessions yet)
       for (const [sessionId, session] of sessions) {
@@ -342,9 +336,7 @@ wss.on('connection', (ws, req) => {
     // ── 2. Security Sandbox ───────────────────────────────────────────
     if (name === 'security_sandbox') {
       const { workspacePath, scriptPath, runtime, timeoutMs } = args;
-      console.log(`[Tool] Sandbox offload requested: ${runtime ?? 'node'} ${scriptPath}`);
-
-      try {
+          try {
         await githubService.octokit.rest.actions.createWorkflowDispatch({
           owner: process.env.GITHUB_OWNER,
           repo: process.env.GITHUB_REPO,
@@ -398,46 +390,13 @@ wss.on('connection', (ws, req) => {
       return typeof subResult === 'string' ? subResult : subResult?.content ?? '';
     }
 
-    // ── 5. Security Sandbox (Gap #9) ─────────────────────────────────
-    if (name === 'security_sandbox') {
-      try {
-        // Delegated to GitHub Actions for execution
-      console.log(`[Sandbox] Offloading execution to GitHub Actions via workflow_dispatch`);
-      try {
-        await githubService.octokit.rest.actions.createWorkflowDispatch({
-          owner: process.env.GITHUB_OWNER,
-          repo: process.env.GITHUB_REPO,
-          workflow_id: 'ai-sandbox.yml',
-          ref: 'main' // In a real app, infer the current branch
-        });
-        return JSON.stringify({
-          success: true,
-          message: 'Execution offloaded to GitHub Actions. Listening for webhook completion.'
-        });
-      } catch (err) {
-        return JSON.stringify({
-          success: false,
-          error: `GitHub API error: ${err.message}`
-        });
-      }
-      return JSON.stringify({
-        success: true,
-        message: 'Execution offloaded to GitHub Actions. Listening for webhook completion.'
-      });
-        return JSON.stringify(result);
-      } catch (err) {
-        return `ERROR: ${err.message}`;
-      }
-    }
-
-    // ── 6. Auto-Sandbox for run_command ─────────────────────────────
+    // ── 5. Auto-Sandbox for run_command ─────────────────────────────
     // If the agent tries to run a script directly, force it into the sandbox.
     if (name === 'run_command' && args.command) {
       const scriptCommands = ['node', 'npm', 'python3', 'python', 'bun', 'sh', 'bash'];
       const isScript = scriptCommands.includes(args.command);
       
       if (isScript) {
-        console.log(`[Orchestrator] Auto-sandboxing command: ${args.command} ${args.args?.join(' ')}`);
         try {
           await githubService.octokit.rest.actions.createWorkflowDispatch({
             owner: process.env.GITHUB_OWNER,
@@ -451,7 +410,7 @@ wss.on('connection', (ws, req) => {
             message: 'Execution offloaded to GitHub Actions. Listening for webhook completion.'
           });
         } catch (err) {
-          console.warn('[Orchestrator] Auto-sandbox dispatch failed:', err.message);
+          send({ type: 'error', message: 'Sandbox dispatch failed.' });
         }
       }
     }
@@ -566,7 +525,6 @@ wss.on('connection', (ws, req) => {
 
           send({ type: 'result', content });
         } catch (err) {
-          console.error(`[WS] Prompt error for session ${sessionId}:`, err.message);
           send({ type: 'error', message: err.message });
         } finally {
           send({ type: 'thinking', value: false });
@@ -704,7 +662,7 @@ wss.on('connection', (ws, req) => {
       }
 
       default:
-        console.warn(`[WS] Unknown message type: ${msg.type}`);
+        break;
     }
   });
 
@@ -721,11 +679,10 @@ wss.on('connection', (ws, req) => {
     // and the ws reference. Critical: without this, each disconnected session
     // holds ~2–5 MB of orchestrator state alive indefinitely.
     sessions.delete(sessionId);
-    console.log(`[WS] Session ${sessionId} closed. Active sessions: ${sessions.size}`);
   });
 
-  ws.on('error', (err) => {
-    console.error(`[WS] Session ${sessionId} error:`, err.message);
+  ws.on('error', () => {
+    sessions.delete(sessionId);
   });
 });
 
@@ -735,42 +692,23 @@ async function start() {
   // ── Database ────────────────────────────────────────────────────────────
   try {
     await initDB();
-    console.log('[DB] PostgreSQL ready.');
   } catch (err) {
     // Non-fatal: memory and skill systems still work without DB.
-    console.warn('[DB] Not available — continuing without persistence:', err.message);
   }
 
   // ── HTTP + WS ───────────────────────────────────────────────────────────
-  server.listen(port, () => {
-    const pad = (s) => s.padEnd(42);
-    console.log('\n' + '═'.repeat(50));
-    console.log(`  🧠 Selina-Hub Server v4.1`);
-    console.log('─'.repeat(50));
-    console.log(`  ${pad('HTTP  →')} http://localhost:${port}`);
-    console.log(`  ${pad('WS    →')} ws://localhost:${port}/ws`);
-    console.log(`  ${pad('Health →')} http://localhost:${port}/health`);
-    console.log('═'.repeat(50) + '\n');
-  });
+  server.listen(port);
 
   // ── Graceful shutdown ────────────────────────────────────────────────────
   // Close server on SIGTERM/SIGINT so in-flight WebSocket messages drain
   // and the sandbox service kills its active containers.
   const shutdown = async (signal) => {
-    console.log(`\n[Server] ${signal} received — shutting down gracefully...`);
-
-    // Drain active sandbox containers first (most critical)
-    // securitySandboxService removed
-
     // Close all WS connections
     for (const [, session] of sessions) {
       session.ws.close(1001, 'Server shutting down.');
     }
 
-    server.close(() => {
-      console.log('[Server] HTTP server closed. Exiting.');
-      process.exit(0);
-    });
+    server.close(() => process.exit(0));
 
     // Force exit after 5 s if drain takes too long
     setTimeout(() => process.exit(1), 5_000);

@@ -14,8 +14,6 @@ export class CreativeService {
    * Search for design inspiration.
    */
   async searchInspiration(query, source = 'mobbin') {
-    console.log(`[Creative] Searching ${source} for inspiration: ${query}`);
-    
     // Simulate high-fidelity design results
     return {
       query,
@@ -32,8 +30,6 @@ export class CreativeService {
    * v4.0: Structured for DALL-E 3 / Stable Diffusion integration.
    */
   async generateAsset(prompt, style = 'minimalist') {
-    console.log(`[Creative] Generating asset: ${prompt} (${style})`);
-    
     // In production, you would call OpenAI/Midjourney/Gemini-Imagen
     // const response = await openai.images.generate({ model: "dall-e-3", prompt, style });
     
@@ -62,8 +58,6 @@ export class CreativeService {
    * Generate alternative UI variants.
    */
   async getUiVariants(componentId, selina) {
-    console.log(`[Creative] Requesting variants for ${componentId} with selina: ${selina}`);
-    
     return [
       { variant: 'A', description: 'Maximum Minimalism', tokenOverrides: { spacing: 'tight' } },
       { variant: 'B', description: 'Bold Brutalism', tokenOverrides: { spacing: 'loose', colors: { primary: '#000' } } }

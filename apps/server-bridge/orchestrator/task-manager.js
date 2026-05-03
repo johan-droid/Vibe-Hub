@@ -87,7 +87,6 @@ export class TaskManager extends EventEmitter {
     this.queue.set(id, task);
     this.order.push(id);
     this._broadcast('queue:update', this._snapshot());
-    console.log(`[TaskManager] Added task "${task.title}" (${id.slice(0, 8)})`);
     return id;
   }
 
@@ -128,7 +127,6 @@ export class TaskManager extends EventEmitter {
    */
   async runQueue() {
     if (this._running) {
-      console.log('[TaskManager] Queue already running, ignoring re-entry.');
       return;
     }
     this._running = true;
@@ -151,7 +149,6 @@ export class TaskManager extends EventEmitter {
     } finally {
       this._running = false;
       this._broadcast('queue:done', this._snapshot());
-      console.log('[TaskManager] Queue complete.');
     }
   }
 
@@ -171,7 +168,6 @@ export class TaskManager extends EventEmitter {
     task.status    = TASK_STATUS.RUNNING;
     task.startedAt = new Date().toISOString();
     this._broadcast('task:start', { id: task.id, title: task.title });
-    console.log(`[TaskManager] ▶ Starting task "${task.title}"`);
 
     try {
       const result = await this.orchestrator.handlePrompt(
@@ -206,16 +202,13 @@ export class TaskManager extends EventEmitter {
         full:    content,
       });
 
-      console.log(`[TaskManager] ✓ Task "${task.title}" done.`);
-
-      // Persist a compact entry to the Brain Journal for future semantic retrieval
       if (this.orchestrator.userId) {
         const { appendBrainJournal } = await import('../memory/loader.js');
         await appendBrainJournal(
           this.orchestrator.userId,
           this.orchestrator.projectName,
           `[Task: ${task.title}] ${task.result}`,
-        ).catch(err => console.warn('[TaskManager] Memory persist failed:', err.message));
+        ).catch(() => {});
       }
 
     } catch (err) {
@@ -223,7 +216,6 @@ export class TaskManager extends EventEmitter {
       task.completedAt = new Date().toISOString();
       task.error       = err.message;
       this._broadcast('task:failed', { id: task.id, title: task.title, error: err.message });
-      console.error(`[TaskManager] ✗ Task "${task.title}" failed:`, err.message);
       // Continue to next task even on failure
     }
 

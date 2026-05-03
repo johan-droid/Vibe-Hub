@@ -70,11 +70,6 @@ export class AgentOrchestrator {
     for (const expert of Object.values(this.experts)) {
       expert.context = this.context;
     }
-
-    console.log(
-      `[Orchestrator] Context flushed. ` +
-      `AST cache preserved (${preserved.astCache.size} files).`
-    );
   }
 
   /**
@@ -88,15 +83,13 @@ export class AgentOrchestrator {
         .filter(f => !f.includes('node_modules') && !f.includes('.next') && !f.includes('dist'))
         .slice(0, 50);
 
-      console.log(`[Orchestrator] Indexing symbols for ${sourceFiles.length} files...`);
-      
       for (const filePath of sourceFiles) {
         try {
           const content = await onToolCall('read_file', { path: filePath, end_line: 500 });
           const symbols = extractSymbols(content);
           this.context.astCache.set(filePath, symbols);
         } catch (err) {
-          console.warn(`[Orchestrator] Failed to index ${filePath}:`, err.message);
+          // Failed to index file
         }
       }
 
@@ -116,7 +109,7 @@ export class AgentOrchestrator {
         }
       } catch { /* ignore */ }
     } catch (err) {
-      console.warn('[Orchestrator] Pre-scan partial failure:', err.message);
+      // Pre-scan partial failure
     }
   }
 

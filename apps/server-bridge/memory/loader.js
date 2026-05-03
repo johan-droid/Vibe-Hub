@@ -46,7 +46,7 @@ export async function loadMemory(userId, projectName, query = null) {
             similarity: r.similarity
           }));
       } catch (embErr) {
-        console.warn('[Memory] Semantic search failed, falling back to recent journal:', embErr.message);
+        // Semantic search failed, falling back to recent journal
       }
     }
 
@@ -63,7 +63,6 @@ export async function loadMemory(userId, projectName, query = null) {
       brainJournal: finalJournal,
     };
   } catch (err) {
-    console.warn('[Memory] Failed to load memory:', err.message);
     return { userMemory: null, brainJournal: [] };
   }
 }
@@ -122,7 +121,7 @@ export async function appendBrainJournal(userId, projectName, entry) {
         [userId, projectName, JSON.stringify(journalEntry), vectorStr]
       );
     } catch (embErr) {
-      console.warn('[Memory] Failed to generate semantic embedding:', embErr.message);
+      // Failed to generate semantic embedding
     }
 
     // Auto-compact if over 100 entries (v3.5 raised limit for more context)
@@ -145,9 +144,8 @@ export async function appendBrainJournal(userId, projectName, entry) {
          WHERE user_id = $1 AND project_name = $2`,
         [userId, projectName]
       );
-      console.log('[Memory] Brain journal compacted to 50 entries.');
     }
   } catch (err) {
-    console.warn('[Memory] Failed to append journal:', err.message);
+    // Failed to append journal
   }
 }

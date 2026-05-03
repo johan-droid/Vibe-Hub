@@ -14,9 +14,6 @@ export class SecuritySandboxService {
    * Leverages the Codespaces infrastructure with a specialized 'security' devcontainer.
    */
   async create(installationId, { owner, repo, ref, profile = 'standard' }) {
-    console.log(`[Security] Provisioning ${profile} sandbox for ${owner}/${repo}...`);
-    
-    // Security Audit Recommendation: Secure token handling
     const octokit = await githubService.getInstallationClient(installationId);
     const { token } = await octokit.auth({ type: 'installation' });
     const expiresAt = Date.now() + (15 * 60 * 1000); // 15 minutes
@@ -49,10 +46,6 @@ export class SecuritySandboxService {
       throw new Error('Security session expired or token missing.');
     }
 
-    console.log(`[Security] Executing in ${id}: ${command}`);
-    
-    // In a real implementation, we would inject tokenData.token into the sandbox environment here
-    
     // Simulate tool output for demonstration
     if (command.includes('semgrep')) {
       return {
