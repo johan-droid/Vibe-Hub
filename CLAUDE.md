@@ -202,6 +202,45 @@ Before committing changes:
 → Check `maxRetries` limit (default: 3)
 → Review rollback prompt injection in logs
 
+## Claude Skills & Capabilities
+
+When working with Claude on this codebase, leverage these specific capabilities:
+
+### 1. Code Generation & Editing
+- **Multi-file edits** — Use `multi_edit` for coordinated changes across files
+- **Pattern recognition** — Claude identifies architectural patterns and suggests improvements
+- **Syntax validation** — Always verify with `node --check` after edits
+- **Import resolution** — Automatically handles ES module imports with `.js` extensions
+
+### 2. Architecture & Planning
+- **V6 Architecture enforcement** — Claude maintains strict org_core/user_env isolation
+- **XState machine design** — Validates state transitions and rollback logic
+- **Security review** — Checks for credential exposure, path traversal, unsafe execution
+- **Performance analysis** — Identifies blocking operations, suggests async patterns
+
+### 3. Debugging & Troubleshooting
+- **Log analysis** — Parse deployment logs, identify root causes
+- **Error pattern matching** — Maps errors to known issues (e.g., ES module vs CommonJS)
+- **Rollback detection** — Recognizes when antigravity mechanism triggers
+
+### 4. Context Management
+- **Semantic search** — Uses `code_search` and `grep_search` to find relevant code
+- **File tree navigation** — `find_by_name` and `list_dir` for project exploration
+- **Memory persistence** — Stores important context across sessions
+
+### 5. Integration & Deployment
+- **Git operations** — Commits with descriptive messages, handles push to origin
+- **Package management** — Installs dependencies, audits for vulnerabilities
+- **Render deployment** — Monitors build logs, identifies deployment failures
+
+### Key Reminders for Claude
+- Always use **ES modules** (`import`/`export`) — never CommonJS in this codebase
+- Always include **`.js` extension** in relative imports
+- Never **cross-import** between `org_core/` and `user_env/`
+- Always **enforce language lock** (en/hi/or only)
+- Always **use Docker sandbox** for code execution
+- **WebSocket streaming** via Socket.io for XState transitions
+
 ## Architecture Decisions
 
 1. **Why XState?** — Deterministic state management with rollback capability
