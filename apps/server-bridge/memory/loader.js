@@ -2,6 +2,7 @@ import Parser from 'tree-sitter';
 import JavaScript from 'tree-sitter-javascript';
 import fs from 'fs/promises';
 import path from 'path';
+import pool from '../db.js';
 
 class SemanticGraphBuilder {
   constructor() {
@@ -56,3 +57,50 @@ class SemanticGraphBuilder {
 }
 
 export default new SemanticGraphBuilder();
+
+// Legacy memory functions (preserved for orchestrator compatibility)
+
+export async function loadMemory(userId, projectName, query = null) {
+  try {
+    const result = await pool.query(
+      'SELECT user_memory, brain_journal FROM project_memory WHERE user_id = $1 AND project_name = $2',
+      [userId, projectName]
+    );
+
+    let userMemory = null;
+    let recentJournal = [];
+
+    if (result.rows.length > 0) {
+      const row = result.rows[0];
+      userMemory = row.user_memory || null;
+      recentJournal = (row.brain_journal || []).slice(-10);
+    }
+
+    return { userMemory, brainJournal: recentJournal };
+  } catch (err) {
+    return { userMemory: null, brainJournal: [] };
+  }
+}
+
+export async function appendBrainJournal(userId, projectName, entry) {
+  try {
+    await pool.query(
+      `INSERT INTO project_memory (id, user_id, project_name, user_memory, brain_journal)
+       VALUES (gen_random_uuid(), $1, $2, '', '[]'::jsonb)
+       ON CONFLICT (user_id, project_name) DO NOTHING`,
+      [userId, projectName]
+    );
+
+    const journalEntry = { ...entry, timestamp: new Date().toISOString() };
+
+    await pool.query(
+      `UPDATE project_memory 
+       SET brain_journal = brain_journal || $3::jsonb,
+           updated_at = NOW()
+       WHERE user_id = $1 AND project_name = $2`,
+      [userId, projectName, JSON.stringify([journalEntry])]
+    );
+  } catch (err) {
+    console.error('Failed to append brain journal:', err);
+  }
+}
