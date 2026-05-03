@@ -9,13 +9,23 @@ const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 
+// Validate required environment variables
+const requiredEnvVars = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REDIRECT_URI'];
+const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+if (missingVars.length > 0) {
+  console.error('[Google OAuth] Missing required environment variables:', missingVars.join(', '));
+}
+
 /**
  * GET /api/auth/google
  * Redirect user to Google's consent screen
  */
 router.get('/google', (req, res) => {
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-    return res.status(500).json({ error: 'Google OAuth is not configured on the server.' });
+    return res.status(500).json({
+      error: 'OAuth not configured',
+      message: 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables must be set'
+    });
   }
 
   const state = crypto.randomBytes(32).toString('hex');
@@ -65,6 +75,11 @@ router.get('/google/callback', async (req, res) => {
   res.clearCookie('google_oauth_state');
 
   try {
+    // Debug: Log what we're sending (mask secret)
+    console.log('[Google OAuth Debug] client_id:', process.env.GOOGLE_CLIENT_ID?.slice(-20));
+    console.log('[Google OAuth Debug] client_secret length:', process.env.GOOGLE_CLIENT_SECRET?.length);
+    console.log('[Google OAuth Debug] redirect_uri:', process.env.GOOGLE_REDIRECT_URI);
+
     // Exchange code for tokens
     const tokenRes = await fetch(GOOGLE_TOKEN_URL, {
       method: 'POST',
@@ -78,6 +93,7 @@ router.get('/google/callback', async (req, res) => {
       }),
     });
     const tokens = await tokenRes.json();
+    console.log('[Google OAuth Debug] Token response:', tokens);
     if (tokens.error) throw new Error(tokens.error_description || tokens.error);
 
     // Get user info
@@ -98,11 +114,18 @@ router.get('/google/callback', async (req, res) => {
     // Generate JWT and redirect to frontend with token
     const jwt = generateToken(user);
     const frontendUrl = process.env.NODE_ENV === 'production'
-      ? 'https://selina-ui.onrender.com'
+      ? 'https://vibe-hub-ui.onrender.com'
       : 'http://localhost:5173';
     res.redirect(`${frontendUrl}/auth/callback?token=${jwt}`);
   } catch (err) {
     console.error('[Google OAuth Error]', err);
+    // Provide more detailed error for invalid_client
+    if (err.message?.includes('invalid_client')) {
+      return res.status(500).json({
+        error: 'Google authentication failed: invalid_client',
+        message: 'Check that GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables are correctly set'
+      });
+    }
     res.status(500).json({ error: 'Google authentication failed.' });
   }
 });

@@ -150,7 +150,9 @@ export class VFSContainer {
   async isPathIgnored(filepath) {
     try {
       // Hardcoded defaults for WebContainer speed
-      if (['node_modules', '.git', 'dist', '.next', 'out', 'build'].some(p => filepath.includes(p))) {
+      // Using pre-compiled stateless regex for O(1) matching, avoiding slower .some() and .includes()
+      // This also correctly matches whole directories, avoiding false positives like 'my_build.js'
+      if (/(?:^|\/)(node_modules|\.git|dist|\.next|out|build)(?:\/|$)/.test(filepath)) {
         return true;
       }
       
@@ -237,7 +239,8 @@ export class VFSContainer {
    */
   async grepSearch(pattern, filePattern) {
     const matches = [];
-    const regex = new RegExp(pattern, 'gi');
+    // Remove 'g' flag to keep RegExp stateless for test(), avoiding expensive manual lastIndex resets
+    const regex = new RegExp(pattern, 'i');
 
     const limit = pLimit(10);
     const walk = async (dir) => {
@@ -253,7 +256,7 @@ export class VFSContainer {
           if (entry.isDirectory()) {
             await walk(fullPath);
           } else {
-            if (filePattern && !fullPath.match(new RegExp(filePattern.replace('*', '.*')))) return;
+            if (filePattern && !fullPath.match(new RegExp(filePattern.split('*').map(s => s.replace(/[.*+?^${}()|[\]\\]/g, (m) => '\\' + m)).join('.*')))) return;
 
             try {
               const content = await this.instance.fs.readFile(fullPath, 'utf-8');
@@ -268,7 +271,6 @@ export class VFSContainer {
                     content: lines[i].trim().slice(0, 120),
                   });
                 }
-                regex.lastIndex = 0; // Reset global regex
               }
             } catch {}
           }
@@ -303,7 +305,8 @@ export class VFSContainer {
     };
 
     const targetPatterns = kind ? patterns[kind] : [...patterns.function, ...patterns.class];
-    const queryRegex = new RegExp(query, 'i');
+    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, (m) => '\\' + m);
+    const queryRegex = new RegExp(escapedQuery, 'i');
 
     const walk = async (dir) => {
       try {

@@ -178,7 +178,7 @@ export function useAgent() {
         socketRef.current = null;
       };
     });
-  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [token]);
   // Note: Zustand set-actions (addMessage etc.) are stable references —
   // they never change between renders, so omitting them from deps is safe.
 
@@ -187,7 +187,7 @@ export function useAgent() {
     const effortLevel = useStore.getState().effortLevel;
     addMessage({ role: 'user', content: prompt });
     socketRef.current.sendPrompt(prompt, effortLevel);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const sendClarificationAnswer = useCallback((clarificationId, answer) => {
     socketRef.current?.sendClarificationResponse(clarificationId, answer);

@@ -52,7 +52,7 @@ class SmartReader {
         // BUG #5 FIX: Escape query before compiling to regex. An LLM-provided
         // query containing (a+)+$ or similar causes catastrophic backtracking
         // (ReDoS) that pegs the V8 event loop and blocks all MCP responses.
-        const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, (m) => '\\' + m);
         const queryRegex = new RegExp(escapedQuery, 'i');
         const matches = [];
         lines.forEach((line, index) => {
