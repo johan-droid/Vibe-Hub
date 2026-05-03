@@ -6,10 +6,10 @@ import { Surface } from '../../shared/components/Surface';
 
 const EXPERTS = [
   { id: 'orchestrator', label: 'Orchestrator', icon: Brain, x: 50, y: 50, color: 'primary' },
-  { id: 'code', label: 'Code_Architect', icon: Code, x: 20, y: 25, color: 'secondary' },
-  { id: 'search', label: 'Knowledge_Vault', icon: Search, x: 80, y: 25, color: 'tertiary' },
-  { id: 'ui', label: 'Visual_Engine', icon: Cpu, x: 80, y: 75, color: 'primary' },
-  { id: 'db', label: 'Memory_Grid', icon: Database, x: 20, y: 75, color: 'secondary' },
+  { id: 'code', label: 'Code Architect', icon: Code, x: 20, y: 25, color: 'secondary' },
+  { id: 'search', label: 'Knowledge Vault', icon: Search, x: 80, y: 25, color: 'tertiary' },
+  { id: 'ui', label: 'Visual Engine', icon: Cpu, x: 80, y: 75, color: 'primary' },
+  { id: 'db', label: 'Memory Grid', icon: Database, x: 20, y: 75, color: 'secondary' },
   { id: 'security', label: 'Sentinel', icon: Shield, x: 50, y: 15, color: 'error' },
 ];
 
@@ -42,7 +42,7 @@ export default function SwarmVisualizer() {
       <div className="p-6 border-b border-outline-variant/10 flex items-center justify-between bg-surface-container-low/50">
         <div className="flex items-center gap-3">
           <Zap size={14} className="text-primary" />
-          <span className="label-small font-bold uppercase tracking-[0.2em] text-on-surface-variant">Swarm_Neural_Net</span>
+          <span className="label-small font-medium uppercase tracking-[0.15em] text-on-surface-variant">Swarm Neural Net</span>
         </div>
         <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20">
            <div className={`w-1.5 h-1.5 rounded-full ${isThinking ? 'bg-primary animate-pulse' : 'bg-outline-variant'}`} />
@@ -142,14 +142,14 @@ export default function SwarmVisualizer() {
 
       <div className="p-6 bg-surface-container-low/50 border-t border-outline-variant/10">
          <div className="flex flex-col gap-3">
-            <span className="label-small font-bold text-on-surface-variant opacity-40 uppercase tracking-widest">Active_Cluster_Telemetry</span>
+            <span className="label-small font-medium text-on-surface-variant/40 uppercase tracking-widest">Cluster Telemetry</span>
             <div className="flex gap-3">
                <div className="flex-1 p-3 rounded-xl bg-surface-container-highest border border-outline-variant/10 flex flex-col gap-1">
-                  <span className="text-[9px] font-mono text-on-surface-variant opacity-40 uppercase tracking-tight">Active_Expert</span>
+                  <span className="text-[9px] font-medium text-on-surface-variant/40 uppercase tracking-tight">Active Expert</span>
                   <span className="label-medium font-mono text-primary truncate uppercase">{neuralStatus.expert}</span>
                </div>
                <div className="flex-1 p-3 rounded-xl bg-surface-container-highest border border-outline-variant/10 flex flex-col gap-1">
-                  <span className="text-[9px] font-mono text-on-surface-variant opacity-40 uppercase tracking-tight">Cycle_Phase</span>
+                  <span className="text-[9px] font-medium text-on-surface-variant/40 uppercase tracking-tight">Cycle Phase</span>
                   <span className="label-medium font-mono text-secondary truncate uppercase">{neuralStatus.phase}</span>
                </div>
             </div>

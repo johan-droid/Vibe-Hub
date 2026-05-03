@@ -134,8 +134,8 @@ export const FileViewer = React.memo(function FileViewer({ path, content }) {
             </div>
             <span className="text-xs text-on-surface-variant/50">|</span>
             <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-tertiary" />
-              <span className="text-xs text-on-surface-variant font-mono uppercase">IDLE_SYSTEM</span>
+              <div className="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse" />
+              <span className="text-xs text-on-surface-variant font-medium">Ready</span>
             </div>
           </div>
           <div className="flex items-center gap-3 text-xs text-on-surface-variant/50">

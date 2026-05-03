@@ -107,13 +107,13 @@ export default function Terminal() {
   // React to remote GitHub Execution
   const { workflowState } = useStore();
 
-  let headerStatus = "Idle_System";
+  let headerStatus = "Standby";
   if (workflowState && workflowState.status === 'triggered') {
-      headerStatus = "GitHub_Action_Queued";
+      headerStatus = "GitHub Action Queued";
   } else if (workflowState && workflowState.status === 'completed') {
-            headerStatus = `GitHub_Action_${workflowState.conclusion}`;
+            headerStatus = `GitHub Action ${workflowState.conclusion === 'success' ? 'Completed' : 'Failed'}`;
   } else if (lines.length > 0) {
-      headerStatus = "Output_Stream";
+      headerStatus = "Output Stream";
   }
 
   return (
@@ -185,8 +185,8 @@ export default function Terminal() {
                  <Play size={20} className="text-on-surface ml-1" />
               </Surface>
             )}
-            <span className="label-small font-mono uppercase tracking-[0.5em]">
-              {neuralStatus?.waitingForGitHub ? 'Awaiting_GitHub_Runner...' : 'Idle_System'}
+            <span className="label-small text-on-surface-variant/50">
+              {neuralStatus?.waitingForGitHub ? 'Awaiting GitHub Runner...' : 'Standby'}
             </span>
           </div>
         ) : (
