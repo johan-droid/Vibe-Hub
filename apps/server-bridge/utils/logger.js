@@ -29,7 +29,7 @@ const consoleFormat = winston.format.combine(
 );
 
 // Create logger instance
-const logger = winston.createLogger({
+export const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
   defaultMeta: {
     service: 'server-bridge',
@@ -129,5 +129,4 @@ export function logStateTransition(from, to, context, userId) {
   });
 }
 
-export { logger, logError, logVfsOperation, logStateTransition, requestContext };
 export default logger;
