@@ -113,7 +113,7 @@ router.get('/github/callback', async (req, res) => {
     // Generate JWT and redirect
     const jwt = generateToken(user);
     const frontendUrl = process.env.NODE_ENV === 'production'
-      ? 'https://selina-ui.onrender.com'
+      ? 'https://vibe-hub-ui.onrender.com'
       : 'http://localhost:5173';
     res.redirect(`${frontendUrl}/auth/callback?token=${jwt}`);
   } catch (err) {

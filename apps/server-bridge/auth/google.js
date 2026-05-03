@@ -71,6 +71,11 @@ router.get('/google/callback', async (req, res) => {
   res.clearCookie('google_oauth_state');
 
   try {
+    // Debug: Log what we're sending (mask secret)
+    console.log('[Google OAuth Debug] client_id:', process.env.GOOGLE_CLIENT_ID?.slice(-20));
+    console.log('[Google OAuth Debug] client_secret length:', process.env.GOOGLE_CLIENT_SECRET?.length);
+    console.log('[Google OAuth Debug] redirect_uri:', process.env.GOOGLE_REDIRECT_URI);
+
     // Exchange code for tokens
     const tokenRes = await fetch(GOOGLE_TOKEN_URL, {
       method: 'POST',
@@ -84,6 +89,7 @@ router.get('/google/callback', async (req, res) => {
       }),
     });
     const tokens = await tokenRes.json();
+    console.log('[Google OAuth Debug] Token response:', tokens);
     if (tokens.error) throw new Error(tokens.error_description || tokens.error);
 
     // Get user info
@@ -104,7 +110,7 @@ router.get('/google/callback', async (req, res) => {
     // Generate JWT and redirect to frontend with token
     const jwt = generateToken(user);
     const frontendUrl = process.env.NODE_ENV === 'production'
-      ? 'https://selina-ui.onrender.com'
+      ? 'https://vibe-hub-ui.onrender.com'
       : 'http://localhost:5173';
     res.redirect(`${frontendUrl}/auth/callback?token=${jwt}`);
   } catch (err) {
