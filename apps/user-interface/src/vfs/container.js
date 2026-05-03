@@ -150,7 +150,9 @@ export class VFSContainer {
   async isPathIgnored(filepath) {
     try {
       // Hardcoded defaults for WebContainer speed
-      if (['node_modules', '.git', 'dist', '.next', 'out', 'build'].some(p => filepath.includes(p))) {
+      // Using pre-compiled stateless regex for O(1) matching, avoiding slower .some() and .includes()
+      // This also correctly matches whole directories, avoiding false positives like 'my_build.js'
+      if (/(?:^|\/)(node_modules|\.git|dist|\.next|out|build)(?:\/|$)/.test(filepath)) {
         return true;
       }
       
@@ -237,8 +239,8 @@ export class VFSContainer {
    */
   async grepSearch(pattern, filePattern) {
     const matches = [];
-    const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, (m) => '\\' + m);
-    const regex = new RegExp(escapedPattern, 'gi');
+    // Remove 'g' flag to keep RegExp stateless for test(), avoiding expensive manual lastIndex resets
+    const regex = new RegExp(pattern, 'i');
 
     const limit = pLimit(10);
     const walk = async (dir) => {
@@ -269,7 +271,6 @@ export class VFSContainer {
                     content: lines[i].trim().slice(0, 120),
                   });
                 }
-                regex.lastIndex = 0; // Reset global regex
               }
             } catch {}
           }
