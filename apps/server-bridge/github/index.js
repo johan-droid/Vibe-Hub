@@ -306,6 +306,24 @@ export class GitHubService {
     return { id: data.id, url: data.html_url };
   }
 
+  /**
+   * Triggers a remote GitHub Action workflow via workflow_dispatch.
+   */
+  async triggerWorkflow({ owner, repo, workflow_id, ref, inputs, installationId, token }) {
+    const octokit = await this.#client({ installationId, token });
+    await octokit.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id, ref, inputs });
+    return { status: 'triggered', workflow_id, ref };
+  }
+
+  /**
+   * Fetches CodeQL alerts for a specific repository.
+   */
+  async getCodeQLAlerts({ owner, repo, ref, state = 'open', installationId, token }) {
+    const octokit = await this.#client({ installationId, token });
+    const { data } = await octokit.rest.codeScanning.listAlertsForRepo({ owner, repo, ref, state });
+    return data.map(a => ({ number: a.number, rule: a.rule.id, description: a.rule.description, severity: a.rule.severity, url: a.html_url }));
+  }
+
   // ── Codespaces ────────────────────────────────────────────────────────────
 
   async createCodespace({ owner, repo, ref, machine_type_name, installationId, token }) {

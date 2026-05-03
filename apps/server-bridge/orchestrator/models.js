@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import { githubService } from '../github/index.js';
 
 /**
@@ -38,7 +38,7 @@ export class ModelService {
   }
 
   /**
-   * Run a chat completion using Google Gemini.
+   * Run a chat completion using Google Gemini with native tool calling.
    */
   async chat(installationId, { model = 'gemini-2.0-flash', messages, max_tokens = 2048, useTools = true }) {
     const geminiModel = this.genAI.getGenerativeModel({ 
@@ -72,6 +72,14 @@ export class ModelService {
       console.error('[ModelService] Chat error:', e);
       throw e;
     }
+
+    return {
+      choices: [{
+        message: {
+          content: response.text()
+        }
+      }]
+    };
   }
 }
 

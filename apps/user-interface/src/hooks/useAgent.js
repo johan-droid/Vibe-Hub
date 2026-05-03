@@ -151,6 +151,12 @@ export function useAgent() {
       socket.on('clarification',    onClarification);
       socket.on('plan',             onPlan);
 
+      const onGithubWorkflow = (msg) => {
+          useStore.getState().setWorkflowState({ status: 'completed', conclusion: msg.conclusion, url: msg.url });
+          useStore.getState().appendTerminalOutput(`\x1b[36m[GitHub]\x1b[0m Workflow ${msg.workflow} completed with conclusion: ${msg.conclusion}`);
+      };
+      socket.on('github_workflow_completed', onGithubWorkflow);
+
       socket.connect();
 
       // Cleanup: remove every named listener before disconnecting.
@@ -167,6 +173,7 @@ export function useAgent() {
         socket.off('conflict_warning', onConflict);
         socket.off('clarification',    onClarification);
         socket.off('plan',             onPlan);
+        socket.off('github_workflow_completed', onGithubWorkflow);
         socket.disconnect();
         socketRef.current = null;
       };

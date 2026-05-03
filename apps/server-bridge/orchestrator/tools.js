@@ -1,3 +1,5 @@
+import { SchemaType as Type } from '@google/generative-ai';
+
 /**
  * Tool Definitions for Gemini Agents — Brain v3.0
  * Includes: surgical editing, clarification, planning, memory, and grep.
@@ -334,6 +336,33 @@ DO NOT USE for:
         },
       },
       required: ['scriptPath'],
+    },
+  },
+  {
+    name: 'github_trigger_workflow',
+    description: 'Triggers a remote GitHub Action workflow.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        owner: { type: Type.STRING },
+        repo: { type: Type.STRING },
+        workflow_id: { type: Type.STRING },
+        ref: { type: Type.STRING }
+      },
+      required: ['owner', 'repo', 'workflow_id', 'ref'],
+    },
+  },
+  {
+    name: 'github_get_codeql_alerts',
+    description: 'Fetches CodeQL security alerts for a given repository.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        owner: { type: Type.STRING },
+        repo: { type: Type.STRING },
+        ref: { type: Type.STRING }
+      },
+      required: ['owner', 'repo', 'ref'],
     },
   },
   {

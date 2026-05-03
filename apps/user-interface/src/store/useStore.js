@@ -28,6 +28,8 @@ export const useStore = create(
       streamingMessage: null, // Atomic storage for byte-by-byte updates
       agentThoughts: [],
       isThinking: false,
+      workflowState: null, // Track remote github actions
+      setWorkflowState: (state) => set({ workflowState: state }),
       
       // Neural Status (Current Expert Context)
       neuralStatus: {

@@ -50,6 +50,10 @@ export class SwarmSocket {
           this.emit('error', msg.message);
           break;
 
+        case 'github_workflow_completed':
+          this.emit('github_workflow_completed', msg);
+          break;
+
         // === NEW in v3 ===
         case 'clarification_request':
           this.emit('clarification', {
