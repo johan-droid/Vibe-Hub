@@ -5,11 +5,14 @@
 import './load-env.js';
 import express            from 'express';
 import cors               from 'cors';
+import helmet             from 'helmet';
+import rateLimit          from 'express-rate-limit';
 import cookieParser       from 'cookie-parser';
 import { createServer }   from 'http';
 import { WebSocketServer } from 'ws';
 import { Server as SocketIOServer } from 'socket.io';
 import { v4 as uuid }     from 'uuid';
+import { logger }         from './utils/logger.js';
 
 import { initDB }                from './db.js';
 import { requireAuth, verifyToken } from './auth/middleware.js';
@@ -29,7 +32,52 @@ const app    = express();
 const server = createServer(app);
 const port   = process.env.PORT || 3001;
 
-// ── Middleware ────────────────────────────────────────────────────────────────
+// ── Security Middleware ─────────────────────────────────────────────────────
+
+// Helmet.js - Security headers (CSP, HSTS, X-Frame-Options, etc.)
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"], // Required for some UI libraries
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", process.env.UI_ORIGIN || "*"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Allow embedding if needed
+}));
+
+// Rate limiting - Prevent abuse
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: { error: 'Too many requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30, // 30 requests per minute for API
+  message: { error: 'API rate limit exceeded.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const orchestrationLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5, // 5 orchestrations per minute (expensive operation)
+  message: { error: 'Orchestration rate limit exceeded. Please wait.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use(generalLimiter); // Apply to all requests
+app.use('/api/', apiLimiter); // Stricter for API
+app.use('/api/code', orchestrationLimiter); // Strictest for LLM calls
+
+// ── Standard Middleware ───────────────────────────────────────────────────────
 
 // Restrict CORS to the UI origin in production; allow all in dev.
 const UI_ORIGIN = process.env.UI_ORIGIN || true;
@@ -37,6 +85,9 @@ app.use(cors({ origin: UI_ORIGIN, credentials: true }));
 
 // Parse cookies for OAuth state validation
 app.use(cookieParser());
+
+// Request context logging (adds requestId and logs requests)
+app.use(requestContext);
 
 // 5 MB JSON cap — large enough for paste-in files, prevents body-flood DoS.
 app.use(express.json({ limit: '5mb' }));
@@ -726,8 +777,46 @@ async function start() {
     // Non-fatal: memory and skill systems still work without DB.
   }
 
+  // ── Global Error Handling ────────────────────────────────────────────────
+  
+  // 404 handler
+  app.use((req, res) => {
+    logger.warn('Route not found', { 
+      requestId: req.id,
+      method: req.method, 
+      url: req.url 
+    });
+    res.status(404).json({ 
+      success: false, 
+      error: 'Route not found',
+      requestId: req.id 
+    });
+  });
+  
+  // Global error handler
+  app.use((err, req, res, next) => {
+    logError(err, {
+      requestId: req.id,
+      method: req.method,
+      url: req.url,
+      userId: req.user?.id
+    });
+    
+    // Don't leak error details in production
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+    
+    res.status(err.status || 500).json({
+      success: false,
+      error: isDevelopment ? err.message : 'Internal server error',
+      requestId: req.id,
+      ...(isDevelopment && { stack: err.stack })
+    });
+  });
+
   // ── HTTP + WS ───────────────────────────────────────────────────────────
-  server.listen(port);
+  server.listen(port, () => {
+    logger.info('Server started', { port, environment: process.env.NODE_ENV });
+  });
 
   // ── Graceful shutdown ────────────────────────────────────────────────────
   // Close server on SIGTERM/SIGINT so in-flight WebSocket messages drain

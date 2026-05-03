@@ -7,6 +7,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { logVfsOperation } from '../utils/logger.js';
 
 class VirtualFileSystem extends EventEmitter {
   constructor() {
@@ -38,6 +39,13 @@ class VirtualFileSystem extends EventEmitter {
     
     // Emit event for WebSocket broadcasting
     this.emit('file_staged', entry);
+    
+    // Audit logging
+    logVfsOperation('stage', filePath, metadata.userId, {
+      retries: metadata.retries,
+      sandboxVerified: metadata.sandboxVerified,
+      size: proposedContent.length
+    });
     
     console.log(`[VFS] Staged: ${filePath} (${proposedContent.length} bytes)`);
     return entry;
@@ -76,6 +84,12 @@ class VirtualFileSystem extends EventEmitter {
     entry.metadata.approvedAt = new Date().toISOString();
     
     this.emit('file_approved', entry);
+    
+    // Audit logging
+    logVfsOperation('approve', filePath, entry.metadata.userId, {
+      approvedAt: entry.metadata.approvedAt
+    });
+    
     console.log(`[VFS] Approved for commit: ${filePath}`);
     
     return entry;
@@ -96,6 +110,13 @@ class VirtualFileSystem extends EventEmitter {
     entry.metadata.rejectionReason = reason;
 
     this.emit('file_rejected', entry);
+    
+    // Audit logging
+    logVfsOperation('reject', filePath, entry.metadata.userId, {
+      rejectedAt: entry.metadata.rejectedAt,
+      reason
+    });
+    
     console.log(`[VFS] Rejected: ${filePath} (${reason})`);
 
     // Keep entry for audit log, but mark as rejected
@@ -124,11 +145,24 @@ class VirtualFileSystem extends EventEmitter {
       entry.metadata.committedAt = new Date().toISOString();
       
       this.emit('file_committed', entry);
+      
+      // Audit logging
+      logVfsOperation('commit', filePath, entry.metadata.userId, {
+        committedAt: entry.metadata.committedAt,
+        size: entry.proposedContent.length
+      });
+      
       console.log(`[VFS] Committed to disk: ${filePath}`);
       
       return entry;
     } catch (error) {
       console.error(`[VFS] Commit failed: ${filePath}`, error);
+      
+      // Audit logging for failed commit
+      logVfsOperation('commit_failed', filePath, entry.metadata.userId, {
+        error: error.message
+      });
+      
       throw new Error(`Failed to commit ${filePath}: ${error.message}`);
     }
   }

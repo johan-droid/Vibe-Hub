@@ -133,7 +133,7 @@ export default function ChatInterface({ onSend }) {
             {isThinking && <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-surface-container-low bg-tertiary animate-soft-pulse" />}
           </div>
           <div className="min-w-0">
-            <h3 className="title-small truncate">Selina Protocol</h3>
+            <h3 className="title-small truncate">Selina</h3>
             <p className="label-small mt-1 truncate text-primary">{neuralStatus.expert} / {neuralStatus.phase}</p>
           </div>
         </div>
@@ -182,7 +182,7 @@ export default function ChatInterface({ onSend }) {
                   <motion.div key={i} animate={{ y: [0, -6, 0], opacity: [0.35, 1, 0.35] }} transition={{ repeat: Infinity, duration: 1, delay: i * 0.15 }} className="h-2 w-2 rounded-full bg-primary" />
                 ))}
               </div>
-              <span className="label-small text-primary">Thinking through the workspace</span>
+              <span className="text-sm font-semibold text-primary">Working through the workspace</span>
             </motion.div>
           )}
         </AnimatePresence>

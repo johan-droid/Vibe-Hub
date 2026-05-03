@@ -166,7 +166,7 @@ export default function FileTree() {
           <Surface elevation={2} shape="md" className="w-6 h-6 flex items-center justify-center bg-primary/10">
             <GitBranch size={14} className="text-primary" />
           </Surface>
-          <span className="label-large font-bold text-on-surface uppercase tracking-widest opacity-60">
+          <span className="text-sm font-semibold text-on-surface-variant">
             Explorer
           </span>
         </div>
@@ -181,7 +181,7 @@ export default function FileTree() {
           <Search size={14} className="absolute left-3.5 text-on-surface-variant/40 pointer-events-none" />
           <input
             type="text"
-            placeholder="Filter VFS..."
+            placeholder="Search files"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="
@@ -197,15 +197,15 @@ export default function FileTree() {
       {/* List Container */}
       <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-0.5 scrollbar-thin">
         {isEmpty ? (
-          <div className="flex flex-col items-center justify-center h-48 gap-4 opacity-30">
+          <div className="flex flex-col items-center justify-center h-48 gap-4 px-6 text-center">
             <div className={`w-2 h-2 rounded-full bg-primary ${vfsStatus === 'booting' ? 'animate-ping' : ''}`} />
-            <span className="label-small font-mono uppercase tracking-[0.4em]">
-              {vfsStatus === 'booting' ? 'Scanning_VFS' : 'Empty_VFS'}
+            <span className="text-sm font-medium text-on-surface-variant">
+              {vfsStatus === 'booting' ? 'Scanning local files...' : 'No project files loaded yet'}
             </span>
           </div>
         ) : visibleTree.length === 0 ? (
-          <div className="flex items-center justify-center h-32 opacity-20">
-            <span className="label-small font-mono uppercase tracking-widest">No_Matches</span>
+          <div className="flex items-center justify-center h-32">
+            <span className="text-sm text-on-surface-variant">No matching files</span>
           </div>
         ) : (
           visibleTree.map((item) => (

@@ -1,15 +1,43 @@
 import React from 'react';
-import { Settings, Sidebar as SidebarIcon, MessageSquare, Cpu, Layers, Sun, Moon, Activity, Gauge } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import {
+  Activity,
+  Bot,
+  FileCode2,
+  Gauge,
+  MessageSquare,
+  Moon,
+  Route,
+  Settings,
+  ShieldCheck,
+  Sidebar as SidebarIcon,
+  Sun,
+} from 'lucide-react';
 import { useStore } from '../../../store/useStore';
 import { IconButton } from './IconButton';
 import { Surface } from './Surface';
 import { Chip } from './Chip';
-import { motion } from 'framer-motion';
+
+const NAV_ITEMS = [
+  { label: 'Overview', path: '/dashboard', icon: Gauge, tab: 'dashboard' },
+  { label: 'Workbench', path: '/dashboard/editor', icon: FileCode2, tab: 'editor' },
+  { label: 'Activity', path: '/dashboard/activity', icon: Activity, tab: 'dashboard' },
+  { label: 'Runtime', path: '/dashboard/runtime', icon: Bot, tab: 'dashboard' },
+  { label: 'Skills', path: '/dashboard/skills', icon: Route, tab: 'dashboard' },
+  { label: 'Security', path: '/dashboard/security', icon: ShieldCheck, tab: 'dashboard' },
+];
+
+function isActivePath(currentPath, itemPath) {
+  if (itemPath === '/dashboard') return currentPath === '/dashboard' || currentPath === '/dashboard/';
+  return currentPath.startsWith(itemPath);
+}
 
 /**
- * Titlebar anchors the workspace with compact navigation and reliable status.
+ * Titlebar anchors the workspace with route-backed navigation and live status.
  */
 export default function Titlebar({ onOpenSettings }) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const {
     vfsStatus = 'idle',
     sidebarCollapsed, setSidebarCollapsed,
@@ -19,48 +47,57 @@ export default function Titlebar({ onOpenSettings }) {
     user,
   } = useStore();
 
-  const statusLabel = vfsStatus === 'ready' ? 'Dashboard ready' : vfsStatus === 'booting' ? 'Booting VFS' : 'Local session';
+  const statusLabel = vfsStatus === 'ready' ? 'Workspace ready' : vfsStatus === 'booting' ? 'Loading files' : 'Session active';
+
+  const goTo = (item) => {
+    setActiveTab(item.tab);
+    navigate(item.path);
+  };
 
   return (
     <Surface
       elevation={0}
       shape="none"
-      className="h-16 border-b border-outline-variant/30 bg-surface-container-lowest/82 backdrop-blur-2xl flex items-center justify-between px-4 md:px-6 select-none z-50"
+      className="z-50 flex h-16 items-center justify-between border-b border-outline-variant/30 bg-surface-container-lowest px-4 text-on-surface shadow-lg shadow-black/20 md:px-6"
     >
       <div className="flex min-w-0 items-center gap-4 md:gap-6">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 text-primary shadow-lg shadow-primary/10">
-            <Cpu size={20} />
+        <button type="button" onClick={() => goTo(NAV_ITEMS[0])} className="flex min-w-0 items-center gap-3 text-left">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 text-primary">
+            <Bot size={20} />
           </div>
           <div className="hidden min-w-0 sm:block">
             <div className="flex items-center gap-2">
-              <span className="title-small leading-none">Vibe Hub</span>
-              <span className="h-1.5 w-1.5 rounded-full bg-tertiary animate-soft-pulse" />
+              <span className="title-small leading-none">Selina</span>
+              <span className="h-1.5 w-1.5 rounded-full bg-tertiary" />
             </div>
-            <span className="label-small mt-1 block truncate text-on-surface-variant">{user?.name || 'Selina Dashboard'}</span>
+            <span className="mt-1 block truncate text-xs font-medium text-on-surface-variant">
+              {user?.name || user?.email || 'Agent workspace'}
+            </span>
           </div>
-        </div>
+        </button>
 
-        <div className="hidden h-8 w-px bg-outline-variant/40 md:block" />
+        <div className="hidden h-8 w-px bg-outline-variant/35 md:block" />
 
-        <div className="hidden items-center rounded-full border border-outline-variant/35 bg-surface-container-low p-1 md:flex">
-          {[
-            { id: 'dashboard', label: 'Dashboard', icon: Gauge },
-            { id: 'editor', label: 'Editor', icon: SidebarIcon },
-            { id: 'diff', label: 'Projection', icon: Layers },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className="relative flex h-9 items-center gap-2 rounded-full px-4 text-on-surface-variant transition hover:text-on-surface"
-            >
-              {activeTab === tab.id && (
-                <motion.div layoutId="active-tab-bg" className="absolute inset-0 rounded-full bg-primary/15 ring-1 ring-primary/25" />
-              )}
-              <tab.icon size={14} className="relative z-10" />
-              <span className="relative z-10 label-small">{tab.label}</span>
-            </button>
-          ))}
+        <div className="hidden items-center gap-1 rounded-full border border-outline-variant/30 bg-surface-container-low p-1 xl:flex">
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const active = isActivePath(location.pathname, item.path) || (item.tab === activeTab && item.path === '/dashboard/editor' && activeTab === 'editor');
+            return (
+              <button
+                key={item.path}
+                type="button"
+                onClick={() => goTo(item)}
+                className={`flex h-9 items-center gap-2 rounded-full px-3 text-sm font-semibold transition ${
+                  active
+                    ? 'bg-on-surface text-surface-container-lowest'
+                    : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+                }`}
+              >
+                <Icon size={14} />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 

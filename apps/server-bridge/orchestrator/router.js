@@ -6,6 +6,8 @@ import { interpret } from 'xstate';
 import agentMachine from './state_machine.js';
 import { selectSkillProfile } from './skill-graph.js';
 import { vfs } from '../vfs/container.js';
+import { logger, logStateTransition } from '../utils/logger.js';
+import { codeRequestSchema, vfsCommitSchema, validateRequest } from '../utils/validation.js';
 
 // Resolve directory for skill files
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -180,6 +182,14 @@ ${prompt}
             const agentService = interpret(agentMachine).onTransition((state) => {
                 console.log(`Agent Status: transitioned to [${state.value}]`);
                 
+                // Structured logging
+                logStateTransition(
+                    state.history?.value || 'unknown',
+                    state.value,
+                    state.context,
+                    userId
+                );
+                
                 // Stream the internal agent status to the frontend via Socket.io
                 if (io && socketId) {
                     io.to(socketId).emit('agent_status', {
@@ -246,12 +256,21 @@ const router = new Router();
  * Supports WebSocket streaming via socketId in request body
  */
 async function handleCodeRequest(req, res) {
-    const { prompt, userId, targetFile, socketId } = req.body;
+    const { prompt, userId, targetFile, socketId } = req.validatedBody || req.body;
     const io = req.app.get('io');
 
+    logger.info('Code orchestration requested', {
+        requestId: req.id,
+        userId,
+        targetFile,
+        hasSocketId: !!socketId
+    });
+
     if (!socketId) {
+        logger.warn('Code request missing socketId', { requestId: req.id });
         return res.status(400).json({ 
-            error: "socketId is required for real-time orchestration tracking." 
+            error: "socketId is required for real-time orchestration tracking.",
+            requestId: req.id
         });
     }
 

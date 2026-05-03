@@ -1,5 +1,5 @@
 import React, { useMemo, useEffect } from 'react';
-import { Eye, Zap, Code, FileCode, GitPullRequest, ChevronRight, X, Check, Github, Terminal } from 'lucide-react';
+import { Eye, Code, FileCode, GitPullRequest, ChevronRight, X, Check, Github, Terminal } from 'lucide-react';
 import ReactDiffViewer from 'react-diff-viewer-continued';
 import { useStore } from '../../../store/useStore';
 import { useVfsStore } from '../../../store/useVfsStore';
@@ -74,28 +74,15 @@ export default function DiffViewer({ onApply, onDiscard }) {
     };
   }, [diffData, hasVfsDiff, activeDiff]);
 
-  // Mock GitHub Diff support, we fall back to existing diff chunk logic
-  const githubDiffChunk = useMemo(() => {
-      if (!diffData || !diffData.patch) return null;
-      // We will parse patch later when fully integrating GitHub Diff parsing
-      return {
-          old: "// Github PR Difference loading...",
-          new: "// PR Code differences",
-          startLine: 1,
-          totalLines: 0
-      };
-  }, [diffData]);
-
   let renderDiff = diffChunk;
-  let title = "Projection";
+  let title = "Review";
   let isVfsMode = false;
 
   if (hasVfsDiff) {
     title = `VFS Review: ${activeDiff.filePath}`;
     isVfsMode = true;
   } else if (diffData && diffData.type === 'github_pr') {
-      renderDiff = githubDiffChunk;
-            title = `PR #${diffData.prNumber} (${diffData.repo})`;
+    title = `PR #${diffData.prNumber} (${diffData.repo})`;
   }
 
   return (
@@ -107,7 +94,7 @@ export default function DiffViewer({ onApply, onDiscard }) {
             <Surface elevation={2} shape="md" className="w-8 h-8 flex items-center justify-center bg-primary/10">
               <GitPullRequest size={16} className="text-primary" />
             </Surface>
-            <h2 className="label-large font-bold text-on-surface uppercase tracking-widest opacity-60">{title}</h2>
+            <h2 className="title-small text-on-surface">{title}</h2>
           </div>
           
           <AnimatePresence mode="wait">
@@ -189,7 +176,7 @@ export default function DiffViewer({ onApply, onDiscard }) {
                     leadingIcon={Check}
                     className="shadow-lg shadow-primary/20"
                   >
-                    Apply Mutation
+                    Apply change
                   </Button>
                 )}
               </motion.div>
@@ -274,49 +261,25 @@ export default function DiffViewer({ onApply, onDiscard }) {
               key="empty-state"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="flex min-h-full flex-col"
+              className="flex min-h-full items-center justify-center px-4 py-8"
             >
-              {/* Empty State Header */}
-              <div className="flex h-14 items-center justify-between px-6 border-b border-outline-variant/20 bg-surface-container-low/30">
-                <div className="flex items-center gap-2 text-xs text-on-surface-variant">
-                  <GitPullRequest size={14} className="text-primary" />
-                  <span>No active diff</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-on-surface-variant/50">Connected providers:</span>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-5 h-5 rounded bg-surface-container-high flex items-center justify-center" title="GitHub">
-                      <Github size={12} />
-                    </div>
-                    <div className="w-5 h-5 rounded bg-surface-container-high flex items-center justify-center" title="Google">
-                      <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/></svg>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Empty State Content */}
-              <div className="flex-1 overflow-auto px-6 py-6 lg:px-8">
-                <div className="mx-auto grid w-full max-w-6xl gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(300px,0.8fr)]">
-                  <Surface elevation={1} shape="2xl" className="border border-outline-variant/30 bg-surface-container-low/70 p-6 shadow-xl shadow-black/10 md:p-7">
-                    <div className="flex items-start gap-4">
-                      <Surface elevation={2} shape="md" className="flex h-12 w-12 shrink-0 items-center justify-center bg-primary/10">
-                        <GitPullRequest size={18} className="text-primary" />
-                      </Surface>
-                      <div className="min-w-0">
-                        <p className="label-small text-primary">Projection Ready</p>
-                        <h3 className="headline-small mt-2 text-on-surface">No active diff is loaded</h3>
-                        <p className="mt-3 max-w-2xl text-sm leading-7 text-on-surface-variant">
-                          Ask Selina to make changes, review PRs, or audit code. Diffs will appear here for surgical review.
-                        </p>
-                      </div>
-                    </div>
+              <Surface elevation={1} shape="2xl" className="w-full max-w-4xl border border-outline-variant/30 bg-surface-container-low/75 p-6 shadow-xl shadow-black/10 md:p-8">
+                <div className="flex flex-col gap-6 md:flex-row md:items-start">
+                  <Surface elevation={2} shape="md" className="flex h-12 w-12 shrink-0 items-center justify-center bg-primary/10">
+                    <GitPullRequest size={18} className="text-primary" />
+                  </Surface>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-primary">Review surface</p>
+                    <h3 className="headline-small mt-2 text-on-surface">No active change is loaded</h3>
+                    <p className="mt-3 max-w-2xl text-sm leading-7 text-on-surface-variant">
+                      This page stays quiet until Selina creates a patch or a PR diff is attached. When that happens, the exact before-and-after code appears here for review before anything is applied.
+                    </p>
 
                     <div className="mt-6 grid gap-3 sm:grid-cols-3">
                       {[
-                        { icon: Eye, label: 'Review', value: 'Pending', tone: 'text-primary/70' },
+                        { icon: Eye, label: 'Review', value: 'Waiting', tone: 'text-primary/70' },
                         { icon: Code, label: 'Changes', value: 'None', tone: 'text-secondary/70' },
-                        { icon: Check, label: 'Status', value: 'Idle', tone: 'text-tertiary/70' },
+                        { icon: Check, label: 'Write gate', value: 'Manual', tone: 'text-tertiary/70' },
                       ].map(({ icon: Icon, label, value, tone }) => (
                         <div key={label} className="rounded-2xl border border-outline-variant/20 bg-surface-container-high/40 p-4">
                           <Icon size={18} className={`mb-3 ${tone}`} />
@@ -328,82 +291,33 @@ export default function DiffViewer({ onApply, onDiscard }) {
 
                     <div className="mt-6 grid gap-3 md:grid-cols-2">
                       <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest/55 p-4">
-                        <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.2em] text-on-surface-variant/60">
+                        <div className="flex items-center gap-2 text-xs font-semibold text-on-surface-variant">
                           <Terminal size={13} className="text-primary" />
-                          Runtime linked
+                          Runtime evidence
                         </div>
                         <p className="mt-3 text-sm leading-6 text-on-surface-variant">
-                          Use the runtime panel below to stream commands, diagnostics, and agent output while you iterate.
+                          Terminal output and agent activity stay available while a change is being prepared.
                         </p>
                       </div>
                       <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest/55 p-4">
-                        <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.2em] text-on-surface-variant/60">
+                        <div className="flex items-center gap-2 text-xs font-semibold text-on-surface-variant">
                           <ChevronRight size={13} className="text-secondary" />
                           Next action
                         </div>
                         <p className="mt-3 text-sm leading-6 text-on-surface-variant">
-                          Open a file from the explorer or ask Selina to stage a change, then this projection surface will populate automatically.
+                          Open a file from the explorer or ask Selina to make a small, reviewable change.
                         </p>
                       </div>
                     </div>
-
-                    <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-outline-variant/30 bg-surface-container-high/50 px-4 py-2">
-                      <Zap size={14} className="text-primary" />
-                      <span className="text-xs text-on-surface-variant">AI-powered diff engine active</span>
-                    </div>
-                  </Surface>
-
-                  <div className="grid gap-5">
-                    <Surface elevation={1} shape="2xl" className="border border-outline-variant/30 bg-surface-container-low/70 p-5 shadow-xl shadow-black/10">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="label-small text-on-surface-variant">Connected providers</p>
-                          <h4 className="title-small mt-1 text-on-surface">Ready for review input</h4>
-                        </div>
-                        <div className="flex items-center gap-1.5 rounded-full border border-tertiary/20 bg-tertiary/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.18em] text-tertiary">
-                          <span className="h-1.5 w-1.5 rounded-full bg-tertiary" />
-                          Live
-                        </div>
-                      </div>
-
-                      <div className="mt-4 space-y-3">
-                        <div className="flex items-center gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-high/40 px-3 py-3">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-container-highest text-on-surface-variant">
-                            <Github size={15} />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-on-surface">GitHub</p>
-                            <p className="text-xs text-on-surface-variant">PR parsing and apply actions</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-high/40 px-3 py-3">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-container-highest text-on-surface-variant">
-                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" /><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" /><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" /><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" /></svg>
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-on-surface">Google</p>
-                            <p className="text-xs text-on-surface-variant">Identity and workspace access</p>
-                          </div>
-                        </div>
-                      </div>
-                    </Surface>
-
-                    <Surface elevation={1} shape="2xl" className="border border-outline-variant/30 bg-surface-container-low/70 p-5 shadow-xl shadow-black/10">
-                      <p className="label-small text-primary">Workspace posture</p>
-                      <h4 className="title-small mt-2 text-on-surface">Projection waits until something is worth reviewing.</h4>
-                      <p className="mt-3 text-sm leading-7 text-on-surface-variant">
-                        The screen stays compact and readable, so the workspace feels deliberate instead of empty when no patch is active.
-                      </p>
-                    </Surface>
                   </div>
                 </div>
-              </div>
+              </Surface>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      {/* Neural Monitor */}
+      {/* Agent working indicator */}
       <AnimatePresence>
         {isThinking && (
           <motion.div 
@@ -423,8 +337,8 @@ export default function DiffViewer({ onApply, onDiscard }) {
                   />
                 ))}
               </div>
-              <span className="label-large font-bold text-primary uppercase tracking-[0.2em]">
-                Neural_Processing
+              <span className="text-sm font-semibold text-primary">
+                Selina is preparing the change
               </span>
             </Surface>
           </motion.div>

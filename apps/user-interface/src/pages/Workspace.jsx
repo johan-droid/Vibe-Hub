@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
+import React, { useEffect, useState, useCallback } from 'react';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LayoutGrid, Terminal as TerminalIcon, Sparkles, Search as SearchIcon, Activity, ShieldAlert, Code2, Gauge } from 'lucide-react';
 import { useAgent } from '../hooks/useAgent';
@@ -50,6 +50,8 @@ function SidebarPlaceholder({ icon: Icon, title, description }) {
 }
 
 export default function Workspace() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const {
     user,
     sidebarCollapsed,
@@ -71,6 +73,30 @@ export default function Workspace() {
   const [terminalH, setTerminalH] = useState(DEFAULT_TERM_H);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const { sendPrompt } = useAgent();
+  const dashboardSegment = location.pathname.replace(/^\/dashboard\/?/, '').split('/')[0] || 'overview';
+  const dashboardPages = new Set(['overview', 'activity', 'runtime', 'skills', 'security']);
+  const isDashboardRoute = location.pathname.startsWith('/dashboard') && dashboardPages.has(dashboardSegment);
+  const effectiveTab = dashboardSegment === 'editor' || dashboardSegment === 'diff' ? dashboardSegment : activeTab;
+
+  const goDashboardPage = useCallback((page = 'overview') => {
+    setActiveTab('dashboard');
+    navigate(page === 'overview' ? '/dashboard' : `/dashboard/${page}`);
+    if (isMobile) setMobileView('dashboard');
+  }, [isMobile, navigate, setActiveTab]);
+
+  const goWorkbench = useCallback(() => {
+    setActiveTab('editor');
+    navigate('/dashboard/editor');
+    if (isMobile) setMobileView('editor');
+  }, [isMobile, navigate, setActiveTab]);
+
+  useEffect(() => {
+    if ((dashboardSegment === 'editor' || dashboardSegment === 'diff') && activeTab === 'dashboard') {
+      setActiveTab(dashboardSegment);
+    } else if (isDashboardRoute && activeTab !== 'dashboard') {
+      setActiveTab('dashboard');
+    }
+  }, [activeTab, dashboardSegment, isDashboardRoute, setActiveTab]);
 
   const onSidebarDrag = useCallback((delta) => {
     setSidebarW((w) => Math.max(MIN_SIDEBAR_W, Math.min(MAX_SIDEBAR_W, w + delta)));
@@ -88,17 +114,16 @@ export default function Workspace() {
     return <Navigate to="/" replace />;
   }
 
-  const isDashboardMode = activeTab === 'dashboard';
+  const isDashboardMode = isDashboardRoute || (activeTab === 'dashboard' && location.pathname === '/dashboard');
 
   if (isDashboardMode) {
     return (
       <div className="flex h-screen w-screen flex-col overflow-hidden bg-surface-container-lowest text-on-surface font-sans selection:bg-primary/20 selection:text-primary">
-        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_0%,hsl(var(--primary)/0.08),transparent_32%),radial-gradient(circle_at_90%_18%,hsl(var(--secondary)/0.07),transparent_28%)]" />
         <Titlebar onOpenSettings={() => setIsSettingsOpen(true)} />
 
         <main className="relative z-10 min-h-0 flex-1 overflow-hidden">
           <React.Suspense fallback={<div className="h-full animate-pulse bg-surface-container-lowest" />}>
-            <IntelligenceDashboard />
+            <IntelligenceDashboard page={dashboardPages.has(dashboardSegment) ? dashboardSegment : 'overview'} />
           </React.Suspense>
         </main>
 
@@ -109,7 +134,6 @@ export default function Workspace() {
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-surface-container-lowest text-on-surface font-sans selection:bg-primary/20 selection:text-primary">
-      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_0%,hsl(var(--primary)/0.08),transparent_32%),radial-gradient(circle_at_90%_18%,hsl(var(--secondary)/0.07),transparent_28%)]" />
       <Titlebar onOpenSettings={() => setIsSettingsOpen(true)} />
 
       <div className="relative flex min-h-0 flex-1 overflow-hidden bg-surface-container-lowest/80">
@@ -118,11 +142,11 @@ export default function Workspace() {
             elevation={0}
             className="fixed inset-x-0 bottom-0 z-40 flex h-16 flex-row items-center justify-around border-t border-outline-variant/30 bg-surface-container-lowest/92 px-3 backdrop-blur-2xl md:relative md:inset-auto md:h-auto md:w-[68px] md:flex-col md:justify-start md:gap-3 md:border-r md:border-t-0 md:py-5"
           >
-            <NavIcon icon={Gauge} active={activeTab === 'dashboard' || mobileView === 'dashboard'} onClick={() => { setActiveTab('dashboard'); if (isMobile) setMobileView('dashboard'); }} ariaLabel="Dashboard" />
-            <NavIcon icon={LayoutGrid} active={sidebarMode === 'explorer'} onClick={() => { setSidebarMode('explorer'); setSidebarCollapsed(false); if (isMobile) setMobileView('sidebar'); }} ariaLabel="Explorer" />
-            <NavIcon icon={Activity} active={sidebarMode === 'swarm'} onClick={() => { setSidebarMode('swarm'); setSidebarCollapsed(false); if (isMobile) setMobileView('sidebar'); }} ariaLabel="Swarm Dashboard" />
+            <NavIcon icon={Gauge} active={isDashboardRoute && dashboardSegment === 'overview'} onClick={() => goDashboardPage('overview')} ariaLabel="Dashboard" />
+            <NavIcon icon={LayoutGrid} active={effectiveTab === 'editor'} onClick={goWorkbench} ariaLabel="Workbench" />
+            <NavIcon icon={Activity} active={isDashboardRoute && dashboardSegment === 'activity'} onClick={() => goDashboardPage('activity')} ariaLabel="Activity" />
             <NavIcon icon={SearchIcon} active={sidebarMode === 'search'} onClick={() => { setSidebarMode('search'); setSidebarCollapsed(false); if (isMobile) setMobileView('sidebar'); }} ariaLabel="Search" />
-            <NavIcon icon={ShieldAlert} active={sidebarMode === 'security'} onClick={() => { setSidebarMode('security'); setSidebarCollapsed(false); if (isMobile) setMobileView('sidebar'); }} ariaLabel="Security Audit" />
+            <NavIcon icon={ShieldAlert} active={isDashboardRoute && dashboardSegment === 'security'} onClick={() => goDashboardPage('security')} ariaLabel="Security Audit" />
             {isMobile && <NavIcon icon={TerminalIcon} active={mobileView === 'terminal'} onClick={() => setMobileView('terminal')} ariaLabel="Terminal" />}
             {isMobile && <NavIcon icon={Sparkles} active={mobileView === 'chat'} onClick={() => { setMobileView('chat'); setChatCollapsed(false); }} ariaLabel="Assistant" />}
             {isMobile && <NavIcon icon={Code2} active={mobileView === 'editor'} onClick={() => { setActiveTab('editor'); setMobileView('editor'); }} ariaLabel="Editor" />}
@@ -143,7 +167,7 @@ export default function Workspace() {
                 <div className="min-h-0 flex-1">
                   <React.Suspense fallback={<div className="h-full animate-pulse bg-surface-container-low" />}>
                     {sidebarMode === 'explorer' && <SidebarFileTree />}
-                    {sidebarMode === 'swarm' && <IntelligenceDashboard />}
+                    {sidebarMode === 'swarm' && <IntelligenceDashboard page="activity" />}
                     {sidebarMode === 'search' && <SidebarPlaceholder icon={SearchIcon} title="Search is staged" description="The command surface is ready for a future global search index." />}
                     {sidebarMode === 'security' && <SecurityAudit />}
                   </React.Suspense>
@@ -161,11 +185,11 @@ export default function Workspace() {
 
         <main className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest">
           <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest ${(isMobile && mobileView === 'terminal') ? 'hidden' : ''}`}>
-            {activeTab !== 'dashboard' && openFiles.length > 0 && <EditorTabs />}
+            {effectiveTab !== 'dashboard' && openFiles.length > 0 && <EditorTabs />}
             <div className="relative min-h-0 flex-1 overflow-hidden">
-              {activeTab !== 'dashboard' && <NeuralProjection />}
+              {effectiveTab !== 'dashboard' && <NeuralProjection />}
               <React.Suspense fallback={<div className="h-full animate-pulse bg-surface-container-lowest" />}>
-                {activeTab === 'dashboard' ? <IntelligenceDashboard /> : activeTab === 'diff' ? <DiffViewer onApply={() => {}} onDiscard={() => {}} /> : <FileViewer path={activeFilePath} content={activeFileContent} />}
+                {effectiveTab === 'dashboard' ? <IntelligenceDashboard /> : effectiveTab === 'diff' ? <DiffViewer onApply={() => {}} onDiscard={() => {}} /> : <FileViewer path={activeFilePath} content={activeFileContent} />}
               </React.Suspense>
             </div>
           </div>

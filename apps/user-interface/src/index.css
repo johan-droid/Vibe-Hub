@@ -134,9 +134,9 @@
   .body-large { @apply font-sans text-base font-medium; }
   .body-medium { @apply font-sans text-sm font-medium; }
   .body-small { @apply font-sans text-xs font-medium; }
-  .label-large { @apply font-mono text-[11px] uppercase tracking-[0.2em] font-bold; }
-  .label-medium { @apply font-mono text-[10px] uppercase tracking-[0.18em] font-bold; }
-  .label-small { @apply font-mono text-[9px] uppercase tracking-[0.16em] font-bold; }
+  .label-large { @apply font-sans text-xs tracking-[0.03em] font-semibold; }
+  .label-medium { @apply font-sans text-[11px] tracking-[0.025em] font-semibold; }
+  .label-small { @apply font-sans text-[10px] tracking-[0.02em] font-semibold; }
 
   .elevation-1 { @apply bg-surface-container-low shadow-sm; }
   .elevation-2 { @apply bg-surface-container shadow-md; }

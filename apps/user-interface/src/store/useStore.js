@@ -159,9 +159,25 @@ export const useStore = create(
       setEffortLevel: (l) => set({ effortLevel: l }),
 
       // Thoughts & Logs
-      addThought: (thought) => set((state) => ({ 
-        agentThoughts: [...state.agentThoughts, { ...thought, timestamp: Date.now() }] 
-      })),
+      addThought: (thought) => set((state) => {
+        const normalized = typeof thought === 'string'
+          ? { content: thought }
+          : {
+              ...thought,
+              content: thought?.content || thought?.message || JSON.stringify(thought ?? ''),
+            };
+
+        const nextThoughts = [
+          ...state.agentThoughts,
+          {
+            id: uuid(),
+            ...normalized,
+            timestamp: normalized.timestamp || Date.now(),
+          },
+        ];
+
+        return { agentThoughts: nextThoughts.slice(-200) };
+      }),
       clearThoughts: () => set({ agentThoughts: [] }),
     }),
     {

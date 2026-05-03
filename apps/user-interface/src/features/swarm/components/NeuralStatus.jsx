@@ -46,7 +46,7 @@ export default function AgentNeuralStatus({ compact = false }) {
             />
           )}
         </div>
-        <span className="label-small font-bold uppercase tracking-[0.2em] text-on-surface opacity-60 group-hover:opacity-100 transition-opacity">
+        <span className="text-xs font-semibold text-on-surface opacity-70 group-hover:opacity-100 transition-opacity">
           {config.label}
         </span>
       </Surface>
@@ -101,7 +101,7 @@ export default function AgentNeuralStatus({ compact = false }) {
 
           <div className="flex flex-col flex-1 gap-1 min-w-0 relative z-10">
             <div className="flex items-center gap-3">
-              <span className="headline-small font-black tracking-tighter uppercase leading-none">
+              <span className="headline-small font-semibold leading-none">
                 {config.label}
               </span>
               <AnimatePresence>
@@ -133,7 +133,7 @@ export default function AgentNeuralStatus({ compact = false }) {
                 className="flex items-center gap-2"
               >
                 <Sparkles size={12} className="opacity-40 shrink-0" />
-                <span className="label-medium font-bold opacity-60 truncate">
+                <span className="text-xs font-semibold opacity-70 truncate">
                   {statusMessage || 'Awaiting instruction...'}
                 </span>
               </motion.div>

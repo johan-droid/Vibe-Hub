@@ -58,8 +58,8 @@ function App() {
       <Suspense fallback={<div className="w-screen h-screen bg-surface-container-lowest flex items-center justify-center animate-pulse" />}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
-          <Route path="/dashboard" element={<Workspace />} />
-          <Route path="/workspace" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard/*" element={<Workspace />} />
+          <Route path="/workspace/*" element={<Navigate to="/dashboard" replace />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
         </Routes>
       </Suspense>

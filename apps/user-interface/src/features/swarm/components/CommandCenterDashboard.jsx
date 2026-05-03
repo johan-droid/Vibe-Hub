@@ -1,486 +1,555 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Activity,
   AlertCircle,
-  Brain,
+  Bot,
   CheckCircle2,
   Clock3,
   Cpu,
-  Gauge,
+  Database,
+  FileCode2,
   GitBranch,
+  Gauge,
+  KeyRound,
+  Layers3,
+  ListChecks,
   LockKeyhole,
+  MessageSquare,
   Network,
   RefreshCw,
-  Rocket,
+  Route,
+  Search,
   ShieldCheck,
-  Sparkles,
-  Terminal,
-  Zap,
+  TerminalSquare,
+  UserCircle,
+  Wifi,
+  Wrench,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { api } from '../../../services/api';
+import { useBackendSignals, flattenSkillGraph } from '../../../hooks/useBackendSignals';
 import { useStore } from '../../../store/useStore';
 import { Surface } from '../../shared/components/Surface';
-import SwarmVisualizer from './SwarmVisualizer';
 import ActivityFeed from './ActivityFeed';
+import SecurityAudit from '../../security/components/SecurityAudit';
 
-const formatPhase = (phase = 'idle') => String(phase).replace(/_/g, ' ');
+const DASHBOARD_PAGES = {
+  overview: 'Overview',
+  activity: 'Activity',
+  runtime: 'Runtime',
+  skills: 'Skills',
+  security: 'Security',
+};
 
 function titleCase(value = '') {
-  return String(value)
-    .replace(/_/g, ' ')
+  return String(value || '')
+    .replace(/[_-]/g, ' ')
     .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
-function formatDuration(ms) {
-  if (!Number.isFinite(ms)) return 'n/a';
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+function formatDuration(seconds) {
+  if (!Number.isFinite(seconds)) return 'Not reported';
+  const totalSeconds = Math.max(0, Math.floor(seconds));
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
+  const secs = totalSeconds % 60;
 
   if (hours > 0) return `${hours}h ${minutes}m`;
-  if (minutes > 0) return `${minutes}m ${seconds}s`;
-  return `${seconds}s`;
+  if (minutes > 0) return `${minutes}m ${secs}s`;
+  return `${secs}s`;
 }
 
 function formatBytes(bytes) {
-  if (!Number.isFinite(bytes)) return 'n/a';
-
+  if (!Number.isFinite(bytes)) return 'Not reported';
   const units = ['B', 'KB', 'MB', 'GB'];
   let value = bytes;
-  let unitIndex = 0;
+  let unit = 0;
 
-  while (value >= 1024 && unitIndex < units.length - 1) {
+  while (value >= 1024 && unit < units.length - 1) {
     value /= 1024;
-    unitIndex += 1;
+    unit += 1;
   }
 
-  const precision = unitIndex === 0 ? 0 : value < 10 ? 1 : 0;
-  return `${value.toFixed(precision)} ${units[unitIndex]}`;
+  return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
-function flattenGraph(graph) {
-  if (Array.isArray(graph)) return graph;
-  if (graph && typeof graph === 'object') return Object.values(graph);
-  return [];
+function relativeSync(date) {
+  if (!date) return 'Not synced yet';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function ScoreRing({ score = 0, label }) {
-  const pct = Math.max(0, Math.min(100, score));
+function getThoughtText(thought) {
+  if (typeof thought === 'string') return thought;
+  return thought?.content || thought?.message || '';
+}
+
+function flattenTree(nodes = []) {
+  const files = [];
+  const visit = (node) => {
+    if (!node) return;
+    if (node.isDir || node.type === 'directory') {
+      (node.children || []).forEach(visit);
+    } else {
+      files.push(node);
+    }
+  };
+  nodes.forEach(visit);
+  return files;
+}
+
+function ShellButton({ children, active, onClick }) {
   return (
-    <div className="relative flex h-28 w-28 shrink-0 items-center justify-center">
-      <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 100 100" aria-hidden="true">
-        <circle cx="50" cy="50" r="42" stroke="hsl(var(--outline-variant) / 0.45)" strokeWidth="8" fill="none" />
-        <motion.circle
-          cx="50"
-          cy="50"
-          r="42"
-          stroke="hsl(var(--primary))"
-          strokeWidth="8"
-          strokeLinecap="round"
-          fill="none"
-          pathLength="100"
-          initial={{ strokeDasharray: '0 100' }}
-          animate={{ strokeDasharray: `${pct} 100` }}
-          transition={{ duration: 0.9, ease: [0.2, 0, 0, 1] }}
-        />
-      </svg>
-      <div className="text-center">
-        <div className="font-display text-2xl font-black tracking-[-0.05em] text-on-surface">{pct}</div>
-        <div className="label-small text-primary">{label}</div>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+        active
+          ? 'bg-on-surface text-surface-container-lowest shadow-lg shadow-black/20'
+          : 'border border-outline-variant/40 bg-surface-container-low/70 text-on-surface-variant hover:border-outline hover:text-on-surface'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function StatusPill({ children, tone = 'neutral', icon: Icon }) {
+  const toneClass = {
+    neutral: 'border-outline-variant/35 bg-surface-container-low text-on-surface-variant',
+    good: 'border-tertiary/25 bg-tertiary/10 text-tertiary',
+    warn: 'border-secondary/25 bg-secondary/10 text-secondary',
+    bad: 'border-error/30 bg-error/10 text-error',
+    info: 'border-primary/25 bg-primary/10 text-primary',
+  }[tone];
+
+  return (
+    <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${toneClass}`}>
+      {Icon && <Icon size={13} />}
+      {children}
+    </span>
+  );
+}
+
+function DataCard({ icon: Icon, label, value, detail, tone = 'info', action }) {
+  const iconClass = {
+    info: 'bg-primary/10 text-primary border-primary/20',
+    good: 'bg-tertiary/10 text-tertiary border-tertiary/20',
+    warn: 'bg-secondary/10 text-secondary border-secondary/20',
+    bad: 'bg-error/10 text-error border-error/25',
+  }[tone];
+
+  return (
+    <Surface elevation={0} shape="2xl" className="border border-outline-variant/25 bg-surface-container-low/80 p-5 shadow-xl shadow-black/10">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-on-surface-variant">{label}</p>
+          <p className="mt-3 truncate font-display text-2xl font-semibold tracking-[-0.04em] text-on-surface">{value}</p>
+          <p className="mt-2 text-sm leading-6 text-on-surface-variant">{detail}</p>
+        </div>
+        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${iconClass}`}>
+          <Icon size={20} />
+        </div>
       </div>
+      {action && <div className="mt-5">{action}</div>}
+    </Surface>
+  );
+}
+
+function SectionCard({ eyebrow, title, children, action, className = '' }) {
+  return (
+    <Surface elevation={0} shape="2xl" className={`border border-outline-variant/25 bg-surface-container-low/80 p-5 shadow-xl shadow-black/10 ${className}`}>
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          {eyebrow && <p className="mb-2 text-xs font-semibold text-primary">{eyebrow}</p>}
+          <h3 className="font-display text-2xl font-semibold tracking-[-0.04em] text-on-surface">{title}</h3>
+        </div>
+        {action}
+      </div>
+      {children}
+    </Surface>
+  );
+}
+
+function EmptyState({ icon: Icon, title, body, action }) {
+  return (
+    <div className="flex min-h-[220px] flex-col items-center justify-center rounded-3xl border border-dashed border-outline-variant/35 bg-surface-container-lowest/45 p-8 text-center">
+      <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-outline-variant/30 bg-surface-container text-primary">
+        <Icon size={22} />
+      </div>
+      <h4 className="title-medium">{title}</h4>
+      <p className="mt-2 max-w-md text-sm leading-6 text-on-surface-variant">{body}</p>
+      {action && <div className="mt-5">{action}</div>}
     </div>
   );
 }
 
-function MetricCard({ icon: Icon, label, value, detail, tone = 'primary', progress = 0 }) {
-  const toneClass = {
-    primary: 'text-primary bg-primary/10 border-primary/20',
-    secondary: 'text-secondary bg-secondary/10 border-secondary/20',
-    tertiary: 'text-tertiary bg-tertiary/10 border-tertiary/20',
-    error: 'text-error bg-error/10 border-error/20',
-  }[tone];
+function DashboardNav({ page }) {
+  const navigate = useNavigate();
 
   return (
-    <Surface elevation={0} shape="xl" className="border border-outline-variant/30 bg-surface-container-low/72 p-4 shadow-xl shadow-black/10">
-      <div className="flex items-start justify-between gap-4">
+    <div className="flex flex-wrap gap-2">
+      {Object.entries(DASHBOARD_PAGES).map(([id, label]) => (
+        <ShellButton key={id} active={page === id} onClick={() => navigate(id === 'overview' ? '/dashboard' : `/dashboard/${id}`)}>
+          {label}
+        </ShellButton>
+      ))}
+    </div>
+  );
+}
+
+function Header({ page, signals, user, providerLabel, isBackendOnline }) {
+  return (
+    <Surface elevation={0} shape="2xl" className="overflow-hidden border border-outline-variant/25 bg-surface-container-low/85 p-5 shadow-2xl shadow-black/15 md:p-6">
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
-          <p className="label-small mb-2 text-on-surface-variant/70">{label}</p>
-          <p className="title-large truncate">{value}</p>
-          <p className="mt-1 truncate text-xs text-on-surface-variant">{detail}</p>
+          <div className="mb-4 flex flex-wrap gap-2">
+            <StatusPill tone={isBackendOnline ? 'good' : 'warn'} icon={Wifi}>
+              Backend {isBackendOnline ? 'online' : 'checking'}
+            </StatusPill>
+            <StatusPill tone="info" icon={Cpu}>{providerLabel}</StatusPill>
+            <StatusPill tone="neutral" icon={Clock3}>Synced {relativeSync(signals.lastSyncedAt)}</StatusPill>
+          </div>
+          <h1 className="font-display text-4xl font-semibold tracking-[-0.06em] text-on-surface md:text-5xl">
+            {page === 'overview' ? `Welcome back${user?.name ? `, ${user.name.split(' ')[0]}` : ''}` : DASHBOARD_PAGES[page]}
+          </h1>
+          <p className="mt-4 max-w-3xl text-base leading-8 text-on-surface-variant">
+            Selina now shows what is actually connected: your session, local workspace, backend runtime, model gateway, and skill graph. No theatre, just the signals you need before asking the agent to work.
+          </p>
+          {signals.error && (
+            <div className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-error/30 bg-error/10 px-4 py-3 text-sm text-on-error-container">
+              <AlertCircle size={16} />
+              {signals.error}
+            </div>
+          )}
         </div>
-        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border ${toneClass}`}>
-          <Icon size={18} />
-        </div>
-      </div>
-      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-surface-container-highest">
-        <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
-          transition={{ duration: 0.9, ease: [0.2, 0, 0, 1] }}
-          className={`h-full ${tone === 'secondary' ? 'bg-secondary' : tone === 'tertiary' ? 'bg-tertiary' : tone === 'error' ? 'bg-error' : 'bg-primary'}`}
-        />
+        <DashboardNav page={page} />
       </div>
     </Surface>
   );
 }
 
-function LiveStat({ icon: Icon, label, value, detail, tone = 'primary' }) {
-  const toneClass = {
-    primary: 'text-primary bg-primary/10 border-primary/20',
-    secondary: 'text-secondary bg-secondary/10 border-secondary/20',
-    tertiary: 'text-tertiary bg-tertiary/10 border-tertiary/20',
-    error: 'text-error bg-error/10 border-error/20',
-  }[tone];
+function OverviewPage({ signals, store, providerLabel, providerConfig, skillNodes, fileCount, isBackendOnline }) {
+  const navigate = useNavigate();
+  const latestThoughts = store.agentThoughts.slice(-3).map(getThoughtText).filter(Boolean).reverse();
 
   return (
-    <div className="flex items-start gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest/50 p-3">
-      <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border ${toneClass}`}>
-        <Icon size={15} />
+    <div className="grid gap-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <DataCard
+          icon={UserCircle}
+          label="Signed in as"
+          value={store.user?.name || 'Authenticated user'}
+          detail={store.user?.email || 'OAuth session restored from the backend.'}
+          tone="good"
+        />
+        <DataCard
+          icon={FileCode2}
+          label="Workspace"
+          value={`${fileCount} files`}
+          detail={store.vfsStatus === 'ready' ? 'Local file tree is available in the explorer.' : `VFS is ${store.vfsStatus || 'idle'}. Open the workbench to boot it.`}
+          tone={store.vfsStatus === 'ready' ? 'good' : 'warn'}
+          action={<button onClick={() => navigate('/dashboard/editor')} className="text-sm font-semibold text-primary hover:text-on-surface">Open workbench</button>}
+        />
+        <DataCard
+          icon={Cpu}
+          label="Model gateway"
+          value={providerLabel}
+          detail={providerConfig?.configured === false ? 'Provider key is missing in the backend environment.' : providerConfig?.model || 'Waiting for diagnostics.'}
+          tone={providerConfig?.configured === false ? 'bad' : 'info'}
+          action={<button onClick={() => navigate('/dashboard/runtime')} className="text-sm font-semibold text-primary hover:text-on-surface">View runtime</button>}
+        />
+        <DataCard
+          icon={Route}
+          label="Skill graph"
+          value={`${skillNodes.length} skills`}
+          detail={skillNodes.length ? 'Backend routing topology is loaded.' : 'Skill graph has not been returned yet.'}
+          tone={skillNodes.length ? 'good' : 'warn'}
+          action={<button onClick={() => navigate('/dashboard/skills')} className="text-sm font-semibold text-primary hover:text-on-surface">Inspect skills</button>}
+        />
       </div>
-      <div className="min-w-0">
-        <p className="label-small text-on-surface-variant/70">{label}</p>
-        <p className="title-small truncate">{value}</p>
-        <p className="mt-1 text-xs leading-5 text-on-surface-variant">{detail}</p>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+        <SectionCard eyebrow="Current work" title="What Selina knows right now">
+          <div className="grid gap-3 md:grid-cols-2">
+            <SignalRow icon={MessageSquare} label="Conversation" value={`${store.messages.length} messages`} detail={store.messages.length ? 'The chat history is available to the session.' : 'No prompt has been sent in this session yet.'} />
+            <SignalRow icon={Activity} label="Agent stream" value={`${store.agentThoughts.length} events`} detail={store.agentThoughts.length ? 'Recent agent activity is visible in the activity page.' : 'The agent has not emitted activity yet.'} />
+            <SignalRow icon={TerminalSquare} label="Terminal" value={`${store.terminalOutput.length} lines`} detail={store.terminalOutput.length ? 'Runtime output is available for debugging.' : 'No terminal output has been captured yet.'} />
+            <SignalRow icon={GitBranch} label="Workflow" value={titleCase(store.workflowState?.status || 'Standby')} detail={store.workflowState?.url || 'No GitHub workflow event has arrived.'} />
+          </div>
+        </SectionCard>
+
+        <SectionCard
+          eyebrow="Start here"
+          title="Useful next actions"
+          action={<StatusPill tone={isBackendOnline ? 'good' : 'warn'}>{signals.loading ? 'Refreshing' : 'Ready'}</StatusPill>}
+        >
+          <div className="space-y-3">
+            <ActionItem icon={FileCode2} title="Open the workbench" body="Use the explorer, editor, terminal, and Selina chat together." onClick={() => navigate('/dashboard/editor')} />
+            <ActionItem icon={Gauge} title="Check runtime health" body="Confirm model keys, memory, uptime, and recent provider events." onClick={() => navigate('/dashboard/runtime')} />
+            <ActionItem icon={Layers3} title="Review skill routing" body="See which computer-science skills the backend exposes to the agent." onClick={() => navigate('/dashboard/skills')} />
+          </div>
+        </SectionCard>
       </div>
+
+      <SectionCard eyebrow="Recent activity" title="Latest session movement" action={<button onClick={() => navigate('/dashboard/activity')} className="text-sm font-semibold text-primary hover:text-on-surface">Open activity</button>}>
+        {latestThoughts.length ? (
+          <div className="space-y-3">
+            {latestThoughts.map((thought, index) => (
+              <div key={`${thought}-${index}`} className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/50 p-4 text-sm leading-6 text-on-surface-variant">
+                {thought}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState icon={Bot} title="No agent activity yet" body="Ask Selina to inspect the repository, explain a file, or run a small change. This panel will fill from the live websocket stream." />
+        )}
+      </SectionCard>
     </div>
   );
 }
 
-function Capability({ icon: Icon, title, body }) {
+function SignalRow({ icon: Icon, label, value, detail }) {
   return (
-    <div className="flex gap-3 rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/55 p-4">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-        <Icon size={17} />
+    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/45 p-4">
+      <div className="mb-3 flex items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <Icon size={17} />
+        </div>
+        <div>
+          <p className="text-xs font-semibold text-on-surface-variant">{label}</p>
+          <p className="title-small">{value}</p>
+        </div>
+      </div>
+      <p className="text-sm leading-6 text-on-surface-variant">{detail}</p>
+    </div>
+  );
+}
+
+function ActionItem({ icon: Icon, title, body, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex w-full gap-4 rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/45 p-4 text-left transition hover:border-primary/35 hover:bg-surface-container"
+    >
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary group-hover:bg-primary/15">
+        <Icon size={18} />
       </div>
       <div>
         <p className="title-small">{title}</p>
-        <p className="mt-1 text-xs leading-5 text-on-surface-variant">{body}</p>
+        <p className="mt-1 text-sm leading-6 text-on-surface-variant">{body}</p>
       </div>
+    </button>
+  );
+}
+
+function ActivityPage({ store }) {
+  return (
+    <div className="grid min-h-[620px] gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+      <Surface elevation={0} shape="2xl" className="overflow-hidden border border-outline-variant/25 bg-surface-container-low/80 shadow-xl shadow-black/10">
+        <ActivityFeed />
+      </Surface>
+
+      <SectionCard eyebrow="Session detail" title="What the feed is reading">
+        <div className="space-y-3">
+          <SignalRow icon={MessageSquare} label="Messages" value={store.messages.length} detail="User and assistant turns stored in the local session." />
+          <SignalRow icon={Activity} label="Agent thoughts" value={store.agentThoughts.length} detail="Planning, tool calls, and status updates received through the websocket." />
+          <SignalRow icon={TerminalSquare} label="Terminal lines" value={store.terminalOutput.length} detail="Shell output captured while Selina works." />
+        </div>
+      </SectionCard>
     </div>
   );
 }
 
-/**
- * IntelligenceDashboard is the live command center for the authenticated workspace.
- * It combines websocket state, file-system state, workflow state, and backend diagnostics.
- */
-export default function IntelligenceDashboard() {
-  const {
-    user,
-    neuralStatus,
-    workflowState,
-    agentState,
-    statusMessage,
-    effortLevel,
-    isThinking,
-    vfsStatus,
-    messages,
-    agentThoughts,
-    terminalOutput,
-    vfsTree,
-    openFiles,
-  } = useStore();
-
-  const [runtimeDiagnostics, setRuntimeDiagnostics] = useState(null);
-  const [skillGraph, setSkillGraph] = useState(null);
-  const [loadingSignals, setLoadingSignals] = useState(true);
-  const [signalError, setSignalError] = useState('');
-  const [refreshTick, setRefreshTick] = useState(0);
-  const [lastSyncedAt, setLastSyncedAt] = useState(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadSignals = async () => {
-      setLoadingSignals(true);
-      try {
-        const [diagnostics, skills] = await Promise.all([
-          api.runtimeDiagnostics(),
-          api.runtimeSkills(),
-        ]);
-
-        if (cancelled) return;
-
-        setRuntimeDiagnostics(diagnostics);
-        setSkillGraph(skills);
-        setSignalError('');
-        setLastSyncedAt(new Date());
-      } catch (error) {
-        if (!cancelled) {
-          setSignalError(error?.message || 'Failed to load runtime signals.');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingSignals(false);
-        }
-      }
-    };
-
-    loadSignals();
-    const timer = window.setInterval(loadSignals, 60_000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [user?.id, refreshTick]);
-
-  const providerStatus = runtimeDiagnostics?.providerStatus || {};
-  const activeProvider = providerStatus.activeProvider || 'gemini';
-  const activeProviderConfig = providerStatus[activeProvider] || providerStatus.gemini || {};
-  const auditTail = Array.isArray(runtimeDiagnostics?.auditTail) ? runtimeDiagnostics.auditTail : [];
-  const skillNodes = flattenGraph(skillGraph?.graph);
-  const skillCount = skillNodes.length;
-
-  const readinessScore = useMemo(() => {
-    let score = 34;
-
-    if (user) score += 8;
-    if (vfsStatus === 'ready') score += 18;
-    else if (vfsStatus === 'booting') score += 10;
-
-    if (isThinking) score += 6;
-    else if (agentState === 'idle') score += 10;
-    else score += 8;
-
-    if (workflowState?.status === 'completed' && workflowState?.conclusion !== 'failure') score += 14;
-    else if (workflowState?.status === 'triggered') score += 8;
-    else if (workflowState?.conclusion === 'failure') score -= 8;
-
-    if (runtimeDiagnostics) score += 8;
-    if (messages.length + agentThoughts.length > 0) score += 6;
-    if (signalError) score -= 8;
-
-    return Math.max(0, Math.min(100, score));
-  }, [agentState, agentThoughts.length, isThinking, messages.length, runtimeDiagnostics, signalError, user, vfsStatus, workflowState]);
-
-  const metrics = useMemo(() => [
-    {
-      icon: Brain,
-      label: 'Agent phase',
-      value: titleCase(neuralStatus.phase || agentState || 'idle'),
-      detail: statusMessage || neuralStatus.lastAction || 'Awaiting instruction.',
-      tone: isThinking ? 'secondary' : 'primary',
-      progress: isThinking ? 68 : agentState === 'idle' ? 100 : 82,
-    },
-    {
-      icon: Network,
-      label: 'Project surface',
-      value: `${openFiles.length} open / ${vfsTree.length} roots`,
-      detail: vfsStatus === 'ready' ? 'VFS bridge connected' : vfsStatus === 'booting' ? 'Booting the workspace bridge' : 'No project tree yet',
-      tone: vfsStatus === 'ready' ? 'tertiary' : 'secondary',
-      progress: vfsStatus === 'ready' ? 100 : vfsStatus === 'booting' ? 45 : 18,
-    },
-    {
-      icon: GitBranch,
-      label: 'Workflow rail',
-      value: workflowState?.status === 'completed'
-        ? titleCase(workflowState.conclusion || 'completed')
-        : workflowState?.status === 'triggered'
-          ? 'Queued'
-          : 'Standby',
-      detail: workflowState?.url ? 'GitHub workflow finished' : 'GitHub actions and PR lifecycle',
-      tone: workflowState?.conclusion === 'failure' ? 'error' : workflowState?.status === 'triggered' ? 'secondary' : 'primary',
-      progress: workflowState?.status === 'completed' ? 100 : workflowState?.status === 'triggered' ? 58 : 28,
-    },
-    {
-      icon: Gauge,
-      label: 'Task effort',
-      value: titleCase(effortLevel || 'standard'),
-      detail: 'Budgeted reasoning lane',
-      tone: 'tertiary',
-      progress: effortLevel === 'deep' ? 92 : effortLevel === 'quick' ? 48 : 72,
-    },
-    {
-      icon: Cpu,
-      label: 'Runtime health',
-      value: activeProvider.toUpperCase(),
-      detail: activeProviderConfig?.model ? `${activeProviderConfig.model} · ${activeProviderConfig.configured === false ? 'needs key' : 'key ready'}` : 'Provider diagnostics unavailable',
-      tone: activeProviderConfig?.configured === false ? 'error' : 'primary',
-      progress: activeProviderConfig?.configured === false ? 40 : 84,
-    },
-    {
-      icon: Sparkles,
-      label: 'Signal volume',
-      value: `${messages.length + agentThoughts.length}`,
-      detail: `${messages.length} turns / ${terminalOutput.length} terminal lines`,
-      tone: 'secondary',
-      progress: Math.min(100, (messages.length + agentThoughts.length + terminalOutput.length) * 5),
-    },
-  ], [activeProvider, activeProviderConfig?.configured, activeProviderConfig?.model, agentState, agentThoughts.length, effortLevel, isThinking, messages.length, neuralStatus.lastAction, neuralStatus.phase, openFiles.length, statusMessage, terminalOutput.length, vfsStatus, vfsTree.length, workflowState]);
-
-  const summaryTags = [
-    user?.name || 'Authenticated session',
-    `${auditTail.length} audit events`,
-    loadingSignals ? 'refreshing live signals' : `synced ${lastSyncedAt ? lastSyncedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'just now'}`,
-  ];
+function RuntimePage({ signals, providerStatus, activeProvider, activeProviderConfig, auditTail }) {
+  const providers = ['gemini', 'openai', 'qwen', 'anthropic'];
 
   return (
-    <div className="h-full overflow-y-auto scrollbar-none bg-surface-container-lowest/35 p-4 md:p-6">
-      <div className="mx-auto flex max-w-7xl flex-col gap-5">
-        <Surface elevation={0} shape="2xl" className="overflow-hidden border border-outline-variant/30 bg-surface-container-low/80 shadow-2xl shadow-black/15">
-          <div className="relative p-5 md:p-6">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,hsl(var(--primary)/0.14),transparent_34%),radial-gradient(circle_at_bottom_left,hsl(var(--secondary)/0.10),transparent_28%)]" />
-            <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-              <div className="min-w-0 space-y-4">
-                <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-primary">
-                  <Sparkles size={13} />
-                  <span className="label-small">Live command center</span>
+    <div className="grid gap-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <DataCard icon={Wifi} label="Backend status" value={titleCase(signals.health?.status || 'Unknown')} detail={`Version ${signals.health?.version || 'not reported'}`} tone={signals.health?.status === 'active' ? 'good' : 'warn'} />
+        <DataCard icon={Clock3} label="Uptime" value={formatDuration(signals.health?.uptime)} detail="Reported by the Express bridge health endpoint." tone="info" />
+        <DataCard icon={Database} label="Memory" value={formatBytes(signals.health?.memory)} detail="Heap usage reported by the bridge process." tone="warn" />
+        <DataCard icon={Cpu} label="Active provider" value={activeProvider.toUpperCase()} detail={activeProviderConfig?.model || 'Model not reported'} tone={activeProviderConfig?.configured === false ? 'bad' : 'good'} />
+      </div>
+
+      <SectionCard eyebrow="Provider gateway" title="Configured model adapters">
+        <div className="grid gap-3 md:grid-cols-2">
+          {providers.map((provider) => {
+            const config = providerStatus?.[provider] || {};
+            const isActive = provider === activeProvider;
+            const configured = Boolean(config.configured);
+            return (
+              <div key={provider} className={`rounded-2xl border p-4 ${isActive ? 'border-primary/35 bg-primary/10' : 'border-outline-variant/25 bg-surface-container-lowest/45'}`}>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-container text-primary">
+                      <Cpu size={17} />
+                    </div>
+                    <div>
+                      <p className="title-small">{titleCase(provider)}</p>
+                      <p className="text-xs text-on-surface-variant">{config.model || 'No model selected'}</p>
+                    </div>
+                  </div>
+                  <StatusPill tone={configured ? 'good' : 'bad'}>{configured ? 'Configured' : 'Missing key'}</StatusPill>
                 </div>
-                <div>
-                  <h2 className="headline-medium">Dashboard</h2>
-                  <p className="mt-2 max-w-2xl text-sm leading-7 text-on-surface-variant">
-                    The workspace reads the agent stream, file system, workflow state, and runtime diagnostics together so you can operate from one control surface.
-                  </p>
+                {config.baseUrl && <p className="truncate text-xs text-on-surface-variant">{config.baseUrl}</p>}
+              </div>
+            );
+          })}
+        </div>
+      </SectionCard>
+
+      <SectionCard eyebrow="Audit trail" title="Recent provider events">
+        {auditTail.length ? (
+          <div className="space-y-3">
+            {auditTail.slice().reverse().map((event, index) => (
+              <div key={`${event.ts}-${index}`} className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/45 p-4">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <StatusPill tone={event.ok === false ? 'bad' : 'good'} icon={event.ok === false ? AlertCircle : CheckCircle2}>{event.kind || 'event'}</StatusPill>
+                  <span className="text-xs text-on-surface-variant">{event.ts ? new Date(event.ts).toLocaleString() : 'No timestamp'}</span>
+                </div>
+                <p className="text-sm leading-6 text-on-surface-variant">
+                  Provider {event.provider || 'unknown'} {event.model ? `using ${event.model}` : ''}{Number.isFinite(event.durationMs) ? ` finished in ${event.durationMs}ms` : ''}.
+                </p>
+                {event.error && <p className="mt-2 text-sm text-error">{event.error}</p>}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState icon={ListChecks} title="No provider events yet" body="Once Selina calls a model, timeout/retry/token estimates and redacted provider diagnostics will appear here." />
+        )}
+      </SectionCard>
+    </div>
+  );
+}
+
+function SkillsPage({ skillNodes }) {
+  const [query, setQuery] = useState('');
+  const visibleNodes = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return skillNodes;
+    return skillNodes.filter((node) => `${node.label} ${node.expertDomain} ${node.id}`.toLowerCase().includes(q));
+  }, [query, skillNodes]);
+
+  const domains = useMemo(() => {
+    const counts = new Map();
+    skillNodes.forEach((node) => counts.set(node.expertDomain, (counts.get(node.expertDomain) || 0) + 1));
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [skillNodes]);
+
+  return (
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]">
+      <SectionCard eyebrow="Routing map" title="Skill coverage">
+        <div className="space-y-3">
+          {domains.map(([domain, count]) => (
+            <div key={domain} className="flex items-center justify-between rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/45 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Route size={17} />
+                </div>
+                <span className="title-small">{titleCase(domain)}</span>
+              </div>
+              <StatusPill tone="info">{count} skills</StatusPill>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        eyebrow="Backend skill graph"
+        title="Available specialist routes"
+        action={
+          <div className="relative min-w-[220px]">
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search skills"
+              className="h-10 w-full rounded-full border border-outline-variant/35 bg-surface-container-lowest pl-9 pr-4 text-sm text-on-surface outline-none transition focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
+            />
+          </div>
+        }
+      >
+        {visibleNodes.length ? (
+          <div className="grid gap-3 md:grid-cols-2">
+            {visibleNodes.map((node) => (
+              <div key={node.id} className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/45 p-4">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="title-small">{node.label}</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">{titleCase(node.expertDomain)} lane</p>
+                  </div>
+                  <StatusPill tone="neutral">{node.bridges?.length || 0} bridges</StatusPill>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {summaryTags.map((tag) => (
-                    <span key={tag} className="rounded-full border border-outline-variant/30 bg-surface-container-lowest/55 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.16em] text-on-surface-variant">
-                      {tag}
+                  {(node.bridges || []).slice(0, 4).map((bridge) => (
+                    <span key={bridge} className="rounded-full border border-outline-variant/25 bg-surface-container px-2.5 py-1 text-xs text-on-surface-variant">
+                      {titleCase(bridge)}
                     </span>
                   ))}
                 </div>
-                {signalError && (
-                  <div className="flex items-center gap-2 rounded-2xl border border-error/30 bg-error/10 px-4 py-3 text-sm text-on-error-container">
-                    <AlertCircle size={16} className="shrink-0" />
-                    <span>{signalError}</span>
-                  </div>
-                )}
               </div>
-
-              <div className="flex flex-col gap-4 md:flex-row md:items-center">
-                <ScoreRing score={readinessScore} label="readiness" />
-                <div className="min-w-[230px] space-y-3">
-                  <div className="flex items-center justify-between gap-3 text-sm text-on-surface">
-                    <div className="flex items-center gap-2">
-                      <span className={`h-2.5 w-2.5 rounded-full ${isThinking ? 'bg-secondary animate-soft-pulse' : 'bg-tertiary'}`} />
-                      {isThinking ? 'Processing request' : 'Ready for execution'}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setRefreshTick((value) => value + 1)}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-outline-variant/30 bg-surface-container-lowest/60 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.14em] text-on-surface-variant transition hover:text-primary"
-                    >
-                      <RefreshCw size={11} className={loadingSignals ? 'animate-spin' : ''} />
-                      Refresh
-                    </button>
-                  </div>
-                  <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/55 p-3">
-                    <p className="label-small text-on-surface-variant/70">Current phase</p>
-                    <p className="title-small capitalize text-primary">{formatPhase(neuralStatus.phase || agentState)}</p>
-                    <p className="mt-1 line-clamp-2 text-xs text-on-surface-variant">{statusMessage || neuralStatus.lastAction || 'Awaiting instruction.'}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            ))}
           </div>
-        </Surface>
+        ) : (
+          <EmptyState icon={Search} title="No matching skill" body="Try searching for frontend, backend, security, database, DevOps, testing, or AI." />
+        )}
+      </SectionCard>
+    </div>
+  );
+}
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {metrics.map((metric) => <MetricCard key={metric.label} {...metric} />)}
-        </div>
+export default function IntelligenceDashboard({ page = 'overview' }) {
+  const store = useStore();
+  const signals = useBackendSignals({ intervalMs: 60_000 });
+  const providerStatus = signals.diagnostics?.providerStatus || {};
+  const activeProvider = providerStatus.activeProvider || 'gemini';
+  const activeProviderConfig = providerStatus[activeProvider] || providerStatus.gemini || {};
+  const providerLabel = `${titleCase(activeProvider)}${activeProviderConfig?.model ? ` / ${activeProviderConfig.model}` : ''}`;
+  const skillNodes = flattenSkillGraph(signals.skills?.graph);
+  const auditTail = Array.isArray(signals.diagnostics?.auditTail) ? signals.diagnostics.auditTail : [];
+  const files = flattenTree(store.vfsTree);
+  const currentPage = DASHBOARD_PAGES[page] ? page : 'overview';
+  const isBackendOnline = signals.health?.status === 'active';
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
-          <Surface elevation={0} shape="2xl" className="min-h-[520px] overflow-hidden border border-outline-variant/30 bg-surface-container-low/70 shadow-xl shadow-black/10">
-            <ActivityFeed />
-          </Surface>
+  return (
+    <div className="h-full overflow-y-auto bg-surface-container-lowest p-4 text-on-surface md:p-6">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
+        className="mx-auto flex max-w-7xl flex-col gap-5"
+      >
+        <Header page={currentPage} signals={signals} user={store.user} providerLabel={providerLabel} isBackendOnline={isBackendOnline} />
 
-          <div className="grid gap-5">
-            <Surface elevation={0} shape="2xl" className="border border-outline-variant/30 bg-surface-container-low/70 p-5 shadow-xl shadow-black/10">
-              <div className="mb-5 flex items-center justify-between gap-4">
-                <div>
-                  <p className="label-small text-primary">Runtime posture</p>
-                  <h3 className="title-large mt-1">System signal</h3>
-                </div>
-                <div className="rounded-full border border-tertiary/20 bg-tertiary/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.18em] text-tertiary">
-                  {loadingSignals ? 'Syncing' : 'Live'}
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <LiveStat icon={Cpu} label="Provider" value={activeProvider.toUpperCase()} detail={activeProviderConfig?.model || 'Provider configuration unavailable'} />
-                <LiveStat icon={Clock3} label="Uptime" value={formatDuration(runtimeDiagnostics?.uptime * 1000)} detail={`Audit tail holds ${auditTail.length} events`} tone="secondary" />
-                <LiveStat icon={Gauge} label="Memory" value={formatBytes(runtimeDiagnostics?.memory)} detail="Heap usage from the bridge process" tone="tertiary" />
-                <LiveStat icon={LockKeyhole} label="Session" value={user?.email ? 'Authenticated' : 'Signed in'} detail={user?.name || 'OAuth-backed route'} tone="primary" />
-              </div>
-
-              <div className="mt-5 rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/55 p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <p className="label-small text-on-surface-variant">Operational snapshot</p>
-                  <Terminal size={14} className="text-secondary" />
-                </div>
-                <div className="grid grid-cols-3 gap-3 text-center">
-                  <div>
-                    <p className="title-large">{messages.length}</p>
-                    <p className="label-small text-on-surface-variant/70">Turns</p>
-                  </div>
-                  <div>
-                    <p className="title-large">{openFiles.length}</p>
-                    <p className="label-small text-on-surface-variant/70">Files</p>
-                  </div>
-                  <div>
-                    <p className="title-large">{terminalOutput.length}</p>
-                    <p className="label-small text-on-surface-variant/70">Logs</p>
-                  </div>
-                </div>
-              </div>
-            </Surface>
-
-            <Surface elevation={0} shape="2xl" className="border border-outline-variant/30 bg-surface-container-low/70 p-5 shadow-xl shadow-black/10">
-              <div className="mb-5 flex items-center justify-between">
-                <div>
-                  <p className="label-small text-primary">Skill graph</p>
-                  <h3 className="title-large mt-1">Routing topology</h3>
-                </div>
-                <div className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.18em] text-primary">
-                  {skillCount} nodes
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <Capability icon={GitBranch} title="Live graph" body={`${skillGraph?.mode || 'Mixture of experts'} with ${skillCount} routing nodes exposed by the backend.`} />
-                <Capability icon={CheckCircle2} title="Audit trail" body={`${auditTail.length} recent provider events are available for inspection in the runtime diagnostics card.`} />
-                <Capability icon={Zap} title="Action loop" body="The dashboard stays tied to agent activity, workflow updates, and terminal output so it changes as the session changes." />
-              </div>
-
-              <div className="mt-5 flex flex-wrap gap-2">
-                {skillNodes.slice(0, 6).map((node) => (
-                  <span key={node.id} className="rounded-full border border-outline-variant/30 bg-surface-container-lowest/55 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.16em] text-on-surface-variant">
-                    {node.label}
-                  </span>
-                ))}
-              </div>
-            </Surface>
+        {signals.loading && !signals.lastSyncedAt && (
+          <div className="flex items-center gap-3 rounded-2xl border border-outline-variant/25 bg-surface-container-low/80 px-4 py-3 text-sm text-on-surface-variant">
+            <RefreshCw size={16} className="animate-spin text-primary" />
+            Loading live backend signals...
           </div>
-        </div>
+        )}
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
-          <Surface elevation={0} shape="2xl" className="min-h-[420px] overflow-hidden border border-outline-variant/30 bg-surface-container-low/70 shadow-xl shadow-black/10">
-            <SwarmVisualizer />
+        {currentPage === 'overview' && (
+          <OverviewPage
+            signals={signals}
+            store={store}
+            providerLabel={providerLabel}
+            providerConfig={activeProviderConfig}
+            skillNodes={skillNodes}
+            fileCount={files.length}
+            isBackendOnline={isBackendOnline}
+          />
+        )}
+        {currentPage === 'activity' && <ActivityPage store={store} />}
+        {currentPage === 'runtime' && <RuntimePage signals={signals} providerStatus={providerStatus} activeProvider={activeProvider} activeProviderConfig={activeProviderConfig} auditTail={auditTail} />}
+        {currentPage === 'skills' && <SkillsPage skillNodes={skillNodes} />}
+        {currentPage === 'security' && (
+          <Surface elevation={0} shape="2xl" className="min-h-[620px] overflow-hidden border border-outline-variant/25 bg-surface-container-low/80 shadow-xl shadow-black/10">
+            <SecurityAudit signals={signals} />
           </Surface>
-
-          <Surface elevation={0} shape="2xl" className="border border-outline-variant/30 bg-surface-container-low/70 p-5 shadow-xl shadow-black/10">
-            <div className="mb-5 flex items-center justify-between gap-4">
-              <div>
-                <p className="label-small text-primary">Next run posture</p>
-                <h3 className="title-large mt-1">What changes next</h3>
-              </div>
-              <div className="rounded-full border border-tertiary/20 bg-tertiary/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.18em] text-tertiary">
-                Ready
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <Capability icon={Rocket} title="Editor handoff" body="Open a file from the explorer to drop into the editing lane without leaving the dashboard route." />
-              <Capability icon={ShieldCheck} title="Signal fidelity" body="Use the refresh action to pull the latest runtime diagnostics and skill graph from the backend." />
-              <Capability icon={Activity} title="Live feed" body="The activity stream mirrors new thoughts, plans, and tool calls as soon as the websocket pushes them." />
-              <Capability icon={Brain} title="Agent focus" body={`Current phase: ${formatPhase(neuralStatus.phase || agentState)}. ${statusMessage || neuralStatus.lastAction || 'No active instruction.'}`} />
-            </div>
-          </Surface>
-        </div>
-      </div>
+        )}
+      </motion.div>
     </div>
   );
 }

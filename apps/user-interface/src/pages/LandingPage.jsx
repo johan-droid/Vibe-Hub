@@ -1,23 +1,14 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  ArrowRight, Brain, CheckCircle2, Code2, Database, Github, GitPullRequestArrow,
-  Layers3, LockKeyhole, Network, Play, Search, ShieldCheck,
+  ArrowRight, Brain, CheckCircle2, Code2, Database, FileCode2, Github,
+  KeyRound, Layers3, LockKeyhole, Network, Search, Server, ShieldCheck,
   Sparkles, TerminalSquare, Zap
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { api } from '../services/api';
 import { Button } from '../features/shared/components/Button';
-
-const GoogleIcon = ({ size = 18 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-  </svg>
-);
 
 const fadeUp = {
   hidden: { opacity: 0, y: 18 },
@@ -39,8 +30,6 @@ const workflows = [
     icon: Network,
     title: 'Turns messy requests into crisp execution paths.',
     summary: 'Selina reads the workspace, chooses the right skill bridge, and proposes the smallest safe path before touching code.',
-    command: 'selina plan "ship auth and dashboard polish"',
-    output: ['Maps repo structure', 'Selects UI + backend + security skills', 'Creates a focused implementation plan'],
   },
   {
     id: 'build',
@@ -48,8 +37,6 @@ const workflows = [
     icon: Code2,
     title: 'Implements with project-aware edits.',
     summary: 'The agent works against real files, keeps context bounded, and uses surgical changes instead of blind rewrites.',
-    command: 'selina build --scope frontend --verify',
-    output: ['Reads components first', 'Applies targeted patches', 'Keeps interface states intuitive'],
   },
   {
     id: 'debug',
@@ -57,8 +44,6 @@ const workflows = [
     icon: TerminalSquare,
     title: 'Finds the failure path, not just the symptom.',
     summary: 'Runtime events, terminal output, model diagnostics, and tests feed the same debugging cockpit.',
-    command: 'selina debug --trace websocket',
-    output: ['Classifies failure domain', 'Runs verification loop', 'Explains root cause clearly'],
   },
   {
     id: 'secure',
@@ -66,8 +51,6 @@ const workflows = [
     icon: ShieldCheck,
     title: 'Hardens the app for real users.',
     summary: 'Auth, token handling, provider routing, audit logs, and secrets stay visible without leaking sensitive data.',
-    command: 'selina audit --market-ready',
-    output: ['Checks trust boundaries', 'Redacts diagnostics', 'Surfaces release blockers'],
   },
 ];
 
@@ -161,8 +144,14 @@ function WorkflowSwitcher({ activeWorkflow, setActiveWorkflow }) {
   );
 }
 
-function ProductPreview({ activeWorkflow }) {
-  const files = ['apps/user-interface/src/App.jsx', 'apps/server-bridge/auth/google.js', 'orchestrator/skill-graph.js'];
+function ProductPreview({ activeWorkflow, backendHealth }) {
+  const backendStatus = backendHealth?.status === 'active' ? 'Backend online' : backendHealth ? 'Backend responded' : 'Checking backend';
+  const routes = [
+    { icon: FileCode2, label: 'Frontend routes', value: '/, /dashboard, /dashboard/runtime, /dashboard/skills', detail: 'The workspace is split into practical pages instead of one oversized mock dashboard.' },
+    { icon: Server, label: 'Backend bridge', value: backendStatus, detail: backendHealth?.version ? `Server bridge version ${backendHealth.version}` : 'Public health is read from /health when available.' },
+    { icon: KeyRound, label: 'Protected APIs', value: '/api/me + runtime endpoints', detail: 'OAuth token restore guards profile, diagnostics, and skill graph calls.' },
+    { icon: activeWorkflow.icon, label: 'Current focus', value: activeWorkflow.label, detail: activeWorkflow.summary },
+  ];
 
   return (
     <motion.div variants={fadeUp} className="relative mx-auto w-full max-w-6xl">
@@ -174,8 +163,8 @@ function ProductPreview({ activeWorkflow }) {
             <span className="h-3 w-3 rounded-full bg-secondary/80" />
             <span className="h-3 w-3 rounded-full bg-tertiary/80" />
           </div>
-          <div className="hidden rounded-full border border-outline-variant/30 bg-surface-container-low px-4 py-1.5 text-[10px] font-mono uppercase tracking-[0.22em] text-on-surface-variant sm:block">
-            Selina Workspace
+          <div className="hidden rounded-full border border-outline-variant/30 bg-surface-container-low px-4 py-1.5 text-xs font-semibold text-on-surface-variant sm:block">
+            Selina workspace map
           </div>
           <div className="flex items-center gap-2 text-primary">
             <Sparkles size={14} />
@@ -183,54 +172,31 @@ function ProductPreview({ activeWorkflow }) {
           </div>
         </div>
 
-        <div className="grid min-h-[540px] grid-cols-1 md:grid-cols-[250px_minmax(0,1fr)_330px]">
-          <aside className="hidden border-r border-outline-variant/30 bg-surface-container-low/70 p-4 md:block">
-            <div className="mb-5 flex items-center justify-between">
-              <span className="label-small text-on-surface-variant">Workspace map</span>
-              <GitPullRequestArrow size={14} className="text-tertiary" />
-            </div>
-            <div className="space-y-2">
-              {files.map((file, index) => (
-                <div key={file} className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs ${index === 2 ? 'bg-primary/10 text-primary' : 'text-on-surface-variant'}`}>
-                  <Code2 size={14} />
-                  <span className="truncate">{file}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-8 rounded-2xl border border-outline-variant/30 bg-surface-container p-4">
-              <p className="label-small mb-4 text-secondary">Skill bridge</p>
-              <div className="space-y-3 text-xs text-on-surface-variant">
-                {['Frontend', 'Backend', 'Security', 'AI routing'].map((skill, index) => (
-                  <div key={skill} className="flex items-center justify-between">
-                    <span>{skill}</span>
-                    <span className={`h-2 w-2 rounded-full ${index < 3 ? 'bg-tertiary' : 'bg-primary animate-soft-pulse'}`} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </aside>
-
+        <div className="grid min-h-[480px] grid-cols-1 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
           <main className="bg-surface-container-lowest/80 p-4 md:p-6">
             <div className="mb-4 flex flex-col gap-4 rounded-2xl border border-outline-variant/30 bg-surface-container-low px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="label-small text-primary">Active workflow</p>
                 <h3 className="title-large mt-1">{activeWorkflow.title}</h3>
               </div>
-              <Button size="sm" variant="tonal" leadingIcon={Play}>Preview run</Button>
+              <span className="rounded-full border border-tertiary/25 bg-tertiary/10 px-3 py-1 text-xs font-semibold text-tertiary">
+                Practical UI
+              </span>
             </div>
 
-            <div className="rounded-2xl border border-outline-variant/30 bg-[#070b10]/90 p-5 font-mono text-[12px] leading-7 text-on-surface-variant shadow-inner">
-              <p><span className="text-outline">$</span> {activeWorkflow.command}</p>
-              <p className="text-primary">Selina: analyzing request...</p>
-              {activeWorkflow.output.map((line, index) => (
-                <p key={line}><span className="text-outline">0{index + 1}</span> <span className="text-tertiary">ok</span> {line}</p>
+            <div className="grid gap-4 md:grid-cols-2">
+              {routes.map((route) => (
+                <div key={route.label} className="rounded-2xl border border-outline-variant/30 bg-surface-container-low p-5">
+                  <route.icon size={20} className="mb-5 text-primary" />
+                  <p className="text-xs font-semibold text-on-surface-variant">{route.label}</p>
+                  <h4 className="mt-2 title-small">{route.value}</h4>
+                  <p className="mt-3 text-sm leading-6 text-on-surface-variant">{route.detail}</p>
+                </div>
               ))}
-              <p className="text-secondary">ready for verified action</p>
             </div>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
-              {['Plan', 'Patch', 'Verify'].map((label, index) => (
+              {['Overview', 'Runtime', 'Skills'].map((label, index) => (
                 <div key={label} className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-4">
                   <CheckCircle2 size={18} className={`mb-3 ${index === 1 ? 'text-primary' : 'text-tertiary'}`} />
                   <p className="label-small text-on-surface-variant">{label}</p>
@@ -239,7 +205,7 @@ function ProductPreview({ activeWorkflow }) {
             </div>
           </main>
 
-          <aside className="border-t border-outline-variant/30 bg-surface-container-low/75 p-4 md:border-l md:border-t-0">
+          <aside className="border-t border-outline-variant/30 bg-surface-container-low/75 p-4 lg:border-l lg:border-t-0">
             <div className="mb-4 flex items-center gap-3">
               <BrandMark />
               <div>
@@ -249,8 +215,8 @@ function ProductPreview({ activeWorkflow }) {
             </div>
             <div className="space-y-3">
               <div className="rounded-2xl bg-surface-container p-4 text-sm leading-6 text-on-surface-variant">{activeWorkflow.summary}</div>
-              <div className="ml-auto max-w-[88%] rounded-2xl bg-primary/15 p-4 text-sm text-on-surface">Make this production ready.</div>
-              <div className="rounded-2xl bg-surface-container p-4 text-sm leading-6 text-on-surface-variant">I will map the work, choose the right skill bridge, edit carefully, and show verification before you ship.</div>
+              <div className="ml-auto max-w-[88%] rounded-2xl bg-primary/15 p-4 text-sm text-on-surface">What should I trust before I ask the agent to work?</div>
+              <div className="rounded-2xl bg-surface-container p-4 text-sm leading-6 text-on-surface-variant">Start with Overview for session state, Runtime for provider health, Skills for routing, and Workbench when you need files.</div>
             </div>
           </aside>
         </div>
@@ -277,8 +243,24 @@ export default function LandingPage() {
   const user = useStore(s => s.user);
   const authError = searchParams.get('error');
   const [activeWorkflow, setActiveWorkflow] = useState(workflows[0]);
+  const [backendHealth, setBackendHealth] = useState(null);
 
   const navItems = useMemo(() => ['Workspace', 'How it works', 'Capabilities', 'Security'], []);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.health()
+      .then((health) => {
+        if (!cancelled) setBackendHealth(health);
+      })
+      .catch(() => {
+        if (!cancelled) setBackendHealth(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleLaunch = (provider = 'google') => {
     window.location.href = provider === 'github'
@@ -313,7 +295,7 @@ export default function LandingPage() {
           <div className="flex items-center gap-2">
             {user && <Button variant="tonal" size="sm" onClick={openWorkspace}>Open dashboard</Button>}
             <Button variant="outlined" size="sm" leadingIcon={Github} className="hidden border-outline-variant/50 text-on-surface sm:flex" onClick={() => handleLaunch('github')}>GitHub</Button>
-            <Button variant="filled" size="sm" leadingIcon={GoogleIcon} onClick={() => handleLaunch('google')}>Sign in</Button>
+            <Button variant="filled" size="sm" leadingIcon={KeyRound} onClick={() => handleLaunch('google')}>Sign in</Button>
           </div>
         </div>
       </nav>
@@ -343,7 +325,7 @@ export default function LandingPage() {
 
               <motion.div variants={fadeUp} className="mt-10 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
                 {user && <Button size="lg" variant="tonal" trailingIcon={ArrowRight} onClick={openWorkspace} className="h-14 px-8">Open dashboard</Button>}
-                <Button size="lg" leadingIcon={GoogleIcon} trailingIcon={ArrowRight} onClick={() => handleLaunch('google')} className="h-14 px-8">Continue with Google</Button>
+                <Button size="lg" leadingIcon={KeyRound} trailingIcon={ArrowRight} onClick={() => handleLaunch('google')} className="h-14 px-8">Continue with Google</Button>
                 <Button size="lg" variant="elevated" leadingIcon={Github} onClick={() => handleLaunch('github')} className="h-14 px-8 border border-outline-variant/40">Continue with GitHub</Button>
               </motion.div>
 
@@ -361,7 +343,7 @@ export default function LandingPage() {
             </motion.div>
 
             <div className="mt-10">
-              <ProductPreview activeWorkflow={activeWorkflow} />
+              <ProductPreview activeWorkflow={activeWorkflow} backendHealth={backendHealth} />
             </div>
           </motion.div>
         </section>
