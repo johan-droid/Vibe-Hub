@@ -118,10 +118,10 @@ export default function Workspace() {
 
   if (isDashboardMode) {
     return (
-      <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#f6f0e6] text-[#17201b] font-sans selection:bg-[#dbeadd] selection:text-[#1f6f5b]">
+      <div className="isolate flex h-dvh w-full flex-col overflow-hidden bg-[#f6f0e6] font-sans text-[#17201b] selection:bg-[#dbeadd] selection:text-[#1f6f5b]">
         <Titlebar onOpenSettings={() => setIsSettingsOpen(true)} />
 
-        <main className="relative z-10 min-h-0 flex-1 overflow-hidden">
+        <main className="relative z-0 min-h-0 flex-1 overflow-hidden bg-[#f6f0e6]">
           <React.Suspense fallback={<div className="h-full animate-pulse bg-surface-container-lowest" />}>
             <IntelligenceDashboard page={dashboardPages.has(dashboardSegment) ? dashboardSegment : 'overview'} />
           </React.Suspense>
@@ -133,10 +133,10 @@ export default function Workspace() {
   }
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#f6f0e6] text-[#17201b] font-sans selection:bg-[#dbeadd] selection:text-[#1f6f5b]">
+    <div className="isolate flex h-dvh w-full flex-col overflow-hidden bg-[#f6f0e6] font-sans text-[#17201b] selection:bg-[#dbeadd] selection:text-[#1f6f5b]">
       <Titlebar onOpenSettings={() => setIsSettingsOpen(true)} />
 
-        <div className="relative flex min-h-0 flex-1 overflow-hidden bg-[#f6f0e6]">
+      <div className="relative z-0 flex min-h-0 flex-1 overflow-hidden bg-[#f6f0e6]">
         <div className="flex h-full shrink-0">
           <Surface
             elevation={0}
@@ -183,14 +183,16 @@ export default function Workspace() {
           </AnimatePresence>
         </div>
 
-        <main className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest">
+        <main className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest">
           <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest ${(isMobile && mobileView === 'terminal') ? 'hidden' : ''}`}>
             {effectiveTab !== 'dashboard' && openFiles.length > 0 && <EditorTabs />}
             <div className="relative min-h-0 flex-1 overflow-hidden">
               {effectiveTab !== 'dashboard' && <NeuralProjection />}
-              <React.Suspense fallback={<div className="h-full animate-pulse bg-surface-container-lowest" />}>
-                {effectiveTab === 'dashboard' ? <IntelligenceDashboard /> : effectiveTab === 'diff' ? <DiffViewer onApply={() => {}} onDiscard={() => {}} /> : <FileViewer path={activeFilePath} content={activeFileContent} />}
-              </React.Suspense>
+              <div className="relative z-10 h-full">
+                <React.Suspense fallback={<div className="h-full animate-pulse bg-surface-container-lowest" />}>
+                  {effectiveTab === 'dashboard' ? <IntelligenceDashboard /> : effectiveTab === 'diff' ? <DiffViewer onApply={() => {}} onDiscard={() => {}} /> : <FileViewer path={activeFilePath} content={activeFileContent} />}
+                </React.Suspense>
+              </div>
             </div>
           </div>
 

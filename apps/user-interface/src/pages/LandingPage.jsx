@@ -102,7 +102,7 @@ const footerGroups = [
 
 function AmbientBackground() {
   return (
-    <div className="fixed inset-0 -z-10 overflow-hidden bg-[#f6f0e6]">
+    <div className="absolute inset-0 -z-10 overflow-hidden bg-[#f6f0e6]">
       <div className="absolute inset-0 bg-[linear-gradient(180deg,#fffaf2_0%,#f6f0e6_48%,#efe5d5_100%)]" />
       <div className="absolute -left-24 top-24 h-80 w-80 rounded-full bg-[#dbeadd] blur-[120px]" />
       <div className="absolute bottom-20 right-0 h-96 w-96 rounded-full bg-[#f8deb7] blur-[140px]" />
@@ -270,7 +270,7 @@ export default function LandingPage() {
   const openWorkspace = () => navigate('/dashboard');
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#f6f0e6] text-[#17201b] selection:bg-[#dbeadd] selection:text-[#1f6f5b]">
+    <div className="relative isolate min-h-screen overflow-x-hidden bg-[#f6f0e6] text-[#17201b] selection:bg-[#dbeadd] selection:text-[#1f6f5b]">
       <AmbientBackground />
 
       <nav className="fixed inset-x-0 top-0 z-50 border-b border-[#e3d8c5] bg-[#fffaf2]/90 backdrop-blur-xl">

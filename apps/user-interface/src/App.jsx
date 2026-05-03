@@ -47,7 +47,7 @@ function App() {
 
   if (!hydrated || !authReady) {
     return (
-      <div className="w-screen h-screen bg-surface-container-lowest flex items-center justify-center">
+      <div className="flex h-dvh w-full items-center justify-center bg-[#f6f0e6]">
         <div className="h-11 w-11 rounded-2xl border border-outline-variant/40 bg-surface-container animate-pulse" />
       </div>
     );
@@ -55,7 +55,7 @@ function App() {
 
   return (
     <BrowserRouter>
-      <Suspense fallback={<div className="w-screen h-screen bg-surface-container-lowest flex items-center justify-center animate-pulse" />}>
+      <Suspense fallback={<div className="flex h-dvh w-full items-center justify-center bg-[#f6f0e6] animate-pulse" />}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/dashboard/*" element={<Workspace />} />

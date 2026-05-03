@@ -79,9 +79,11 @@ Vibe-Hub is a self-contained system with three layers:
 │  Node.js + Express + XState + Socket.io                      │
 │  - State Machine (7 states with rollback)                   │
 │  - AST Parser (tree-sitter)                                │
-│  - Docker Executor (ephemeral containers)                  │
-│  - VFS (virtual file system)                               │
+│  - Docker Executor (ephemeral containers + resource limits) │
+│  - VFS (virtual file system + audit logging)               │
 │  - LLM Client (Gemini/OpenAI/Anthropic)                   │
+│  - Security (Helmet, rate limiting, Zod validation)        │
+│  - Logging (Winston structured + request tracing)           │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼ PostgreSQL
@@ -104,6 +106,8 @@ Vibe-Hub is a self-contained system with three layers:
 6. **Real-time Streaming** — WebSocket updates during orchestration
 7. **Multi-language Support** — English, Hindi, Odia (locked)
 8. **GitHub Integration** — PR creation, workflow monitoring
+9. **Security Hardening** — Helmet headers, rate limiting, XSS protection
+10. **Audit Logging** — Structured logs with request ID tracing
 
 ### 2.3 User Classes and Characteristics
 
@@ -320,19 +324,28 @@ None (browser-based application)
 |----|-------------|----------|
 | NF-007 | No auto-disk-write without approval | Critical |
 | NF-008 | Sandbox network isolation (`--network none`) | Critical |
-| NF-009 | Sandbox resource limits (CPU, memory) | High |
+| NF-009 | Sandbox resource limits (256MB memory, 0.5 CPU, 50 PID limit) | High |
 | NF-010 | Input sanitization (path traversal prevention) | Critical |
+| NF-011 | Helmet.js security headers (CSP, HSTS, X-Frame-Options) | High |
+| NF-012 | Rate limiting (100/15min general, 30/min API, 5/min LLM) | High |
+| NF-013 | Zod input validation schemas | High |
+| NF-014 | XSS protection middleware | High |
+| NF-015 | Attack monitoring and logging | Medium |
 
 ### 5.3 Security Requirements
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| NF-011 | JWT token authentication | Critical |
-| NF-012 | HTTPS in production | Critical |
-| NF-013 | Environment variable injection (no hardcoded secrets) | Critical |
-| NF-014 | CORS configuration (restrict to UI origin) | High |
-| NF-015 | Docker container isolation | Critical |
-| NF-016 | File path validation before disk writes | Critical |
+| NF-016 | JWT token authentication | Critical |
+| NF-017 | HTTPS in production | Critical |
+| NF-018 | Environment variable injection (no hardcoded secrets) | Critical |
+| NF-019 | CORS configuration (restrict to UI origin) | High |
+| NF-020 | Docker container isolation (--network none, --read-only) | Critical |
+| NF-021 | File path validation before disk writes | Critical |
+| NF-022 | Request ID tracing for audit logs | High |
+| NF-023 | Structured JSON logging (Winston) | High |
+| NF-024 | Error sanitization in production (no stack traces) | High |
+| NF-025 | VFS audit logging (stage, approve, reject, commit) | High |
 
 ### 5.4 Software Quality Attributes
 
@@ -365,9 +378,17 @@ apps/server-bridge/
 ├── user_env/           [FLEXIBLE - No external deps]
 ├── orchestrator/       [INTEGRATION - Can import both]
 ├── memory/             [DATA ACCESS]
-├── sandbox/            [ISOLATION]
-├── vfs/                [STAGING]
-└── auth/               [SECURITY]
+├── sandbox/            [ISOLATION - Docker + resource limits]
+├── vfs/                [STAGING - Audit logging]
+├── auth/               [SECURITY]
+├── utils/              [UTILITIES - Logging, validation, security]
+│   ├── logger.js       [Winston structured logging]
+│   ├── validation.js   [Zod schemas]
+│   └── security.js     [XSS protection, attack monitoring]
+└── test/               [TESTING - Vitest suite]
+    ├── state-machine.test.js
+    ├── vfs.test.js
+    └── api.test.js
 ```
 
 ### 6.3 State Machine Specification

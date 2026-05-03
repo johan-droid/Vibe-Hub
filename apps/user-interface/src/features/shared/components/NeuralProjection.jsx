@@ -9,7 +9,7 @@ import { useStore } from '../../../store/useStore';
 export function NeuralProjection() {
   const { isThinking } = useStore();
   return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden -z-10">
+    <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
       <div className="absolute inset-0 bg-[linear-gradient(180deg,hsl(var(--surface-container-lowest)),hsl(var(--surface-container-low))_55%,hsl(var(--surface-container-lowest)))]" />
       
       <AnimatePresence>

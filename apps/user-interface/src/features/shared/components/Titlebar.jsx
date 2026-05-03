@@ -58,7 +58,7 @@ export default function Titlebar({ onOpenSettings }) {
     <Surface
       elevation={0}
       shape="none"
-      className="z-50 flex h-16 items-center justify-between border-b border-[#e3d8c5] bg-[#fffaf2] px-4 text-[#17201b] shadow-[0_8px_30px_-28px_rgba(27,32,26,0.5)] md:px-6"
+      className="relative z-30 flex h-16 shrink-0 items-center justify-between border-b border-[#e3d8c5] bg-[#fffaf2] px-4 text-[#17201b] shadow-[0_8px_30px_-28px_rgba(27,32,26,0.5)] md:px-6"
     >
       <div className="flex min-w-0 items-center gap-4 md:gap-6">
         <button type="button" onClick={() => goTo(NAV_ITEMS[0])} className="flex min-w-0 items-center gap-3 text-left">

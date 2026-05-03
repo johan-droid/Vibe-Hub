@@ -80,12 +80,25 @@
 
   * { border-color: hsl(var(--outline-variant)); }
 
-  html { scroll-behavior: smooth; }
+  html {
+    min-height: 100%;
+    scroll-behavior: smooth;
+    background: #f6f0e6;
+  }
 
   body {
     @apply bg-surface text-on-surface font-sans antialiased overflow-x-hidden;
+    min-height: 100%;
+    margin: 0;
+    background: #f6f0e6;
     font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
     text-rendering: geometricPrecision;
+  }
+
+  #root {
+    min-height: 100%;
+    isolation: isolate;
+    background: #f6f0e6;
   }
 
   ::selection { @apply bg-primary/20 text-primary; }
