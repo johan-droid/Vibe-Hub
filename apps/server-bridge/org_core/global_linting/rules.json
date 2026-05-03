@@ -1,0 +1,6 @@
+{
+  "semi": ["error", "always"],
+  "quotes": ["error", "single"],
+  "no-console": "warn",
+  "no-unused-vars": "error"
+}

@@ -1,6 +1,6 @@
 const TOKEN_SPLIT = /[^a-z0-9+#.]+/i;
 
-export const CS_SKILL_NODES = [
+const CS_SKILL_NODES = [
   {
     id: 'software_architecture',
     label: 'Software Architecture',
@@ -187,9 +187,9 @@ export const CS_SKILL_NODES = [
   },
 ];
 
-export const SKILL_NODE_BY_ID = new Map(CS_SKILL_NODES.map(node => [node.id, node]));
+const SKILL_NODE_BY_ID = new Map(CS_SKILL_NODES.map(node => [node.id, node]));
 
-export function tokenizePrompt(prompt) {
+function tokenizePrompt(prompt) {
   return String(prompt || '')
     .toLowerCase()
     .split(TOKEN_SPLIT)
@@ -203,7 +203,7 @@ function keywordScore(promptLower, tokens, keyword) {
   return tokens.some(token => token.includes(k) || k.includes(token)) ? 1 : 0;
 }
 
-export function scoreSkillNodes(prompt) {
+function scoreSkillNodes(prompt) {
   const promptLower = String(prompt || '').toLowerCase();
   const tokens = tokenizePrompt(prompt);
 
@@ -224,7 +224,7 @@ function inferDomain(scored) {
   return [...domainScores.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 'code';
 }
 
-export function selectSkillProfile(prompt, { maxSkills = 5 } = {}) {
+function selectSkillProfile(prompt, { maxSkills = 5 } = {}) {
   const scored = scoreSkillNodes(prompt);
   const selected = scored.slice(0, maxSkills).map(item => item.node);
   const selectedIds = new Set(selected.map(node => node.id));
@@ -247,7 +247,7 @@ export function selectSkillProfile(prompt, { maxSkills = 5 } = {}) {
   };
 }
 
-export function buildSkillBridgePrompt(profile) {
+function buildSkillBridgePrompt(profile) {
   if (!profile?.selectedSkills?.length) {
     return `# Skill Switcher Bridge\nNo high-confidence CS specialty was detected. Operate as a generalist: clarify intent, inspect context, choose the smallest safe expert path, and escalate to planning/security/debugging when evidence requires it.`;
   }
@@ -268,6 +268,16 @@ export function buildSkillBridgePrompt(profile) {
   return `# Skill Switcher Bridge (Mixture-of-Experts)\nPrimary expert domain: ${profile.domain}\nConfidence: ${profile.confidence.toFixed(2)}\n\n## Selected CS Skill Neurons\n${skillLines}\n\n## Bridge Edges\n${bridgeLines}\n\n## Switching Protocol\n- Start with the highest-ranked skill, but actively switch when the evidence moves into a bridged domain.\n- When two selected skills conflict, prefer security, correctness, and testability over speed or aesthetics.\n- Before editing, name which skill lens is active in your private reasoning and choose tools accordingly.\n- If the task spans 3+ files or multiple skill neurons, create a concise plan before executing.\n- End with verification evidence tied to the active skills.`;
 }
 
-export function listSkillGraph() {
+function listSkillGraph() {
   return CS_SKILL_NODES.map(({ id, label, expertDomain, bridges }) => ({ id, label, expertDomain, bridges }));
 }
+
+module.exports = {
+  CS_SKILL_NODES,
+  SKILL_NODE_BY_ID,
+  tokenizePrompt,
+  scoreSkillNodes,
+  selectSkillProfile,
+  buildSkillBridgePrompt,
+  listSkillGraph
+};

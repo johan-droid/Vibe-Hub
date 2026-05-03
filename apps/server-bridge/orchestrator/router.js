@@ -1,11 +1,12 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { selectSkillProfile } from './skill-graph.js';
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+const fs = require('fs').promises;
+const path = require('path');
+const { interpret } = require('xstate');
+const agentMachine = require('./state_machine');
+const { selectSkillProfile } = require('./skill-graph.js');
 
 // Resolve directory for skill files
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = path.dirname(__filename);
 const SKILLS_DIR = path.join(__dirname, 'skills');
 
 /**
@@ -36,7 +37,7 @@ class AIService {
  * L1: Local heuristic mapping (zero latency)
  * L2: LLM-based intent classification
  */
-export class Router {
+class Router {
     constructor() {
         this.ai = AIService.getInstance();
         this.skillCache = new Map(); // path -> content
@@ -142,6 +143,64 @@ ${vfsSummary}
 ${prompt}
         `.trim();
     }
+
+    /**
+     * Execute task through XState machine with rollback capability
+     */
+    async executeWithStateMachine(prompt, userId, targetFile) {
+        return new Promise((resolve, reject) => {
+            const agentService = interpret(agentMachine).onTransition((state) => {
+                console.log(`Agent Status: transitioned to [${state.value}]`);
+                
+                if (state.value === 'success') {
+                    resolve({
+                        success: true,
+                        code: state.context.generatedCode,
+                        astGraph: state.context.astGraph,
+                        retries: state.context.retries
+                    });
+                } else if (state.value === 'fatal_failure') {
+                    reject(new Error(`Fatal failure: ${state.context.sandboxError || 'Unknown error'}`));
+                }
+            });
+
+            agentService.start();
+            agentService.send({ 
+                type: 'START_TASK', 
+                prompt, 
+                userId,
+                targetFile 
+            });
+        });
+    }
 }
 
-export const router = new Router();
+const router = new Router();
+
+/**
+ * API endpoint handler for code requests
+ */
+async function handleCodeRequest(req, res) {
+    const { prompt, userId, targetFile } = req.body;
+
+    try {
+        // Option 1: Use XState machine with rollback
+        const result = await router.executeWithStateMachine(prompt, userId, targetFile);
+        res.status(200).json({ 
+            success: true,
+            message: "Agent completed successfully",
+            data: result
+        });
+    } catch (error) {
+        // Option 2: Fallback to legacy routing (no rollback)
+        const config = await router.route(prompt);
+        res.status(202).json({ 
+            success: false,
+            message: "Agent entered rollback loop",
+            error: error.message,
+            fallback: config
+        });
+    }
+}
+
+module.exports = { Router, router, handleCodeRequest };
