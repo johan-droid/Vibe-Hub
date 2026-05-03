@@ -129,5 +129,5 @@ export function logStateTransition(from, to, context, userId) {
   });
 }
 
-export { logger };
+export { logger, logError, logVfsOperation, logStateTransition, requestContext };
 export default logger;
