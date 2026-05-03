@@ -60,7 +60,7 @@ export default function LandingPage() {
 
       {/* Navigation */}
       <nav className="fixed top-0 inset-x-0 z-[100] h-20 glass border-b border-outline-variant/20">
-        <div className="max-w-7xl mx-auto px-8 h-full flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 h-full flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Surface elevation={3} shape="lg" className="w-10 h-10 bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
               <Brain size={22} className="text-on-primary" />
@@ -71,6 +71,11 @@ export default function LandingPage() {
             </div>
           </div>
 
+          <div className="lg:hidden flex items-center mr-auto ml-4">
+            <Button variant="text" size="sm" onClick={() => {}} className="px-2">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            </Button>
+          </div>
           <div className="hidden lg:flex items-center gap-8">
             {['Capabilities', 'Intelligence', 'Protocol'].map(item => (
               <a key={item} href={`#${item.toLowerCase()}`} className="text-xs font-mono font-bold uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors">
@@ -127,9 +132,9 @@ export default function LandingPage() {
           initial={{ opacity: 0, y: 60 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, delay: 0.2, ease: [0.2, 0, 0, 1] }}
-          className="mt-32 w-full max-w-6xl"
+          className="mt-32 w-full max-w-6xl px-4 md:px-0"
         >
-          <Surface elevation={1} shape="2xl" className="p-2 border border-outline-variant/30 shadow-2xl bg-surface-container-low/40 backdrop-blur-2xl">
+          <Surface elevation={1} shape="2xl" className="p-2 border border-outline-variant/30 shadow-2xl bg-surface-container-low/40 backdrop-blur-2xl overflow-x-auto">
             <Surface elevation={4} shape="xl" className="aspect-[16/9] overflow-hidden border border-outline-variant/20">
                <div className="w-full h-full flex flex-col">
                   {/* Mock IDE Header */}
@@ -169,7 +174,7 @@ export default function LandingPage() {
 
       {/* Expertise Section */}
       <section id="capabilities" className="py-24 relative">
-        <div className="max-w-6xl mx-auto px-8">
+        <div className="max-w-6xl mx-auto px-4 md:px-8">
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
