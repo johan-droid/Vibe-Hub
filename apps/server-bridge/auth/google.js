@@ -10,9 +10,10 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 
 function getFrontendUrl() {
-  const origin = process.env.UI_ORIGIN || (process.env.NODE_ENV === 'production'
-    ? 'https://vibe-hub-ui.onrender.com'
-    : 'http://localhost:5173');
+  const origin = process.env.UI_ORIGIN;
+  if (!origin) {
+    throw new Error('UI_ORIGIN environment variable is required');
+  }
   return origin.replace(/\/$/, '');
 }
 
@@ -21,11 +22,8 @@ function redirectWithError(res, error) {
 }
 
 // Validate required environment variables
-const requiredEnvVars = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REDIRECT_URI'];
+const requiredEnvVars = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REDIRECT_URI', 'UI_ORIGIN'];
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
-if (missingVars.length > 0) {
-  console.error('[Google OAuth] Missing required environment variables:', missingVars.join(', '));
-}
 
 /**
  * GET /api/auth/google
@@ -111,7 +109,6 @@ router.get('/google/callback', async (req, res) => {
     const jwt = generateToken(user);
     res.redirect(`${getFrontendUrl()}/auth/callback?token=${encodeURIComponent(jwt)}`);
   } catch (err) {
-    console.error('[Google OAuth Error]', err);
     redirectWithError(res, 'provider_failed');
   }
 });

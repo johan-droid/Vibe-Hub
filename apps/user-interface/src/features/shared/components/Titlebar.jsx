@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, Sidebar as SidebarIcon, MessageSquare, Cpu, Layers, Sun, Moon, Activity } from 'lucide-react';
+import { Settings, Sidebar as SidebarIcon, MessageSquare, Cpu, Layers, Sun, Moon, Activity, Gauge } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
 import { IconButton } from './IconButton';
 import { Surface } from './Surface';
@@ -19,7 +19,7 @@ export default function Titlebar({ onOpenSettings }) {
     user,
   } = useStore();
 
-  const statusLabel = vfsStatus === 'ready' ? 'Workspace ready' : vfsStatus === 'booting' ? 'Booting VFS' : 'Local session';
+  const statusLabel = vfsStatus === 'ready' ? 'Dashboard ready' : vfsStatus === 'booting' ? 'Booting VFS' : 'Local session';
 
   return (
     <Surface
@@ -37,7 +37,7 @@ export default function Titlebar({ onOpenSettings }) {
               <span className="title-small leading-none">Vibe Hub</span>
               <span className="h-1.5 w-1.5 rounded-full bg-tertiary animate-soft-pulse" />
             </div>
-            <span className="label-small mt-1 block truncate text-on-surface-variant">{user?.name || 'Selina Workspace'}</span>
+            <span className="label-small mt-1 block truncate text-on-surface-variant">{user?.name || 'Selina Dashboard'}</span>
           </div>
         </div>
 
@@ -45,8 +45,9 @@ export default function Titlebar({ onOpenSettings }) {
 
         <div className="hidden items-center rounded-full border border-outline-variant/35 bg-surface-container-low p-1 md:flex">
           {[
-            { id: 'diff', label: 'Projection', icon: Layers },
+            { id: 'dashboard', label: 'Dashboard', icon: Gauge },
             { id: 'editor', label: 'Editor', icon: SidebarIcon },
+            { id: 'diff', label: 'Projection', icon: Layers },
           ].map((tab) => (
             <button
               key={tab.id}

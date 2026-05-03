@@ -11,9 +11,10 @@ const GITHUB_USER_URL = 'https://api.github.com/user';
 const GITHUB_EMAILS_URL = 'https://api.github.com/user/emails';
 
 function getFrontendUrl() {
-  const origin = process.env.UI_ORIGIN || (process.env.NODE_ENV === 'production'
-    ? 'https://vibe-hub-ui.onrender.com'
-    : 'http://localhost:5173');
+  const origin = process.env.UI_ORIGIN;
+  if (!origin) {
+    throw new Error('UI_ORIGIN environment variable is required');
+  }
   return origin.replace(/\/$/, '');
 }
 
@@ -22,11 +23,8 @@ function redirectWithError(res, error) {
 }
 
 // Validate required environment variables
-const requiredEnvVars = ['GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', 'GITHUB_REDIRECT_URI'];
+const requiredEnvVars = ['GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', 'GITHUB_REDIRECT_URI', 'UI_ORIGIN'];
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
-if (missingVars.length > 0) {
-  console.error('[GitHub OAuth] Missing required environment variables:', missingVars.join(', '));
-}
 
 /**
  * GET /api/auth/github
@@ -119,7 +117,6 @@ router.get('/github/callback', async (req, res) => {
     const jwt = generateToken(user);
     res.redirect(`${getFrontendUrl()}/auth/callback?token=${encodeURIComponent(jwt)}`);
   } catch (err) {
-    console.error('[GitHub OAuth Error]', err);
     redirectWithError(res, 'provider_failed');
   }
 });

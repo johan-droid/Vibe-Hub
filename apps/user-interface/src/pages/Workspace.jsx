@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutGrid, Terminal as TerminalIcon, Sparkles, Search as SearchIcon, Activity, ShieldAlert, Code2 } from 'lucide-react';
+import { LayoutGrid, Terminal as TerminalIcon, Sparkles, Search as SearchIcon, Activity, ShieldAlert, Code2, Gauge } from 'lucide-react';
 import { useAgent } from '../hooks/useAgent';
 import { useStore } from '../store/useStore';
 import { useMediaQuery } from '../hooks/useMediaQuery';
@@ -18,10 +18,11 @@ import SidebarFileTree from '../features/editor/components/SidebarFileTree';
 import ChatInterface from '../features/chat/components/ChatInterface';
 import { EditorTabs } from '../features/editor/components/EditorTabs';
 import { FileViewer } from '../features/editor/components/FileViewer';
+import ActivityFeed from '../features/swarm/components/ActivityFeed';
 
 const DiffViewer = React.lazy(() => import('../features/editor/components/DiffViewer'));
 const Terminal = React.lazy(() => import('../features/editor/components/Terminal'));
-const IntelligenceDashboard = React.lazy(() => import('../features/swarm/components/Dashboard'));
+const IntelligenceDashboard = React.lazy(() => import('../features/swarm/components/CommandCenterDashboard'));
 const SecurityAudit = React.lazy(() => import('../features/security/components/SecurityAudit'));
 
 const MIN_SIDEBAR_W = 220;
@@ -55,13 +56,15 @@ export default function Workspace() {
     setSidebarCollapsed,
     chatCollapsed,
     setChatCollapsed,
+    setActiveTab,
     activeTab,
     activeFileContent,
     activeFilePath,
+    openFiles,
   } = useStore();
 
   const [sidebarMode, setSidebarMode] = useState('explorer');
-  const [mobileView, setMobileView] = useState('editor');
+  const [mobileView, setMobileView] = useState('dashboard');
   const isMobile = useMediaQuery('(max-width: 768px)');
   const [sidebarW, setSidebarW] = useState(DEFAULT_SIDEBAR_W);
   const [chatW, setChatW] = useState(DEFAULT_CHAT_W);
@@ -85,7 +88,7 @@ export default function Workspace() {
     return <Navigate to="/" replace />;
   }
 
-  const showEditor = !isMobile || mobileView === 'editor' || mobileView === 'terminal';
+  const showMain = !isMobile || mobileView === 'dashboard' || mobileView === 'editor' || mobileView === 'terminal';
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-surface-container-lowest text-on-surface font-sans selection:bg-primary/20 selection:text-primary">
@@ -98,13 +101,14 @@ export default function Workspace() {
             elevation={0}
             className="fixed inset-x-0 bottom-0 z-40 flex h-16 flex-row items-center justify-around border-t border-outline-variant/30 bg-surface-container-lowest/92 px-3 backdrop-blur-2xl md:relative md:inset-auto md:h-auto md:w-[68px] md:flex-col md:justify-start md:gap-3 md:border-r md:border-t-0 md:py-5"
           >
+            <NavIcon icon={Gauge} active={activeTab === 'dashboard' || mobileView === 'dashboard'} onClick={() => { setActiveTab('dashboard'); if (isMobile) setMobileView('dashboard'); }} ariaLabel="Dashboard" />
             <NavIcon icon={LayoutGrid} active={sidebarMode === 'explorer'} onClick={() => { setSidebarMode('explorer'); setSidebarCollapsed(false); if (isMobile) setMobileView('sidebar'); }} ariaLabel="Explorer" />
             <NavIcon icon={Activity} active={sidebarMode === 'swarm'} onClick={() => { setSidebarMode('swarm'); setSidebarCollapsed(false); if (isMobile) setMobileView('sidebar'); }} ariaLabel="Swarm Dashboard" />
             <NavIcon icon={SearchIcon} active={sidebarMode === 'search'} onClick={() => { setSidebarMode('search'); setSidebarCollapsed(false); if (isMobile) setMobileView('sidebar'); }} ariaLabel="Search" />
             <NavIcon icon={ShieldAlert} active={sidebarMode === 'security'} onClick={() => { setSidebarMode('security'); setSidebarCollapsed(false); if (isMobile) setMobileView('sidebar'); }} ariaLabel="Security Audit" />
             {isMobile && <NavIcon icon={TerminalIcon} active={mobileView === 'terminal'} onClick={() => setMobileView('terminal')} ariaLabel="Terminal" />}
             {isMobile && <NavIcon icon={Sparkles} active={mobileView === 'chat'} onClick={() => { setMobileView('chat'); setChatCollapsed(false); }} ariaLabel="Assistant" />}
-            {isMobile && <NavIcon icon={Code2} active={mobileView === 'editor'} onClick={() => setMobileView('editor')} ariaLabel="Editor" />}
+            {isMobile && <NavIcon icon={Code2} active={mobileView === 'editor'} onClick={() => { setActiveTab('editor'); setMobileView('editor'); }} ariaLabel="Editor" />}
             <div className="mt-auto hidden md:block">
               <NavIcon icon={Sparkles} active={!chatCollapsed} onClick={() => setChatCollapsed(!chatCollapsed)} ariaLabel="Assistant" />
             </div>
@@ -129,7 +133,7 @@ export default function Workspace() {
                 </div>
                 {sidebarMode === 'explorer' && !isMobile && (
                   <div className="h-[34%] min-h-[220px] overflow-hidden border-t border-outline-variant/30 bg-surface-container-lowest/55">
-                    <IntelligenceDashboard />
+                    <ActivityFeed />
                   </div>
                 )}
                 <ResizeHandle direction="horizontal" onDrag={onSidebarDrag} className="absolute right-0 top-0 hidden h-full w-1.5 hover:bg-primary/20 md:block" />
@@ -138,13 +142,13 @@ export default function Workspace() {
           </AnimatePresence>
         </div>
 
-        <main className={`relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest ${showEditor ? '' : 'hidden'}`}>
+        <main className={`relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest ${showMain ? '' : 'hidden'}`}>
           <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest ${(isMobile && mobileView === 'terminal') ? 'hidden' : ''}`}>
-            <EditorTabs />
+            {activeTab !== 'dashboard' && openFiles.length > 0 && <EditorTabs />}
             <div className="relative min-h-0 flex-1 overflow-hidden">
-              <NeuralProjection />
+              {activeTab !== 'dashboard' && <NeuralProjection />}
               <React.Suspense fallback={<div className="h-full animate-pulse bg-surface-container-lowest" />}>
-                {activeTab === 'diff' ? <DiffViewer onApply={() => {}} onDiscard={() => {}} /> : <FileViewer path={activeFilePath} content={activeFileContent} />}
+                {activeTab === 'dashboard' ? <IntelligenceDashboard /> : activeTab === 'diff' ? <DiffViewer onApply={() => {}} onDiscard={() => {}} /> : <FileViewer path={activeFilePath} content={activeFileContent} />}
               </React.Suspense>
             </div>
           </div>

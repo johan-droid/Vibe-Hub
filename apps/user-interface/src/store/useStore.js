@@ -20,7 +20,7 @@ export const useStore = create(
       sidebarCollapsed: false,
       chatCollapsed: false,
       terminalHeight: 256,
-      activeTab: 'editor',
+      activeTab: 'dashboard',
       theme: 'dark', // Always dark
 
       // --- AGENT CORE STATE (Volatile) ---
@@ -125,7 +125,7 @@ export const useStore = create(
           openFiles: newOpenFiles,
           activeFilePath: nextPath,
           activeFileContent: nextContent,
-          activeTab: nextPath ? 'editor' : (state.diffData ? 'diff' : 'editor')
+          activeTab: nextPath ? 'editor' : (state.diffData ? 'diff' : 'dashboard')
         };
       }),
 

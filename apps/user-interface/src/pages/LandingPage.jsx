@@ -311,7 +311,7 @@ export default function LandingPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            {user && <Button variant="tonal" size="sm" onClick={openWorkspace}>Open workspace</Button>}
+            {user && <Button variant="tonal" size="sm" onClick={openWorkspace}>Open dashboard</Button>}
             <Button variant="outlined" size="sm" leadingIcon={Github} className="hidden border-outline-variant/50 text-on-surface sm:flex" onClick={() => handleLaunch('github')}>GitHub</Button>
             <Button variant="filled" size="sm" leadingIcon={GoogleIcon} onClick={() => handleLaunch('google')}>Sign in</Button>
           </div>
@@ -338,11 +338,11 @@ export default function LandingPage() {
               </motion.h1>
 
               <motion.p variants={fadeUp} className="mx-auto mt-7 max-w-3xl text-base leading-8 text-on-surface-variant md:text-lg">
-                Selina is an agentic coding workspace that plans across disciplines, edits with context, verifies changes, and keeps the interface calm enough for real product work.
+                Selina is an agentic dashboard for coding teams that plans across disciplines, edits with context, verifies changes, and keeps the interface calm enough for real product work.
               </motion.p>
 
               <motion.div variants={fadeUp} className="mt-10 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
-                {user && <Button size="lg" variant="tonal" trailingIcon={ArrowRight} onClick={openWorkspace} className="h-14 px-8">Open workspace</Button>}
+                {user && <Button size="lg" variant="tonal" trailingIcon={ArrowRight} onClick={openWorkspace} className="h-14 px-8">Open dashboard</Button>}
                 <Button size="lg" leadingIcon={GoogleIcon} trailingIcon={ArrowRight} onClick={() => handleLaunch('google')} className="h-14 px-8">Continue with Google</Button>
                 <Button size="lg" variant="elevated" leadingIcon={Github} onClick={() => handleLaunch('github')} className="h-14 px-8 border border-outline-variant/40">Continue with GitHub</Button>
               </motion.div>

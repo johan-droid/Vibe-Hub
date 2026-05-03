@@ -21,7 +21,7 @@ export default function AuthCallback() {
   const navigate = useNavigate();
   const setUser = useStore(s => s.setUser);
   const [status, setStatus] = useState('loading');
-  const [message, setMessage] = useState('Securing your workspace session...');
+  const [message, setMessage] = useState('Securing your dashboard session...');
 
   const providerError = useMemo(() => searchParams.get('error'), [searchParams]);
 
@@ -52,7 +52,7 @@ export default function AuthCallback() {
         if (cancelled) return;
         setUser(user);
         setStatus('success');
-        setMessage('Session verified. Opening your workspace...');
+        setMessage('Session verified. Opening your dashboard...');
         window.setTimeout(() => navigate('/workspace', { replace: true }), 350);
       } catch (err) {
         if (cancelled) return;

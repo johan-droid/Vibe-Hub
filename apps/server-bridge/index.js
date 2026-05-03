@@ -220,7 +220,6 @@ const heartbeatInterval = setInterval(() => {
     // Kill if pong doesn't arrive within PONG_TIMEOUT_MS
     session.pingTimeout = setTimeout(() => {
       if (!session.pongReceived) {
-        console.warn(`[WS] Zombie session ${sessionId} — terminating.`);
         session.ws.terminate();
         sessions.delete(sessionId);
       }
@@ -260,8 +259,6 @@ wss.on('connection', (ws, req) => {
     taskManager:         null, // lazy-init on first task message
   };
   sessions.set(sessionId, session);
-
-  console.log(`[WS] Session ${sessionId} — ${decoded.email} connected.`);
 
   // ── Pong handler (heartbeat) ───────────────────────────────────────────
   ws.on('pong', () => {

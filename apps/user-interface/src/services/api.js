@@ -68,6 +68,16 @@ class ApiClient {
     return this.get('/health');
   }
 
+  /** Get runtime diagnostics for the model gateway */
+  async runtimeDiagnostics() {
+    return this.get('/api/runtime/diagnostics');
+  }
+
+  /** Get the live skill graph and routing topology */
+  async runtimeSkills() {
+    return this.get('/api/runtime/skills');
+  }
+
   /** Get current user profile */
   async me() {
     return this.get('/api/me');
