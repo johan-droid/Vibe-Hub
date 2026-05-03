@@ -90,8 +90,8 @@ export default function LandingPage() {
           </div>
 
           <div className="flex items-center gap-4">
-            <Button variant="outlined" size="sm" leadingIcon={Github} className="hidden sm:flex border-outline-variant/50" onClick={() => handleLaunch('github')}>GitHub</Button>
-            <Button variant="filled" size="sm" leadingIcon={GoogleIcon} onClick={() => handleLaunch('google')}>Google</Button>
+            <Button variant="filled" size="sm" leadingIcon={Github} className="hidden sm:flex border-outline-variant/50 bg-[#154634] text-white hover:bg-[#1d5b45]" onClick={() => handleLaunch('github')}>GitHub</Button>
+            <Button variant="filled" size="sm" leadingIcon={GoogleIcon} className="bg-[#3ba2f6] text-white hover:bg-[#2e82c5]" onClick={() => handleLaunch('google')}>Google</Button>
           </div>
         </div>
       </nav>
@@ -115,7 +115,7 @@ export default function LandingPage() {
 
           <h1 className="display-medium md:text-7xl mb-6 leading-[1.1] tracking-tight font-black">
             The Agentic <br />
-            <span className="text-gradient italic">Operating System.</span>
+            <span className="text-[#3ba2f6] italic">Operating System.</span>
           </h1>
 
           <p className="text-lg md:text-xl text-on-surface-variant max-w-xl mx-auto leading-relaxed mb-10 opacity-70">
@@ -123,10 +123,10 @@ export default function LandingPage() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Button size="lg" variant="tonal" leadingIcon={Github} className="h-14 px-10 text-base rounded-2xl" onClick={() => handleLaunch('github')}>
+            <Button size="lg" variant="filled" leadingIcon={Github} className="h-14 px-10 text-base rounded-2xl bg-[#154634] text-white hover:bg-[#1d5b45]" onClick={() => handleLaunch('github')}>
               Continue with GitHub
             </Button>
-            <Button size="lg" variant="filled" leadingIcon={GoogleIcon} className="h-14 px-10 text-base rounded-2xl" onClick={() => handleLaunch('google')}>
+            <Button size="lg" variant="filled" leadingIcon={GoogleIcon} className="h-14 px-10 text-base rounded-2xl bg-[#3ba2f6] text-white hover:bg-[#2e82c5]" onClick={() => handleLaunch('google')}>
               Continue with Google
             </Button>
           </div>
