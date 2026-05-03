@@ -101,7 +101,7 @@ export default function Titlebar({ onOpenSettings }) {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 md:gap-3">
+      <div className="flex items-center gap-1 sm:gap-2 md:gap-3">
         <Chip
           label={statusLabel}
           variant="tonal"
@@ -119,6 +119,7 @@ export default function Titlebar({ onOpenSettings }) {
           title="Toggle theme"
         />
         <IconButton
+          className="hidden md:flex"
           icon={SidebarIcon}
           active={!sidebarCollapsed}
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}

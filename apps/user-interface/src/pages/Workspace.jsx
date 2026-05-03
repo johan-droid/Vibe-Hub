@@ -116,22 +116,6 @@ export default function Workspace() {
 
   const isDashboardMode = isDashboardRoute || (activeTab === 'dashboard' && location.pathname === '/dashboard');
 
-  if (isDashboardMode) {
-    return (
-      <div className="isolate flex h-dvh w-full flex-col overflow-hidden bg-[#f6f0e6] font-sans text-[#17201b] selection:bg-[#dbeadd] selection:text-[#1f6f5b]">
-        <Titlebar onOpenSettings={() => setIsSettingsOpen(true)} />
-
-        <main className="relative z-0 min-h-0 flex-1 overflow-hidden bg-[#f6f0e6]">
-          <React.Suspense fallback={<div className="h-full animate-pulse bg-surface-container-lowest" />}>
-            <IntelligenceDashboard page={dashboardPages.has(dashboardSegment) ? dashboardSegment : 'overview'} />
-          </React.Suspense>
-        </main>
-
-        <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
-      </div>
-    );
-  }
-
   return (
     <div className="isolate flex h-dvh w-full flex-col overflow-hidden bg-[#f6f0e6] font-sans text-[#17201b] selection:bg-[#dbeadd] selection:text-[#1f6f5b]">
       <Titlebar onOpenSettings={() => setIsSettingsOpen(true)} />
@@ -183,14 +167,14 @@ export default function Workspace() {
           </AnimatePresence>
         </div>
 
-        <main className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest">
+        <main className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest pb-16 md:pb-0">
           <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest ${(isMobile && mobileView === 'terminal') ? 'hidden' : ''}`}>
             {effectiveTab !== 'dashboard' && openFiles.length > 0 && <EditorTabs />}
             <div className="relative min-h-0 flex-1 overflow-hidden">
               {effectiveTab !== 'dashboard' && <NeuralProjection />}
               <div className="relative z-10 h-full">
                 <React.Suspense fallback={<div className="h-full animate-pulse bg-surface-container-lowest" />}>
-                  {effectiveTab === 'dashboard' ? <IntelligenceDashboard /> : effectiveTab === 'diff' ? <DiffViewer onApply={() => {}} onDiscard={() => {}} /> : <FileViewer path={activeFilePath} content={activeFileContent} />}
+                  {effectiveTab === 'dashboard' ? <IntelligenceDashboard page={isDashboardRoute && dashboardPages.has(dashboardSegment) ? dashboardSegment : 'overview'} /> : effectiveTab === 'diff' ? <DiffViewer onApply={() => {}} onDiscard={() => {}} /> : <FileViewer path={activeFilePath} content={activeFileContent} />}
                 </React.Suspense>
               </div>
             </div>
