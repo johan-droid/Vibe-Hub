@@ -253,7 +253,7 @@ export class VFSContainer {
           if (entry.isDirectory()) {
             await walk(fullPath);
           } else {
-            if (filePattern && !fullPath.match(new RegExp(filePattern.replace('*', '.*')))) return;
+            if (filePattern && !fullPath.match(new RegExp(filePattern.split('*').map(s => s.replace(/[.*+?^${}()|[\]\\]/g, (m) => '\\' + m)).join('.*')))) return;
 
             try {
               const content = await this.instance.fs.readFile(fullPath, 'utf-8');
@@ -303,7 +303,8 @@ export class VFSContainer {
     };
 
     const targetPatterns = kind ? patterns[kind] : [...patterns.function, ...patterns.class];
-    const queryRegex = new RegExp(query, 'i');
+    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, (m) => '\\' + m);
+    const queryRegex = new RegExp(escapedQuery, 'i');
 
     const walk = async (dir) => {
       try {
