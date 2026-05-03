@@ -1,219 +1,58 @@
-import pool from '../db.js';
-import { embeddingsService } from './embeddings.js';
-import { ASTGraphStore, HybridContextRetriever } from './ast-graph.js';
+const Parser = require('tree-sitter');
+const JavaScript = require('tree-sitter-javascript');
+const fs = require('fs/promises');
+const path = require('path');
 
-/**
- * Load memory for a project: user-written memory.md + auto-learned brain journal + semantic memory.
- * v4.0: Implements pgvector Semantic Retrieval.
- */
-export async function loadMemory(userId, projectName, query = null) {
-  try {
-    // 1. Fetch user memory and standard journal
-    const result = await pool.query(
-      'SELECT user_memory, brain_journal FROM project_memory WHERE user_id = $1 AND project_name = $2',
-      [userId, projectName]
-    );
-
-    let userMemory = null;
-    let recentJournal = [];
-
-    if (result.rows.length > 0) {
-      const row = result.rows[0];
-      userMemory = row.user_memory || null;
-      // Always include the 10 most recent entries for temporal continuity
-      recentJournal = (row.brain_journal || []).slice(-10);
-    }
-
-    // 2. Semantic Retrieval: If query exists, search vector memory
-    let semanticJournal = [];
-    if (query && typeof query === 'string' && query.length > 5) {
-      try {
-        const embedding = await embeddingsService.getEmbedding(query);
-        const vectorStr = `[${embedding.join(',')}]`;
-
-        const semanticResult = await pool.query(
-          `SELECT content, metadata, 1 - (embedding <=> $3::vector) as similarity
-           FROM semantic_memory
-           WHERE user_id = $1 AND project_name = $2
-           ORDER BY similarity DESC
-           LIMIT 15`,
-          [userId, projectName, vectorStr]
-        );
-
-        semanticJournal = semanticResult.rows
-          .filter(r => r.similarity > 0.7) // Threshold for relevance
-          .map(r => ({
-            ...JSON.parse(r.content),
-            similarity: r.similarity
-          }));
-      } catch (embErr) {
-        // Semantic search failed, falling back to recent journal
-      }
-    }
-
-    // Combine and deduplicate
-    const combined = [...semanticJournal, ...recentJournal];
-    const unique = Array.from(new Map(combined.map(item => [item.timestamp || JSON.stringify(item), item])).values());
-    
-    const finalJournal = unique.sort((a, b) => 
-      new Date(a.timestamp) - new Date(b.timestamp)
-    );
-
-    return {
-      userMemory,
-      brainJournal: finalJournal,
-    };
-  } catch (err) {
-    return { userMemory: null, brainJournal: [] };
+class SemanticGraphBuilder {
+  constructor() {
+    this.parser = new Parser();
+    this.parser.setLanguage(JavaScript);
   }
-}
 
-/**
- * Save or update user-written memory (memory.md content).
- */
-export async function saveUserMemory(userId, projectName, content) {
-  await pool.query(
-    `INSERT INTO project_memory (id, user_id, project_name, user_memory, brain_journal)
-     VALUES (gen_random_uuid(), $1, $2, $3, '[]'::jsonb)
-     ON CONFLICT (user_id, project_name) DO UPDATE SET
-       user_memory = EXCLUDED.user_memory,
-       updated_at = NOW()`,
-    [userId, projectName, content]
-  );
-}
-
-/**
- * Append an auto-learned entry to the brain journal.
- * Auto-compacts when journal exceeds 100 entries.
- */
-export async function appendBrainJournal(userId, projectName, entry) {
-  try {
-    // Ensure row exists
-    await pool.query(
-      `INSERT INTO project_memory (id, user_id, project_name, user_memory, brain_journal)
-       VALUES (gen_random_uuid(), $1, $2, '', '[]'::jsonb)
-       ON CONFLICT (user_id, project_name) DO NOTHING`,
-      [userId, projectName]
-    );
-
-    const journalEntry = {
-      ...entry,
-      timestamp: new Date().toISOString(),
-    };
-
-    // 1. Store in standard JSONB journal (temporal)
-    await pool.query(
-      `UPDATE project_memory 
-       SET brain_journal = brain_journal || $3::jsonb,
-           updated_at = NOW()
-       WHERE user_id = $1 AND project_name = $2`,
-      [userId, projectName, JSON.stringify([journalEntry])]
-    );
-
-    // 2. Store in Semantic Memory (vector)
+  /**
+   * Parses a file and extracts a deterministic map of its dependencies and exports.
+   * @param {string} filePath - Absolute path to the target file.
+   */
+  async buildSemanticGraph(filePath) {
     try {
-      const contentToEmbed = `Type: ${entry.type}. Content: ${entry.content}`;
-      const embedding = await embeddingsService.getEmbedding(contentToEmbed);
-      const vectorStr = `[${embedding.join(',')}]`;
+      const code = await fs.readFile(filePath, 'utf8');
+      const tree = this.parser.parse(code);
+      
+      const exportsList = [];
+      const importsList = [];
+      const functionsList = [];
 
-      await pool.query(
-        `INSERT INTO semantic_memory (user_id, project_name, content, embedding)
-         VALUES ($1, $2, $3, $4::vector)`,
-        [userId, projectName, JSON.stringify(journalEntry), vectorStr]
-      );
-    } catch (embErr) {
-      // Failed to generate semantic embedding
+      // Traverse the Abstract Syntax Tree (AST)
+      // This maps the actual logic of the code, completely bypassing fuzzy vector search
+      const traverse = (node) => {
+        if (node.type === 'import_statement') {
+          importsList.push(code.substring(node.startIndex, node.endIndex));
+        } else if (node.type === 'export_statement' || node.type === 'lexical_declaration' && node.parent.type === 'export_statement') {
+          exportsList.push(code.substring(node.startIndex, node.endIndex));
+        } else if (node.type === 'function_declaration' || node.type === 'arrow_function') {
+          // Extract function signatures for context mapping
+          let nameNode = node.children.find(c => c.type === 'identifier');
+          if (nameNode) functionsList.push(code.substring(nameNode.startIndex, nameNode.endIndex));
+        }
+
+        for (let i = 0; i < node.childCount; i++) {
+          traverse(node.child(i));
+        }
+      };
+
+      traverse(tree.rootNode);
+
+      return {
+        file: path.basename(filePath),
+        strict_imports: importsList,
+        strict_exports: exportsList,
+        internal_functions: functionsList,
+        ast_node_count: tree.rootNode.childCount
+      };
+    } catch (error) {
+      throw new Error(`CRITICAL: AST Parsing failed for ${filePath}. Graph broken. ${error.message}`);
     }
-
-    // Auto-compact if over 100 entries (v3.5 raised limit for more context)
-    const result = await pool.query(
-      'SELECT jsonb_array_length(brain_journal) as count FROM project_memory WHERE user_id = $1 AND project_name = $2',
-      [userId, projectName]
-    );
-
-    if (result.rows[0]?.count > 100) {
-      // Keep only the 50 most recent entries
-      await pool.query(
-        `UPDATE project_memory 
-         SET brain_journal = (
-           SELECT jsonb_agg(elem) FROM (
-             SELECT elem FROM jsonb_array_elements(brain_journal) AS elem
-             ORDER BY elem->>'timestamp' DESC
-             LIMIT 50
-           ) sub
-         )
-         WHERE user_id = $1 AND project_name = $2`,
-        [userId, projectName]
-      );
-    }
-  } catch (err) {
-    // Failed to append journal
   }
 }
 
-/**
- * V6: Hybrid Memory Retrieval — AST-first, embeddings fallback
- * ============================================================
- * Strategy: 100% AST-first for code structure, embeddings only if AST sparse.
- * 
- * @param {string} userId
- * @param {string} projectName
- * @param {string} targetFilePath - File being modified
- * @param {string} targetFunctionName - Function being modified (optional)
- * @param {string} query - Semantic query for fallback (optional)
- */
-export async function loadMemoryHybrid(userId, projectName, targetFilePath, targetFunctionName = null, query = null) {
-  try {
-    // 1. Base memory (same as v4)
-    const baseMemory = await loadMemory(userId, projectName, query);
-    
-    // 2. V6: AST-first structural memory
-    let astContext = null;
-    try {
-      const astGraph = await ASTGraphStore.loadProject(projectName);
-      if (astGraph) {
-        const retriever = new HybridContextRetriever(astGraph, embeddingsService);
-        const results = await retriever.getContext(targetFilePath, targetFunctionName, query);
-        astContext = HybridContextRetriever.formatContext(results);
-      }
-    } catch (astErr) {
-      // AST not available, will rely on embeddings
-    }
-    
-    // 3. Semantic fallback if AST sparse
-    let semanticContext = null;
-    if (!astContext || astContext.length < 100) {
-      // Already loaded in baseMemory.brainJournal, but we can supplement
-      const semanticResult = await loadMemory(userId, projectName, query);
-      if (semanticResult.brainJournal.length > 0) {
-        semanticContext = `=== RELATED MEMORIES ===\n${semanticResult.brainJournal.map(j => j.content || j).join('\n')}`;
-      }
-    }
-    
-    return {
-      ...baseMemory,
-      astContext,      // Exact dependencies from AST
-      semanticContext, // Fuzzy matches from embeddings (fallback only)
-      strategy: 'ast-first'
-    };
-  } catch (err) {
-    // Fall back to base memory
-    const base = await loadMemory(userId, projectName, query);
-    return { ...base, astContext: null, semanticContext: null, strategy: 'fallback' };
-  }
-}
-
-/**
- * Parse and store AST for a file
- */
-export async function indexFileAST(projectName, filePath, content) {
-  try {
-    const { ASTParser, ASTGraphStore } = await import('./ast-graph.js');
-    const parser = new ASTParser();
-    const graph = parser.parseFile(filePath, content);
-    await ASTGraphStore.save(projectName, filePath, graph);
-    return { success: true, nodes: graph.nodes.size };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-}
+module.exports = new SemanticGraphBuilder();
