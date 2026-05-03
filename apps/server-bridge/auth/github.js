@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import { upsertUser } from '../db.js';
 import { generateToken } from './middleware.js';
 
@@ -27,10 +28,20 @@ router.get('/github', (req, res) => {
       message: 'GITHUB_CLIENT_ID and GITHUB_REDIRECT_URI environment variables must be set'
     });
   }
+
+  const state = crypto.randomBytes(32).toString('hex');
+  res.cookie('github_oauth_state', state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 15 * 60 * 1000, // 15 minutes
+  });
+
   const params = new URLSearchParams({
     client_id: process.env.GITHUB_CLIENT_ID,
     redirect_uri: process.env.GITHUB_REDIRECT_URI,
     scope: 'user:email read:user',
+    state,
   });
   res.redirect(`${GITHUB_AUTH_URL}?${params}`);
 });
@@ -40,8 +51,22 @@ router.get('/github', (req, res) => {
  * Exchange code for access token, fetch user profile
  */
 router.get('/github/callback', async (req, res) => {
-  const { code } = req.query;
+  const { code, state } = req.query;
+
+  let cookieState = req.cookies?.github_oauth_state;
+  if (!cookieState && req.headers.cookie) {
+    const match = req.headers.cookie.match(/(?:^|;\s*)github_oauth_state=([^;]*)/);
+    if (match) cookieState = match[1];
+  }
+
+
   if (!code) return res.status(400).json({ error: 'Missing authorization code.' });
+  if (!state || !cookieState || state !== cookieState) {
+    return res.status(403).json({ error: 'Invalid OAuth state.' });
+  }
+
+  // Clear state cookie
+  res.clearCookie('github_oauth_state');
 
   try {
     // Exchange code for token
@@ -61,7 +86,7 @@ router.get('/github/callback', async (req, res) => {
     const tokens = await tokenRes.json();
     if (tokens.error) throw new Error(tokens.error_description || tokens.error);
 
-    const headers = { Authorization: `Bearer ${tokens.access_token}`, 'User-Agent': 'VibeHub' };
+    const headers = { Authorization: `Bearer ${tokens.access_token}`, 'User-Agent': 'Selina' };
 
     // Get user profile
     const userRes = await fetch(GITHUB_USER_URL, { headers });
@@ -88,7 +113,7 @@ router.get('/github/callback', async (req, res) => {
     // Generate JWT and redirect
     const jwt = generateToken(user);
     const frontendUrl = process.env.NODE_ENV === 'production'
-      ? 'https://vibe-hub-ui.onrender.com'
+      ? 'https://selina-ui.onrender.com'
       : 'http://localhost:5173';
     res.redirect(`${frontendUrl}/auth/callback?token=${jwt}`);
   } catch (err) {

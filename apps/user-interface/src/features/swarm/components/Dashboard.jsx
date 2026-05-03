@@ -11,9 +11,18 @@ import SwarmVisualizer from './SwarmVisualizer';
  * Visualizes the neural throughput and system health of the agent swarm.
  */
 export default function IntelligenceDashboard() {
-  const { neuralStatus } = useStore();
+  const { neuralStatus, workflowState } = useStore();
 
   const metrics = [
+    {
+      label: 'GitHub Actions',
+      value: workflowState?.status === 'triggered' ? 'Queued' : (workflowState?.status === 'completed' ? 'Done' : 'Idle'),
+      sub: workflowState?.conclusion || 'Execution Engine',
+      icon: ShieldCheck,
+      color: workflowState?.conclusion === 'failure' ? 'text-error' : (workflowState?.conclusion === 'success' ? 'text-primary' : 'text-on-surface-variant'),
+      span: 3,
+      progress: workflowState?.status === 'triggered' ? 50 : (workflowState?.status === 'completed' ? 100 : 0)
+    },
     { 
       label: 'Neural Load', 
       value: neuralStatus.expert === 'Orchestrator' ? '12%' : '84%', 
@@ -33,10 +42,10 @@ export default function IntelligenceDashboard() {
       progress: 15
     },
     { 
-      label: 'Cores', 
-      value: '16/16', 
-      sub: 'Active Nodes',
-      icon: Cpu,
+      label: 'GH Runners',
+      value: neuralStatus.waitingForGitHub ? 'WAITING' : 'READY',
+      sub: 'Action Nodes',
+      icon: Server,
       color: 'text-tertiary',
       span: 1,
       progress: 100

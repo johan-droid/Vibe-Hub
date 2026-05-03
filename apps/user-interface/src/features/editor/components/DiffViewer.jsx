@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Eye, Zap, Code, FileCode, GitPullRequest, ChevronRight, X, Check } from 'lucide-react';
+import { Eye, Zap, Code, FileCode, GitPullRequest, ChevronRight, X, Check, Github } from 'lucide-react';
 import ReactDiffViewer from 'react-diff-viewer-continued';
 import { useStore } from '../../../store/useStore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,10 +15,12 @@ export default function DiffViewer({ onApply, onDiscard }) {
   const { diffData, isThinking, neuralStatus } = useStore();
 
   const diffChunk = useMemo(() => {
-    if (!diffData || !diffData.oldValue || !diffData.newValue) return null;
+    if (!diffData) return null;
+    const diffToRender = Array.isArray(diffData) ? diffData[0] : diffData;
+    if (!diffToRender.oldValue || !diffToRender.newValue) return null;
     
-    const oldLines = diffData.oldValue.split('\n');
-    const newLines = diffData.newValue.split('\n');
+    const oldLines = diffToRender.oldValue.split('\n');
+    const newLines = diffToRender.newValue.split('\n');
     
     let firstDiff = 0;
     while (firstDiff < oldLines.length && oldLines[firstDiff] === newLines[firstDiff]) {
@@ -36,6 +38,26 @@ export default function DiffViewer({ onApply, onDiscard }) {
     };
   }, [diffData]);
 
+  // Mock GitHub Diff support, we fall back to existing diff chunk logic
+  const githubDiffChunk = useMemo(() => {
+      if (!diffData || !diffData.patch) return null;
+      // We will parse patch later when fully integrating GitHub Diff parsing
+      return {
+          old: "// Github PR Difference loading...",
+          new: "// PR Code differences",
+          startLine: 1,
+          totalLines: 0
+      };
+  }, [diffData]);
+
+  let renderDiff = diffChunk;
+  let title = "Projection";
+
+  if (diffData && diffData.type === 'github_pr') {
+      renderDiff = githubDiffChunk;
+            title = `PR #${diffData.prNumber} (${diffData.repo})`;
+  }
+
   return (
     <Surface elevation={0} className="h-full bg-surface-container-lowest flex flex-col relative overflow-hidden">
       {/* Header */}
@@ -45,7 +67,7 @@ export default function DiffViewer({ onApply, onDiscard }) {
             <Surface elevation={2} shape="md" className="w-8 h-8 flex items-center justify-center bg-primary/10">
               <GitPullRequest size={16} className="text-primary" />
             </Surface>
-            <h2 className="label-large font-bold text-on-surface uppercase tracking-widest opacity-60">Projection</h2>
+            <h2 className="label-large font-bold text-on-surface uppercase tracking-widest opacity-60">{title}</h2>
           </div>
           
           <AnimatePresence mode="wait">
@@ -59,7 +81,7 @@ export default function DiffViewer({ onApply, onDiscard }) {
                 <div className="w-px h-4 bg-outline-variant/30 mx-2" />
                 <Surface elevation={1} shape="full" className="flex items-center gap-2 px-3 py-1 border border-outline-variant/30 bg-surface-container-high/40">
                   <FileCode size={12} className="text-primary opacity-60" />
-                  <span className="label-small text-on-surface-variant font-mono">{diffData.path}</span>
+                  <span className="label-small text-on-surface-variant font-mono">{Array.isArray(diffData) ? `${diffData.length} files (PR View)` : diffData.path}</span>
                 </Surface>
               </motion.div>
             )}
@@ -84,16 +106,29 @@ export default function DiffViewer({ onApply, onDiscard }) {
                 >
                   Discard
                 </Button>
-                <Button 
-                  variant="filled" 
-                  size="sm" 
-                  onClick={() => onApply(diffData)}
-                  disabled={isThinking}
-                  leadingIcon={Check}
-                  className="shadow-lg shadow-primary/20"
-                >
-                  Apply Mutation
-                </Button>
+                {diffData.type === 'github_pr' ? (
+                  <Button
+                    variant="filled"
+                    size="sm"
+                    onClick={() => onApply(diffData)}
+                    disabled={isThinking}
+                    leadingIcon={Github}
+                    className="shadow-lg shadow-primary/20"
+                  >
+                    Merge to Main
+                  </Button>
+                ) : (
+                  <Button
+                    variant="filled"
+                    size="sm"
+                    onClick={() => onApply(diffData)}
+                    disabled={isThinking}
+                    leadingIcon={Check}
+                    className="shadow-lg shadow-primary/20"
+                  >
+                    Apply Mutation
+                  </Button>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -103,7 +138,7 @@ export default function DiffViewer({ onApply, onDiscard }) {
       {/* Workspace */}
       <div className="flex-1 overflow-auto p-6 scrollbar-none">
         <AnimatePresence mode="wait">
-          {diffChunk ? (
+          {renderDiff ? (
             <motion.div 
               key="diff-content"
               initial={{ opacity: 0, y: 30 }}
@@ -116,17 +151,17 @@ export default function DiffViewer({ onApply, onDiscard }) {
                 <div className="bg-surface-container-high/50 px-6 py-4 border-b border-outline-variant/20 flex items-center justify-between">
                   <div className="flex items-center gap-3 label-medium text-on-surface-variant uppercase tracking-widest opacity-60">
                     <Code size={14} className="text-primary" /> 
-                    <span>Lines {diffChunk.startLine} — {diffChunk.startLine + 40}</span>
+                    <span>Lines {renderDiff.startLine} — {renderDiff.startLine + 40}</span>
                   </div>
                   <div className="label-small text-on-surface-variant font-bold opacity-40">
-                    {diffChunk.totalLines} lines total
+                    {renderDiff.totalLines} lines total
                   </div>
                 </div>
                 
                 <div className="p-4 bg-surface">
                   <ReactDiffViewer
-                    oldValue={diffChunk.old}
-                    newValue={diffChunk.new}
+                    oldValue={renderDiff.old}
+                    newValue={renderDiff.new}
                     splitView={true}
                     useDarkTheme={true}
                     codeFoldGutter={true}

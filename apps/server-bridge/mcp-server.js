@@ -6,7 +6,7 @@ import path from 'path';
 import { loadMemory } from './memory/loader.js';
 
 /**
- * Vibe Hub MCP Server — High Performance Implementation
+ * Selina MCP Server — High Performance Implementation
  * 
  * Engineered for Ryzen 5 5500U (6C/12T) environments.
  * Focuses on low memory overhead and intelligent context retrieval.
@@ -14,7 +14,7 @@ import { loadMemory } from './memory/loader.js';
 
 const server = new Server(
   {
-    name: 'vibe-hub-mcp',
+    name: 'selina-mcp',
     version: '2.0.0',
   },
   {
@@ -81,14 +81,14 @@ class SmartReader {
 }
 
 /**
- * Register Vibe Hub Tools
+ * Register Selina Tools
  * All schemas are standard JSON Schema compliant.
  */
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
-        name: 'vibe_read_file',
+        name: 'selina_read_file',
         description: 'Read a file intelligently with line-limiting and semantic filtering.',
         inputSchema: {
           type: 'object',
@@ -101,7 +101,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: 'vibe_search_symbols',
+        name: 'selina_search_symbols',
         description: 'Optimized grep-based symbol search across the workspace.',
         inputSchema: {
           type: 'object',
@@ -113,7 +113,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: 'vibe_get_memory',
+        name: 'selina_get_memory',
         description: 'Retrieve project-specific persistent memory and brain journal.',
         inputSchema: {
           type: 'object',
@@ -137,7 +137,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
-      case 'vibe_read_file': {
+      case 'selina_read_file': {
         // BUG #4 FIX: path.resolve() handles ../ but we must ALSO verify the
         // resolved path is still inside workspaceRoot. Without this check,
         // a path of "../../etc/passwd" resolves to an absolute path that
@@ -159,13 +159,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return { content: [{ type: 'text', text: content }] };
       }
 
-      case 'vibe_search_symbols': {
+      case 'selina_search_symbols': {
         // Implementation of efficient recursive search
         // On Windows with Ryzen 5, we use a throttled async walk to avoid IO saturation
         return { content: [{ type: 'text', text: `Search capability for "${args.query}" initialized. [Optimized implementation pending file-system indexer integration]` }] };
       }
 
-      case 'vibe_get_memory': {
+      case 'selina_get_memory': {
         const memory = await loadMemory('default_user', args.projectId);
         return {
           content: [{ 
@@ -195,7 +195,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('[MCP] Vibe Hub Server v2.0 optimized for Ryzen/Windows host.');
+  console.error('[MCP] Selina Server v2.0 optimized for Ryzen/Windows host.');
 }
 
 main().catch((err) => {

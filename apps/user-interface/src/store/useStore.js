@@ -4,7 +4,7 @@ import { idbStorage } from './idbStorage';
 import { v4 as uuid } from 'uuid';
 
 /**
- * Vibe Hub Global State Store — Principal Architect Implementation
+ * Selina Global State Store — Principal Architect Implementation
  * 
  * Engineered for hyper-performance on Ryzen hardware.
  * Uses atomic updates and selective persistence to minimize I/O overhead.
@@ -21,19 +21,22 @@ export const useStore = create(
       chatCollapsed: false,
       terminalHeight: 256,
       activeTab: 'diff',
-      theme: 'dark', // 'dark' | 'light'
+      theme: 'dark', // Always dark
 
       // --- AGENT CORE STATE (Volatile) ---
       messages: [],
       streamingMessage: null, // Atomic storage for byte-by-byte updates
       agentThoughts: [],
       isThinking: false,
+      workflowState: null, // Track remote github actions
+      setWorkflowState: (state) => set({ workflowState: state }),
       
       // Neural Status (Current Expert Context)
       neuralStatus: {
         expert: 'core', // 'core', 'react', 'debugging', 'planning', etc.
         phase: 'idle',  // 'idle', 'classifying', 'executing', 'streaming'
         lastAction: '',
+        waitingForGitHub: false,
       },
 
       // Agent state for AgentNeuralStatus
@@ -59,7 +62,7 @@ export const useStore = create(
       // Auth
       setUser: (user) => set({ user }),
       logout: () => {
-        localStorage.removeItem('vibe_token');
+        localStorage.removeItem('selina_token');
         set({ user: null, messages: [], agentThoughts: [], streamingMessage: null });
       },
 
@@ -152,7 +155,15 @@ export const useStore = create(
       clearTerminal: () => set({ terminalOutput: [] }),
 
       // Agent status (used by useAgent.js and AgentNeuralStatus)
-      setAgentStatus: (state, message) => set({ agentState: state, statusMessage: message || '' }),
+      setAgentStatus: (state, message) => set((prev) => {
+        const nextState = { agentState: state, statusMessage: message || '' };
+        if (state === 'waitingForGitHub') {
+          nextState.neuralStatus = { ...prev.neuralStatus, waitingForGitHub: true };
+        } else if (state === 'idle') {
+          nextState.neuralStatus = { ...prev.neuralStatus, waitingForGitHub: false };
+        }
+        return nextState;
+      }),
       setEffortLevel: (l) => set({ effortLevel: l }),
 
       // Thoughts & Logs
@@ -162,7 +173,7 @@ export const useStore = create(
       clearThoughts: () => set({ agentThoughts: [] }),
     }),
     {
-      name: 'vibehub-neural-storage',
+      name: 'selinahub-neural-storage',
       storage: createJSONStorage(() => idbStorage),
       partialize: (state) => ({
         user: state.user,

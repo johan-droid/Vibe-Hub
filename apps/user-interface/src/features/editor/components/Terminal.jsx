@@ -72,7 +72,7 @@ const LogLine = memo(function LogLine({ line, index }) {
 
 // ─── Main Terminal ────────────────────────────────────────────────────────────
 export default function Terminal() {
-  const { terminalOutput } = useStore();
+  const { terminalOutput, neuralStatus } = useStore();
   const scrollRef = useRef(null);
   const [isUserScrolled, setIsUserScrolled] = useState(false);
   const isUserScrolledRef = useRef(false);
@@ -104,6 +104,18 @@ export default function Terminal() {
     useStore.getState().clearTerminal();
   }, []);
 
+  // React to remote GitHub Execution
+  const { workflowState } = useStore();
+
+  let headerStatus = "Idle_System";
+  if (workflowState && workflowState.status === 'triggered') {
+      headerStatus = "GitHub_Action_Queued";
+  } else if (workflowState && workflowState.status === 'completed') {
+            headerStatus = `GitHub_Action_${workflowState.conclusion}`;
+  } else if (lines.length > 0) {
+      headerStatus = "Output_Stream";
+  }
+
   return (
     <Surface elevation={0} className="h-full w-full flex flex-col bg-surface-container-lowest overflow-hidden">
       {/* Toolbar */}
@@ -113,7 +125,7 @@ export default function Terminal() {
             <TermIcon size={14} className="text-primary" />
           </Surface>
           <span className="label-large font-bold text-on-surface uppercase tracking-widest opacity-60">
-            Output_Stream
+            {headerStatus}
           </span>
           <motion.div
             animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
@@ -158,13 +170,23 @@ export default function Terminal() {
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto py-4 px-2 scrollbar-none"
       >
-        {lines.length === 0 ? (
+                {lines.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 gap-4 opacity-20">
-            <Surface elevation={1} shape="full" className="w-12 h-12 flex items-center justify-center border border-outline-variant/30">
-               <Play size={20} className="text-on-surface ml-1" />
-            </Surface>
+            {neuralStatus?.waitingForGitHub ? (
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+              >
+                <Surface elevation={1} shape="full" className="w-12 h-12 flex items-center justify-center border-t-2 border-primary border-outline-variant/30">
+                </Surface>
+              </motion.div>
+            ) : (
+              <Surface elevation={1} shape="full" className="w-12 h-12 flex items-center justify-center border border-outline-variant/30">
+                 <Play size={20} className="text-on-surface ml-1" />
+              </Surface>
+            )}
             <span className="label-small font-mono uppercase tracking-[0.5em]">
-              Idle_System
+              {neuralStatus?.waitingForGitHub ? 'Awaiting_GitHub_Runner...' : 'Idle_System'}
             </span>
           </div>
         ) : (

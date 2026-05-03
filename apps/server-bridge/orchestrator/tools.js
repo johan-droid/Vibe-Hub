@@ -1,3 +1,5 @@
+import { SchemaType as Type } from '@google/generative-ai';
+
 /**
  * Tool Definitions for Gemini Agents — Brain v3.0
  * Includes: surgical editing, clarification, planning, memory, and grep.
@@ -177,7 +179,7 @@ export const AGENT_TOOLS = [
   // === GITHUB ===
   {
     name: 'github_create_branch',
-    description: 'Creates an isolated agent working branch on GitHub using the vibe/<timestamp>/<slug> convention. ALWAYS call this before making any file commits on a shared repository.',
+    description: 'Creates an isolated agent working branch on GitHub using the selina/<timestamp>/<slug> convention. ALWAYS call this before making any file commits on a shared repository.',
     parameters: {
       type: 'OBJECT',
       properties: {
@@ -255,7 +257,7 @@ export const AGENT_TOOLS = [
       properties: {
         owner:      { type: 'STRING', description: 'Repository owner.' },
         repo:       { type: 'STRING', description: 'Repository name.' },
-        name:       { type: 'STRING', description: 'Check name (e.g., "Vibe Hub Tests").' },
+        name:       { type: 'STRING', description: 'Check name (e.g., "Selina Tests").' },
         head_sha:   { type: 'STRING', description: 'The commit SHA to attach the check to.' },
         status:     { type: 'STRING', enum: ['queued', 'in_progress', 'completed'], description: 'Check status.' },
         conclusion: { type: 'STRING', enum: ['success', 'failure', 'neutral', 'cancelled', 'skipped', 'timed_out'], description: 'Final result (required when status is "completed").' },
@@ -337,6 +339,33 @@ DO NOT USE for:
     },
   },
   {
+    name: 'github_trigger_workflow',
+    description: 'Triggers a remote GitHub Action workflow.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        owner: { type: Type.STRING },
+        repo: { type: Type.STRING },
+        workflow_id: { type: Type.STRING },
+        ref: { type: Type.STRING }
+      },
+      required: ['owner', 'repo', 'workflow_id', 'ref'],
+    },
+  },
+  {
+    name: 'github_get_codeql_alerts',
+    description: 'Fetches CodeQL security alerts for a given repository.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        owner: { type: Type.STRING },
+        repo: { type: Type.STRING },
+        ref: { type: Type.STRING }
+      },
+      required: ['owner', 'repo', 'ref'],
+    },
+  },
+  {
     name: 'design_research',
     description: 'Fetch design inspiration, patterns, and moodboard references from specialized repositories.',
     parameters: {
@@ -367,9 +396,9 @@ DO NOT USE for:
       type: 'OBJECT',
       properties: {
         componentId: { type: 'STRING', description: 'The component to redesign.' },
-        vibe: { type: 'STRING', description: 'The desired aesthetic shift (e.g., "more brutalist").' },
+        selina: { type: 'STRING', description: 'The desired aesthetic shift (e.g., "more brutalist").' },
       },
-      required: ['componentId', 'vibe'],
+      required: ['componentId', 'selina'],
     },
   },
 ];

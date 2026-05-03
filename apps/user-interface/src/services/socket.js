@@ -16,7 +16,7 @@ export class SwarmSocket {
 
   connect() {
     const wsBase = import.meta.env.VITE_WS_BASE || (import.meta.env.PROD
-      ? 'wss://vibe-hub-bridge.onrender.com'
+      ? 'wss://selina-bridge.onrender.com'
       : `ws://${window.location.hostname}:3001`);
     
     this.ws = new WebSocket(`${wsBase}/ws?token=${this.token}`);
@@ -48,6 +48,10 @@ export class SwarmSocket {
 
         case 'error':
           this.emit('error', msg.message);
+          break;
+
+        case 'github_workflow_completed':
+          this.emit('github_workflow_completed', msg);
           break;
 
         // === NEW in v3 ===

@@ -1,5 +1,5 @@
 /**
- * server-bridge/index.js — Vibe-Hub Central Nervous System v4.1
+ * server-bridge/index.js — Selina-Hub Central Nervous System v4.1
  */
 
 import './load-env.js';
@@ -16,7 +16,6 @@ import githubAuth                from './auth/github.js';
 import { AgentOrchestrator }     from './orchestrator/index.js';
 import { TaskManager }           from './orchestrator/task-manager.js';
 import { githubService }         from './github/index.js';
-import { securitySandboxService } from './sandbox/security-sandbox.js';
 import { creativeService }       from './creative/index.js';
 import { uiVariantService }      from './creative/generate-ui-variant.js';
 
@@ -63,6 +62,10 @@ app.post('/api/github/webhook', async (req, res) => {
   // The body arrives as a raw Buffer because of the express.raw() middleware
   // above. We must verify the HMAC signature before processing anything.
   const signature = req.headers['x-hub-signature-256'];
+  if (!signature) {
+    console.warn('[GitHub] Webhook signature missing — rejecting.');
+    return res.status(403).send('Missing signature.');
+  }
   const valid = await githubService.verifyWebhookSignature(req.body, signature);
 
   if (!valid) {
@@ -75,10 +78,49 @@ app.post('/api/github/webhook', async (req, res) => {
 
   console.log(`[GitHub] Webhook: ${event} (${payload.action ?? 'n/a'})`);
 
+  // Handle Action workflow runs (e.g. AI Sandbox results)
+  if (event === 'workflow_run') {
+    const workflowName = payload.workflow_run.name;
+    const conclusion = payload.workflow_run.conclusion;
+    console.log(`[GitHub] Workflow ${workflowName} completed with conclusion: ${conclusion}`);
+    // Notify clients that GitHub runner finished
+    const wss = req.app.get('wss'); // Assume wss is attached to app
+    if (wss) wss.clients.forEach(client => {
+      if (client.readyState === 1) { // WebSocket.OPEN
+        client.send(JSON.stringify({
+          type: 'terminal_output',
+          data: `\x1b[36m[GitHub] Workflow ${workflowName} finished with conclusion: ${conclusion}\x1b[0m\n`
+        }));
+        client.send(JSON.stringify({
+          type: 'state_change',
+          state: 'idle',
+          message: 'GitHub workflow complete'
+        }));
+      }
+    });
+  }
+
   // Route webhook events to the relevant open agent session (if any).
   // In a full implementation, we'd look up which session owns the repo.
   if (event === 'pull_request' && payload.action === 'opened') {
     console.log(`[GitHub] PR #${payload.number} opened in ${payload.repository?.full_name}`);
+  }
+
+  if (event === 'workflow_run' && payload.action === 'completed') {
+      const { workflow_run } = payload;
+      console.log(`[GitHub] Workflow ${workflow_run.name} completed with conclusion: ${workflow_run.conclusion}`);
+
+      // Broadcast to all active sessions (since we aren't mapping repos to sessions yet)
+      for (const [sessionId, session] of sessions) {
+          if (session.ws.readyState === session.ws.OPEN) {
+              session.ws.send(JSON.stringify({
+                  type: 'github_workflow_completed',
+                  workflow: workflow_run.name,
+                  conclusion: workflow_run.conclusion,
+                  url: workflow_run.html_url
+              }));
+          }
+      }
   }
 
   res.status(200).send('OK');
@@ -127,6 +169,7 @@ app.post('/api/copilot/chat', requireAuth, async (req, res) => {
 // ─── WebSocket Server ─────────────────────────────────────────────────────────
 
 const wss = new WebSocketServer({ server, path: '/ws' });
+app.set('wss', wss);
 
 /**
  * Session map: sessionId → { ws, orchestrator, pendingToolCalls,
@@ -270,6 +313,12 @@ wss.on('connection', (ws, req) => {
         case 'github_create_codespace':
           return JSON.stringify(await githubService.createCodespace({ ...args, installationId, token }));
 
+        case 'github_trigger_workflow':
+          return JSON.stringify(await githubService.triggerWorkflow({ ...args, installationId, token }));
+
+        case 'github_get_codeql_alerts':
+          return JSON.stringify(await githubService.getCodeQLAlerts({ ...args, installationId, token }));
+
         default:
           throw new Error(`GitHub tool not implemented: ${name}`);
       }
@@ -278,23 +327,29 @@ wss.on('connection', (ws, req) => {
     // ── 2. Security Sandbox ───────────────────────────────────────────
     if (name === 'security_sandbox') {
       const { workspacePath, scriptPath, runtime, timeoutMs } = args;
-      console.log(`[Tool] Sandbox execute: ${runtime ?? 'node'} ${scriptPath}`);
+      console.log(`[Tool] Sandbox offload requested: ${runtime ?? 'node'} ${scriptPath}`);
 
-      const result = await securitySandboxService.execute({
-        workspacePath: workspacePath || '.',
-        scriptPath,
-        runtime:   runtime   ?? 'node',
-        timeoutMs: timeoutMs ?? 10_000,
-        // Live-stream output chunks to the Terminal.jsx via WebSocket
-        onChunk: (chunk) => send({ type: 'terminal_output', data: chunk }),
-      });
+      try {
+        await githubService.octokit.rest.actions.createWorkflowDispatch({
+          owner: process.env.GITHUB_OWNER,
+          repo: process.env.GITHUB_REPO,
+          workflow_id: 'ai-sandbox.yml',
+          ref: 'main' // In a real app, infer the current branch
+        });
 
-      onThought(
-        `[Sandbox] exit=${result.exitCode} in ${result.durationMs}ms` +
-        (result.timedOut ? ' ⚠️ KILLED: TIMEOUT' : '')
-      );
+        // Let the agent know it needs to wait
+        send({ type: 'state_change', state: 'waitingForGitHub', message: 'Triggered GitHub Action run.' });
 
-      return JSON.stringify(result);
+        return JSON.stringify({
+          success: true,
+          message: 'Execution offloaded to GitHub Actions. Listening for webhook completion.'
+        });
+      } catch (err) {
+        return JSON.stringify({
+          success: false,
+          error: `GitHub API error: ${err.message}`
+        });
+      }
     }
 
     // ── 3. Creative Swarm ─────────────────────────────────────────────
@@ -331,13 +386,29 @@ wss.on('connection', (ws, req) => {
     // ── 5. Security Sandbox (Gap #9) ─────────────────────────────────
     if (name === 'security_sandbox') {
       try {
-        const result = await securitySandboxService.execute({
-          workspacePath: args.workspacePath || process.cwd(),
-          scriptPath: args.scriptPath,
-          runtime: args.runtime || 'node',
-          timeoutMs: args.timeoutMs,
-          onChunk: (chunk) => send({ type: 'terminal_output', value: chunk }),
+        // Delegated to GitHub Actions for execution
+      console.log(`[Sandbox] Offloading execution to GitHub Actions via workflow_dispatch`);
+      try {
+        await githubService.octokit.rest.actions.createWorkflowDispatch({
+          owner: process.env.GITHUB_OWNER,
+          repo: process.env.GITHUB_REPO,
+          workflow_id: 'ai-sandbox.yml',
+          ref: 'main' // In a real app, infer the current branch
         });
+        return JSON.stringify({
+          success: true,
+          message: 'Execution offloaded to GitHub Actions. Listening for webhook completion.'
+        });
+      } catch (err) {
+        return JSON.stringify({
+          success: false,
+          error: `GitHub API error: ${err.message}`
+        });
+      }
+      return JSON.stringify({
+        success: true,
+        message: 'Execution offloaded to GitHub Actions. Listening for webhook completion.'
+      });
         return JSON.stringify(result);
       } catch (err) {
         return `ERROR: ${err.message}`;
@@ -353,17 +424,19 @@ wss.on('connection', (ws, req) => {
       if (isScript) {
         console.log(`[Orchestrator] Auto-sandboxing command: ${args.command} ${args.args?.join(' ')}`);
         try {
-          // For npm test/run, we need to map it to a script execution if possible.
-          // For now, we'll try to run it in the sandbox with 'sh' or 'node'.
-          const result = await securitySandboxService.execute({
-            workspacePath: process.cwd(),
-            scriptPath: args.args?.length > 0 ? args.args[0] : 'index.js', // Heuristic
-            runtime: args.command === 'node' ? 'node' : 'sh',
-            onChunk: (chunk) => send({ type: 'terminal_output', value: chunk }),
+          await githubService.octokit.rest.actions.createWorkflowDispatch({
+            owner: process.env.GITHUB_OWNER,
+            repo: process.env.GITHUB_REPO,
+            workflow_id: 'ai-sandbox.yml',
+            ref: 'main'
           });
-          return JSON.stringify(result);
+          send({ type: 'state_change', state: 'waitingForGitHub', message: 'Triggered GitHub Action run.' });
+          return JSON.stringify({
+            success: true,
+            message: 'Execution offloaded to GitHub Actions. Listening for webhook completion.'
+          });
         } catch (err) {
-          console.warn('[Orchestrator] Auto-sandbox failed, falling back to WebContainer:', err.message);
+          console.warn('[Orchestrator] Auto-sandbox dispatch failed:', err.message);
         }
       }
     }
@@ -657,7 +730,7 @@ async function start() {
   server.listen(port, () => {
     const pad = (s) => s.padEnd(42);
     console.log('\n' + '═'.repeat(50));
-    console.log(`  🧠 Vibe-Hub Server v4.1`);
+    console.log(`  🧠 Selina-Hub Server v4.1`);
     console.log('─'.repeat(50));
     console.log(`  ${pad('HTTP  →')} http://localhost:${port}`);
     console.log(`  ${pad('WS    →')} ws://localhost:${port}/ws`);
@@ -672,7 +745,7 @@ async function start() {
     console.log(`\n[Server] ${signal} received — shutting down gracefully...`);
 
     // Drain active sandbox containers first (most critical)
-    await securitySandboxService.shutdown();
+    // securitySandboxService removed
 
     // Close all WS connections
     for (const [, session] of sessions) {
