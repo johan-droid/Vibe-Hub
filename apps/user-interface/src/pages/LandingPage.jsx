@@ -286,7 +286,7 @@ export default function LandingPage() {
       : api.getGoogleAuthUrl();
   };
 
-  const openWorkspace = () => navigate('/workspace');
+  const openWorkspace = () => navigate('/dashboard');
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-surface-container-lowest text-on-surface selection:bg-primary/20 selection:text-primary">

@@ -53,7 +53,7 @@ export default function AuthCallback() {
         setUser(user);
         setStatus('success');
         setMessage('Session verified. Opening your dashboard...');
-        window.setTimeout(() => navigate('/workspace', { replace: true }), 350);
+        window.setTimeout(() => navigate('/dashboard', { replace: true }), 350);
       } catch (err) {
         if (cancelled) return;
         api.clearToken();

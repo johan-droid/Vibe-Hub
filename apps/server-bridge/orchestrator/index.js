@@ -4,6 +4,7 @@ import {
   CreativeDirectorExpert, DesignSystemArchitect, MotionDesignerExpert, VisualAssetGenerator
 } from './experts.js';
 import { buildSystemPrompt } from './skill-loader.js';
+import { buildSystemPromptV6 } from './context-builder.js';
 import { loadMemory, appendBrainJournal } from '../memory/loader.js';
 import { SharedContext } from './context.js';
 import { extractSymbols } from './parser.js';
@@ -153,15 +154,32 @@ export class AgentOrchestrator {
         } catch {}
       }
 
-      const systemPrompt = buildSystemPrompt({
-        domain,
-        projectTree: this.projectTree,
-        packageJson: this.packageJson,
-        userMemory,
-        brainJournal,
-        effortLevel,
-        skillProfile,
-      });
+      // V6: Use strict architectural isolation if enabled
+      const useV6Context = process.env.USE_V6_CONTEXT === 'true';
+      let systemPrompt;
+      
+      if (useV6Context) {
+        systemPrompt = await buildSystemPromptV6({
+          projectName: this.projectName,
+          userId: this.userId,
+          domain,
+          projectTree: this.projectTree,
+          packageJson: this.packageJson,
+          userMemory,
+          brainJournal,
+          skillProfile,
+        });
+      } else {
+        systemPrompt = buildSystemPrompt({
+          domain,
+          projectTree: this.projectTree,
+          packageJson: this.packageJson,
+          userMemory,
+          brainJournal,
+          effortLevel,
+          skillProfile,
+        });
+      }
 
       const onMemoryUpdateInternal = async (entry) => {
         if (this.userId) await appendBrainJournal(this.userId, this.projectName, entry);

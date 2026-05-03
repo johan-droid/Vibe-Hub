@@ -88,7 +88,24 @@ export default function Workspace() {
     return <Navigate to="/" replace />;
   }
 
-  const showMain = !isMobile || mobileView === 'dashboard' || mobileView === 'editor' || mobileView === 'terminal';
+  const isDashboardMode = activeTab === 'dashboard';
+
+  if (isDashboardMode) {
+    return (
+      <div className="flex h-screen w-screen flex-col overflow-hidden bg-surface-container-lowest text-on-surface font-sans selection:bg-primary/20 selection:text-primary">
+        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_0%,hsl(var(--primary)/0.08),transparent_32%),radial-gradient(circle_at_90%_18%,hsl(var(--secondary)/0.07),transparent_28%)]" />
+        <Titlebar onOpenSettings={() => setIsSettingsOpen(true)} />
+
+        <main className="relative z-10 min-h-0 flex-1 overflow-hidden">
+          <React.Suspense fallback={<div className="h-full animate-pulse bg-surface-container-lowest" />}>
+            <IntelligenceDashboard />
+          </React.Suspense>
+        </main>
+
+        <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-surface-container-lowest text-on-surface font-sans selection:bg-primary/20 selection:text-primary">
@@ -142,7 +159,7 @@ export default function Workspace() {
           </AnimatePresence>
         </div>
 
-        <main className={`relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest ${showMain ? '' : 'hidden'}`}>
+        <main className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest">
           <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest ${(isMobile && mobileView === 'terminal') ? 'hidden' : ''}`}>
             {activeTab !== 'dashboard' && openFiles.length > 0 && <EditorTabs />}
             <div className="relative min-h-0 flex-1 overflow-hidden">
