@@ -5,7 +5,10 @@
  * - Clarification request/response flow
  * - Plan approval/rejection flow
  * - Tool dispatch with edit_file support
+ * - Socket.io integration for XState streaming
  */
+
+import { io } from 'socket.io-client';
 export class SwarmSocket {
   constructor(token) {
     this.token = token;
@@ -166,3 +169,90 @@ export class SwarmSocket {
     if (this.ws) this.ws.close();
   }
 }
+
+/**
+ * Socket.io client for XState orchestration streaming (v6)
+ * Streams real-time state machine transitions from server-bridge
+ */
+export class OrchestratorSocket {
+  constructor() {
+    this.socket = null;
+    this.listeners = {};
+    this.socketId = null;
+  }
+
+  connect(userId = null) {
+    const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    
+    this.socket = io(SOCKET_URL, {
+      path: '/socket.io',
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      transports: ['websocket', 'polling']
+    });
+
+    this.socket.on('connect', () => {
+      this.socketId = this.socket.id;
+      console.log('[OrchestratorSocket] Connected:', this.socketId);
+      
+      // Join user-specific room if userId provided
+      if (userId) {
+        this.socket.emit('join', { userId });
+      }
+      
+      this.emit('connected', { socketId: this.socketId });
+    });
+
+    this.socket.on('agent_status', (data) => {
+      console.log('[OrchestratorSocket] Agent status:', data);
+      this.emit('agent_status', data);
+    });
+
+    this.socket.on('disconnect', (reason) => {
+      console.log('[OrchestratorSocket] Disconnected:', reason);
+      this.emit('disconnected', { reason });
+    });
+
+    this.socket.on('connect_error', (error) => {
+      console.error('[OrchestratorSocket] Connection error:', error);
+      this.emit('error', error);
+    });
+
+    this.socket.on('reconnect', (attemptNumber) => {
+      console.log('[OrchestratorSocket] Reconnected after', attemptNumber, 'attempts');
+      this.emit('reconnected', { attemptNumber });
+    });
+
+    return this;
+  }
+
+  getSocketId() {
+    return this.socketId;
+  }
+
+  on(event, callback) {
+    if (!this.listeners[event]) this.listeners[event] = [];
+    this.listeners[event].push(callback);
+  }
+
+  off(event, callback) {
+    if (this.listeners[event]) {
+      this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
+    }
+  }
+
+  emit(event, ...args) {
+    (this.listeners[event] || []).forEach(cb => cb(...args));
+  }
+
+  disconnect() {
+    if (this.socket) {
+      this.socket.disconnect();
+    }
+  }
+}
+
+// Default export for convenience
+export const socket = new OrchestratorSocket();

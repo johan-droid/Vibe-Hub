@@ -20,12 +20,13 @@
     "jsonwebtoken": "^9.0.2",
     "octokit": "^5.0.5",
     "pg": "^8.13.0",
-    "uuid": "^14.0.0",
-    "ws": "^8.18.0",
-    "xstate": "^5.19.2",
+    "socket.io": "^4.8.3",
     "tree-sitter": "^0.22.4",
     "tree-sitter-javascript": "^0.23.1",
-    "tree-sitter-typescript": "^0.23.2"
+    "tree-sitter-typescript": "^0.23.2",
+    "uuid": "^14.0.0",
+    "ws": "^8.18.0",
+    "xstate": "^5.19.2"
   },
   "devDependencies": {
     "vitest": "^4.1.5"

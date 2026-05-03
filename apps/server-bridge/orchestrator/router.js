@@ -147,11 +147,22 @@ ${prompt}
 
     /**
      * Execute task through XState machine with rollback capability
+     * Streams state transitions via Socket.io for real-time UI updates
      */
-    async executeWithStateMachine(prompt, userId, targetFile) {
+    async executeWithStateMachine(prompt, userId, targetFile, io, socketId) {
         return new Promise((resolve, reject) => {
             const agentService = interpret(agentMachine).onTransition((state) => {
                 console.log(`Agent Status: transitioned to [${state.value}]`);
+                
+                // Stream the internal agent status to the frontend via Socket.io
+                if (io && socketId) {
+                    io.to(socketId).emit('agent_status', {
+                        status: state.value,
+                        message: this.mapStateToMessage(state.value),
+                        retries: state.context.retries,
+                        timestamp: new Date().toISOString()
+                    });
+                }
                 
                 if (state.value === 'success') {
                     resolve({
@@ -174,19 +185,45 @@ ${prompt}
             });
         });
     }
+
+    /**
+     * Translates raw XState nodes into user-facing UI text.
+     */
+    mapStateToMessage(stateValue) {
+        const messages = {
+            idle: "Waiting to start...",
+            loading_contexts: "Locking organizational and user boundaries...",
+            parsing_ast: "Building semantic code graph...",
+            drafting_code: "Synthesizing logic with LLM...",
+            sandboxing: "Executing in offline Docker sandbox...",
+            evaluating_failure: "Sandbox execution failed. Analyzing trace...",
+            rollback: "CRITICAL: Forcing architectural rollback. Pivoting approach...",
+            success: "Code verified and ready.",
+            fatal_failure: "Fatal error occurred. Orchestration halted."
+        };
+        return messages[stateValue] || "Processing...";
+    }
 }
 
 const router = new Router();
 
 /**
  * API endpoint handler for code requests
+ * Supports WebSocket streaming via socketId in request body
  */
 async function handleCodeRequest(req, res) {
-    const { prompt, userId, targetFile } = req.body;
+    const { prompt, userId, targetFile, socketId } = req.body;
+    const io = req.app.get('io');
+
+    if (!socketId) {
+        return res.status(400).json({ 
+            error: "socketId is required for real-time orchestration tracking." 
+        });
+    }
 
     try {
-        // Option 1: Use XState machine with rollback
-        const result = await router.executeWithStateMachine(prompt, userId, targetFile);
+        // Option 1: Use XState machine with rollback and WebSocket streaming
+        const result = await router.executeWithStateMachine(prompt, userId, targetFile, io, socketId);
         res.status(200).json({ 
             success: true,
             message: "Agent completed successfully",

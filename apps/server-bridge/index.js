@@ -8,6 +8,7 @@ import cors               from 'cors';
 import cookieParser       from 'cookie-parser';
 import { createServer }   from 'http';
 import { WebSocketServer } from 'ws';
+import { Server as SocketIOServer } from 'socket.io';
 import { v4 as uuid }     from 'uuid';
 
 import { initDB }                from './db.js';
@@ -182,6 +183,35 @@ app.post('/api/copilot/chat', requireAuth, async (req, res) => {
 
 const wss = new WebSocketServer({ server, path: '/ws' });
 app.set('wss', wss);
+
+// ─── Socket.io Server (for XState streaming) ──────────────────────────────────
+
+const io = new SocketIOServer(server, {
+  path: '/socket.io',
+  cors: {
+    origin: process.env.UI_ORIGIN || "*",
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
+
+// Inject the io instance into the Express app for the router to use
+app.set('io', io);
+
+io.on('connection', (socket) => {
+  console.log(`[Socket.io] Client connected: ${socket.id}`);
+  
+  socket.on('join', (data) => {
+    if (data.userId) {
+      socket.join(`user_${data.userId}`);
+      console.log(`[Socket.io] Socket ${socket.id} joined room user_${data.userId}`);
+    }
+  });
+  
+  socket.on('disconnect', () => {
+    console.log(`[Socket.io] Client disconnected: ${socket.id}`);
+  });
+});
 
 /**
  * Session map: sessionId → { ws, orchestrator, pendingToolCalls,
