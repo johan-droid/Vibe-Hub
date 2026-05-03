@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { Eye, Zap, Code, FileCode, GitPullRequest, ChevronRight, X, Check, Github, Terminal } from 'lucide-react';
 import ReactDiffViewer from 'react-diff-viewer-continued';
 import { useStore } from '../../../store/useStore';
+import { useVfsStore } from '../../../store/useVfsStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Surface } from '../../shared/components/Surface';
 import { Button } from '../../shared/components/Button';
@@ -12,8 +13,43 @@ import { Button } from '../../shared/components/Button';
  */
 export default function DiffViewer({ onApply, onDiscard }) {
   const { diffData, isThinking, neuralStatus } = useStore();
+  
+  // VFS Integration: Check for staged files awaiting approval
+  const { 
+    activeDiff, 
+    isReviewing, 
+    discardChanges, 
+    commitToPhysicalDisk,
+    pendingFiles,
+    fetchPendingFiles 
+  } = useVfsStore();
+
+  // Fetch pending VFS files on mount
+  useEffect(() => {
+    fetchPendingFiles();
+  }, [fetchPendingFiles]);
+
+  // Check if we have VFS staged changes
+  const hasVfsDiff = isReviewing && activeDiff;
 
   const diffChunk = useMemo(() => {
+    // Priority 1: VFS staged changes (agent-generated code awaiting approval)
+    if (hasVfsDiff) {
+      const oldContent = activeDiff.originalContent || '';
+      const newContent = activeDiff.proposedContent || '';
+      
+      return {
+        old: oldContent,
+        new: newContent,
+        startLine: 1,
+        totalLines: newContent.split('\n').length,
+        isVfs: true,
+        filePath: activeDiff.filePath,
+        metadata: activeDiff.metadata
+      };
+    }
+    
+    // Priority 2: Legacy diffData from store
     if (!diffData) return null;
     const diffToRender = Array.isArray(diffData) ? diffData[0] : diffData;
     if (!diffToRender.oldValue || !diffToRender.newValue) return null;
@@ -33,9 +69,10 @@ export default function DiffViewer({ onApply, onDiscard }) {
       old: oldLines.slice(start, end).join('\n'),
       new: newLines.slice(start, end).join('\n'),
       startLine: start + 1,
-      totalLines: newLines.length
+      totalLines: newLines.length,
+      isVfs: false
     };
-  }, [diffData]);
+  }, [diffData, hasVfsDiff, activeDiff]);
 
   // Mock GitHub Diff support, we fall back to existing diff chunk logic
   const githubDiffChunk = useMemo(() => {
@@ -51,8 +88,12 @@ export default function DiffViewer({ onApply, onDiscard }) {
 
   let renderDiff = diffChunk;
   let title = "Projection";
+  let isVfsMode = false;
 
-  if (diffData && diffData.type === 'github_pr') {
+  if (hasVfsDiff) {
+    title = `VFS Review: ${activeDiff.filePath}`;
+    isVfsMode = true;
+  } else if (diffData && diffData.type === 'github_pr') {
       renderDiff = githubDiffChunk;
             title = `PR #${diffData.prNumber} (${diffData.repo})`;
   }
@@ -70,7 +111,7 @@ export default function DiffViewer({ onApply, onDiscard }) {
           </div>
           
           <AnimatePresence mode="wait">
-            {diffData && (
+            {(diffData || hasVfsDiff) && (
               <motion.div 
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -105,7 +146,30 @@ export default function DiffViewer({ onApply, onDiscard }) {
                 >
                   Discard
                 </Button>
-                {diffData.type === 'github_pr' ? (
+                {isVfsMode ? (
+                  // VFS Approval Gate: Reject / Approve & Write
+                  <>
+                    <Button 
+                      variant="text" 
+                      size="sm" 
+                      onClick={discardChanges}
+                      disabled={isThinking}
+                      leadingIcon={X}
+                    >
+                      Reject
+                    </Button>
+                    <Button
+                      variant="filled"
+                      size="sm"
+                      onClick={commitToPhysicalDisk}
+                      disabled={isThinking}
+                      leadingIcon={Check}
+                      className="shadow-lg shadow-primary/20"
+                    >
+                      Approve & Write
+                    </Button>
+                  </>
+                ) : diffData?.type === 'github_pr' ? (
                   <Button
                     variant="filled"
                     size="sm"
