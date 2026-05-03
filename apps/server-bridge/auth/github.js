@@ -9,11 +9,24 @@ const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 const GITHUB_USER_URL = 'https://api.github.com/user';
 const GITHUB_EMAILS_URL = 'https://api.github.com/user/emails';
 
+// Validate required environment variables
+const requiredEnvVars = ['GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', 'GITHUB_REDIRECT_URI'];
+const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+if (missingVars.length > 0) {
+  console.error('[GitHub OAuth] Missing required environment variables:', missingVars.join(', '));
+}
+
 /**
  * GET /api/auth/github
  * Redirect user to GitHub's consent screen
  */
 router.get('/github', (req, res) => {
+  if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_REDIRECT_URI) {
+    return res.status(500).json({
+      error: 'OAuth not configured',
+      message: 'GITHUB_CLIENT_ID and GITHUB_REDIRECT_URI environment variables must be set'
+    });
+  }
   const params = new URLSearchParams({
     client_id: process.env.GITHUB_CLIENT_ID,
     redirect_uri: process.env.GITHUB_REDIRECT_URI,
@@ -80,6 +93,13 @@ router.get('/github/callback', async (req, res) => {
     res.redirect(`${frontendUrl}/auth/callback?token=${jwt}`);
   } catch (err) {
     console.error('[GitHub OAuth Error]', err);
+    // Provide more detailed error for authentication failures
+    if (err.message?.includes('Bad credentials') || err.message?.includes('invalid')) {
+      return res.status(500).json({
+        error: 'GitHub authentication failed: invalid credentials',
+        message: 'Check that GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET environment variables are correctly set'
+      });
+    }
     res.status(500).json({ error: 'GitHub authentication failed.' });
   }
 });

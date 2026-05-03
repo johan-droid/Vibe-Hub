@@ -8,11 +8,24 @@ const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 
+// Validate required environment variables
+const requiredEnvVars = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REDIRECT_URI'];
+const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+if (missingVars.length > 0) {
+  console.error('[Google OAuth] Missing required environment variables:', missingVars.join(', '));
+}
+
 /**
  * GET /api/auth/google
  * Redirect user to Google's consent screen
  */
 router.get('/google', (req, res) => {
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_REDIRECT_URI) {
+    return res.status(500).json({
+      error: 'OAuth not configured',
+      message: 'GOOGLE_CLIENT_ID and GOOGLE_REDIRECT_URI environment variables must be set'
+    });
+  }
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID,
     redirect_uri: process.env.GOOGLE_REDIRECT_URI,
@@ -71,6 +84,13 @@ router.get('/google/callback', async (req, res) => {
     res.redirect(`${frontendUrl}/auth/callback?token=${jwt}`);
   } catch (err) {
     console.error('[Google OAuth Error]', err);
+    // Provide more detailed error for invalid_client
+    if (err.message?.includes('invalid_client')) {
+      return res.status(500).json({
+        error: 'Google authentication failed: invalid_client',
+        message: 'Check that GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables are correctly set'
+      });
+    }
     res.status(500).json({ error: 'Google authentication failed.' });
   }
 });
