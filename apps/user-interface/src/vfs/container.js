@@ -237,7 +237,8 @@ export class VFSContainer {
    */
   async grepSearch(pattern, filePattern) {
     const matches = [];
-    const regex = new RegExp(pattern, 'gi');
+    const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, (m) => '\\' + m);
+    const regex = new RegExp(escapedPattern, 'gi');
 
     const limit = pLimit(10);
     const walk = async (dir) => {
@@ -253,7 +254,10 @@ export class VFSContainer {
           if (entry.isDirectory()) {
             await walk(fullPath);
           } else {
-            if (filePattern && !fullPath.match(new RegExp(filePattern.replace('*', '.*')))) return;
+            if (filePattern) {
+              const escapedFilePattern = filePattern.replace(/[.+?^${}()|[\]\\]/g, (m) => '\\' + m).replace(/\*/g, '.*');
+              if (!fullPath.match(new RegExp(escapedFilePattern))) return;
+            }
 
             try {
               const content = await this.instance.fs.readFile(fullPath, 'utf-8');
@@ -303,7 +307,8 @@ export class VFSContainer {
     };
 
     const targetPatterns = kind ? patterns[kind] : [...patterns.function, ...patterns.class];
-    const queryRegex = new RegExp(query, 'i');
+    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, (m) => '\\' + m);
+    const queryRegex = new RegExp(escapedQuery, 'i');
 
     const walk = async (dir) => {
       try {
