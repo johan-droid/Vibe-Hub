@@ -7,7 +7,11 @@ const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.PROD
  */
 class ApiClient {
   constructor() {
-    this.token = localStorage.getItem('selina_token') || null;
+    this.token = localStorage.getItem('selina_token') || localStorage.getItem('vibe_token') || null;
+    if (localStorage.getItem('vibe_token') && !localStorage.getItem('selina_token')) {
+        localStorage.setItem('selina_token', this.token);
+        localStorage.removeItem('vibe_token');
+    }
   }
 
   setToken(token) {

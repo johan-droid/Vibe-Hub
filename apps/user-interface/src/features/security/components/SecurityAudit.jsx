@@ -7,11 +7,21 @@ export default function SecurityAudit() {
   const [scanning, setScanning] = useState(false);
   const [results, setResults] = useState(null);
 
+  const [auditTimeout, setAuditTimeout] = useState(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (auditTimeout) clearTimeout(auditTimeout);
+    };
+  }, [auditTimeout]);
+
   const runAudit = () => {
     setScanning(true);
     setResults(null);
+    if (auditTimeout) clearTimeout(auditTimeout);
+
     // Mock network request / scan delay
-    setTimeout(() => {
+    const timeout = setTimeout(() => {
       setScanning(false);
       setResults({
         score: 92,
@@ -22,6 +32,7 @@ export default function SecurityAudit() {
         ]
       });
     }, 2500);
+    setAuditTimeout(timeout);
   };
 
   return (

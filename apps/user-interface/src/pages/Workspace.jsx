@@ -68,7 +68,11 @@ export default function Workspace() {
     setTerminalH((h) => Math.max(MIN_TERM_H, Math.min(MAX_TERM_H, h - delta)));
   }, []);
 
-  if (!user && !localStorage.getItem('selina_token')) {
+  if (!user && !localStorage.getItem('selina_token') && !localStorage.getItem('vibe_token')) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (!user && !localStorage.getItem('selina_token') && !localStorage.getItem('vibe_token')) {
     return <Navigate to="/" replace />;
   }
 

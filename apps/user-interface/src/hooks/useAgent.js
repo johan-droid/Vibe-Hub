@@ -29,7 +29,7 @@ export function useAgent() {
     setDiffData, setVfsTree, setStreamingMessage,
   } = useStore();
 
-  const token = localStorage.getItem('selina_token');
+  const token = localStorage.getItem('selina_token') || localStorage.getItem('vibe_token');
 
   useEffect(() => {
     if (!token || socketRef.current) return;
