@@ -83,7 +83,7 @@
   html { scroll-behavior: smooth; }
 
   body {
-    @apply bg-surface text-on-surface font-sans antialiased overflow-hidden;
+    @apply bg-surface text-on-surface font-sans antialiased overflow-x-hidden;
     font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
     text-rendering: geometricPrecision;
   }

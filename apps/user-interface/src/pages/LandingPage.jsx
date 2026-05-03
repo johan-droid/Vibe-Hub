@@ -140,14 +140,13 @@ export default function LandingPage() {
   const authError = searchParams.get('error');
 
   const handleLaunch = (provider = 'google') => {
-    if (user || api.hasToken()) {
-      navigate('/workspace');
-      return;
-    }
-
     window.location.href = provider === 'github'
       ? api.getGithubAuthUrl()
       : api.getGoogleAuthUrl();
+  };
+
+  const openWorkspace = () => {
+    navigate('/workspace');
   };
 
   const features = [
@@ -182,6 +181,9 @@ export default function LandingPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            {user && (
+              <Button variant="tonal" size="sm" onClick={openWorkspace}>Open workspace</Button>
+            )}
             <Button variant="outlined" size="sm" leadingIcon={Github} className="hidden border-outline-variant/50 text-on-surface sm:flex" onClick={() => handleLaunch('github')}>GitHub</Button>
             <Button variant="filled" size="sm" leadingIcon={GoogleIcon} onClick={() => handleLaunch('google')}>Sign in</Button>
           </div>
@@ -212,6 +214,11 @@ export default function LandingPage() {
               </motion.p>
 
               <motion.div variants={fadeUp} className="mt-10 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
+                {user && (
+                  <Button size="lg" variant="tonal" trailingIcon={ArrowRight} onClick={openWorkspace} className="h-14 px-8">
+                    Open workspace
+                  </Button>
+                )}
                 <Button size="lg" leadingIcon={GoogleIcon} trailingIcon={ArrowRight} onClick={() => handleLaunch('google')} className="h-14 px-8">
                   Continue with Google
                 </Button>
