@@ -10,6 +10,27 @@ import http from 'isomorphic-git/http/web';
  * - grep_search: Text search across all files
  * - create_file: Renamed from write_file (for new files only)
  */
+
+// A simple Promise queue to limit concurrency and avoid EMFILE errors
+const pLimit = (concurrency) => {
+  let active = 0;
+  const queue = [];
+  const next = () => {
+    if (queue.length > 0 && active < concurrency) {
+      active++;
+      const { fn, resolve, reject } = queue.shift();
+      fn().then(resolve).catch(reject).finally(() => {
+        active--;
+        next();
+      });
+    }
+  };
+  return (fn) => new Promise((resolve, reject) => {
+    queue.push({ fn, resolve, reject });
+    next();
+  });
+};
+
 export class VFSContainer {
   constructor() {
     this.instance = null;
@@ -218,21 +239,21 @@ export class VFSContainer {
     const matches = [];
     const regex = new RegExp(pattern, 'gi');
 
+    const limit = pLimit(10);
     const walk = async (dir) => {
       try {
         const entries = await this.instance.fs.readdir(dir, { withFileTypes: true });
 
-        for (const entry of entries) {
+        // Process all checks and reads concurrently for speed
+        await Promise.all(entries.map((entry) => limit(async () => {
           const fullPath = dir === '.' ? entry.name : `${dir}/${entry.name}`;
 
-          const ignored = await this.isPathIgnored(fullPath);
-          if (ignored) continue;
+          if (await this.isPathIgnored(fullPath)) return;
 
           if (entry.isDirectory()) {
             await walk(fullPath);
           } else {
-            // Apply file pattern filter
-            if (filePattern && !fullPath.match(new RegExp(filePattern.replace('*', '.*')))) continue;
+            if (filePattern && !fullPath.match(new RegExp(filePattern.replace('*', '.*')))) return;
 
             try {
               const content = await this.instance.fs.readFile(fullPath, 'utf-8');
@@ -240,20 +261,18 @@ export class VFSContainer {
 
               for (let i = 0; i < lines.length; i++) {
                 if (regex.test(lines[i])) {
+                  if (matches.length >= 50) return; // Cap results
                   matches.push({
                     file: fullPath,
                     line: i + 1,
                     content: lines[i].trim().slice(0, 120),
                   });
-                  if (matches.length >= 50) return; // Cap results
                 }
                 regex.lastIndex = 0; // Reset global regex
               }
-            } catch {
-              // Binary file or unreadable — skip
-            }
+            } catch {}
           }
-        }
+        })));
       } catch {}
     };
 
@@ -287,36 +306,39 @@ export class VFSContainer {
     const queryRegex = new RegExp(query, 'i');
 
     const walk = async (dir) => {
-      const entries = await this.instance.fs.readdir(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        const fullPath = dir === '.' ? entry.name : `${dir}/${entry.name}`;
-        if (await this.isPathIgnored(fullPath)) continue;
+      try {
+        const entries = await this.instance.fs.readdir(dir, { withFileTypes: true });
 
-        if (entry.isDirectory()) {
-          await walk(fullPath);
-        } else if (fullPath.match(/\.(js|jsx|ts|tsx|py|go|rs|c|cpp|h)$/)) {
-          const content = await this.instance.fs.readFile(fullPath, 'utf-8');
-          const lines = content.split('\n');
-          
-          for (let i = 0; i < lines.length; i++) {
-            for (const p of targetPatterns) {
-              let match;
-              while ((match = p.exec(lines[i])) !== null) {
-                const name = match[1];
-                if (queryRegex.test(name)) {
-                  symbols.push({
-                    name,
-                    file: fullPath,
-                    line: i + 1,
-                    kind: kind || (p === patterns.class[0] ? 'class' : 'function'),
-                  });
+        await Promise.all(entries.map((entry) => limit(async () => {
+          const fullPath = dir === '.' ? entry.name : `${dir}/${entry.name}`;
+          if (await this.isPathIgnored(fullPath)) return;
+
+          if (entry.isDirectory()) {
+            await walk(fullPath);
+          } else if (fullPath.match(/\.(js|jsx|ts|tsx|py|go|rs|c|cpp|h)$/)) {
+            const content = await this.instance.fs.readFile(fullPath, 'utf-8');
+            const lines = content.split('\n');
+
+            for (let i = 0; i < lines.length; i++) {
+              for (const p of targetPatterns) {
+                let match;
+                while ((match = p.exec(lines[i])) !== null) {
+                  const name = match[1];
+                  if (queryRegex.test(name)) {
+                    symbols.push({
+                      name,
+                      file: fullPath,
+                      line: i + 1,
+                      kind: kind || (p === patterns.class[0] ? 'class' : 'function'),
+                    });
+                  }
                 }
+                p.lastIndex = 0;
               }
-              p.lastIndex = 0;
             }
           }
-        }
-      }
+        })));
+      } catch {}
     };
 
     await walk('.');

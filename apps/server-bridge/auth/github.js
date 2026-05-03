@@ -38,8 +38,13 @@ router.get('/github', (req, res) => {
  */
 router.get('/github/callback', async (req, res) => {
   const { code, state } = req.query;
-  const match = req.headers.cookie?.match(/(?:^|;\s*)github_oauth_state=([^;]*)/);
-  const cookieState = match ? match[1] : null;
+
+  let cookieState = req.cookies?.github_oauth_state;
+  if (!cookieState && req.headers.cookie) {
+    const match = req.headers.cookie.match(/(?:^|;\s*)github_oauth_state=([^;]*)/);
+    if (match) cookieState = match[1];
+  }
+
 
   if (!code) return res.status(400).json({ error: 'Missing authorization code.' });
   if (!state || !cookieState || state !== cookieState) {

@@ -15,10 +15,12 @@ export default function DiffViewer({ onApply, onDiscard }) {
   const { diffData, isThinking, neuralStatus } = useStore();
 
   const diffChunk = useMemo(() => {
-    if (!diffData || !diffData.oldValue || !diffData.newValue) return null;
+    if (!diffData) return null;
+    const diffToRender = Array.isArray(diffData) ? diffData[0] : diffData;
+    if (!diffToRender.oldValue || !diffToRender.newValue) return null;
     
-    const oldLines = diffData.oldValue.split('\n');
-    const newLines = diffData.newValue.split('\n');
+    const oldLines = diffToRender.oldValue.split('\n');
+    const newLines = diffToRender.newValue.split('\n');
     
     let firstDiff = 0;
     while (firstDiff < oldLines.length && oldLines[firstDiff] === newLines[firstDiff]) {
@@ -59,7 +61,7 @@ export default function DiffViewer({ onApply, onDiscard }) {
                 <div className="w-px h-4 bg-outline-variant/30 mx-2" />
                 <Surface elevation={1} shape="full" className="flex items-center gap-2 px-3 py-1 border border-outline-variant/30 bg-surface-container-high/40">
                   <FileCode size={12} className="text-primary opacity-60" />
-                  <span className="label-small text-on-surface-variant font-mono">{diffData.path}</span>
+                  <span className="label-small text-on-surface-variant font-mono">{Array.isArray(diffData) ? `${diffData.length} files (PR View)` : diffData.path}</span>
                 </Surface>
               </motion.div>
             )}
