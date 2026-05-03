@@ -1,5 +1,5 @@
 const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.PROD
-  ? 'https://vibe-hub-bridge.onrender.com'
+  ? 'https://selina-bridge.onrender.com'
   : '');
 
 /**
@@ -7,17 +7,17 @@ const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.PROD
  */
 class ApiClient {
   constructor() {
-    this.token = localStorage.getItem('vibe_token') || null;
+    this.token = localStorage.getItem('selina_token') || null;
   }
 
   setToken(token) {
     this.token = token;
-    localStorage.setItem('vibe_token', token);
+    localStorage.setItem('selina_token', token);
   }
 
   clearToken() {
     this.token = null;
-    localStorage.removeItem('vibe_token');
+    localStorage.removeItem('selina_token');
   }
 
   get headers() {

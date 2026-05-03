@@ -45,7 +45,7 @@ export default function LandingPage() {
   const user = useStore(s => s.user);
 
   const handleLaunch = (provider = 'google') => {
-    if (localStorage.getItem('vibe_token')) {
+    if (localStorage.getItem('selina_token')) {
       navigate('/workspace');
     } else {
       window.location.href = provider === 'github' 
@@ -116,7 +116,7 @@ export default function LandingPage() {
             <Button size="lg" trailingIcon={ArrowRight} className="h-14 px-10 text-base rounded-2xl" onClick={() => handleLaunch()}>
               Get Started
             </Button>
-            <Button variant="outlined" size="lg" className="h-14 px-10 text-base rounded-2xl border-outline-variant/50" onClick={() => window.open('https://github.com/johan-droid/Vibe-Hub', '_blank')}>
+            <Button variant="outlined" size="lg" className="h-14 px-10 text-base rounded-2xl border-outline-variant/50" onClick={() => window.open('https://github.com/johan-droid/Selina-Hub', '_blank')}>
               View Protocol
             </Button>
           </div>
@@ -153,7 +153,7 @@ export default function LandingPage() {
                     <div className="flex-1 flex flex-col gap-6">
                        <Surface elevation={1} shape="lg" className="flex-1 border border-outline-variant/10 p-6 bg-surface-container/20">
                           <div className="font-mono text-xs text-primary/40 space-y-2">
-                             <div>vibe@hub:~$ agent --init --bento</div>
+                             <div>selina@hub:~$ agent --init --bento</div>
                              <div className="text-on-surface/30">Initializing Material 3 protocol...</div>
                              <div className="text-secondary/60">✓ Design system generated.</div>
                           </div>

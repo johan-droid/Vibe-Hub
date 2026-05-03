@@ -1,5 +1,5 @@
 /**
- * server-bridge/index.js — Vibe-Hub Central Nervous System v4.1
+ * server-bridge/index.js — Selina-Hub Central Nervous System v4.1
  */
 
 import './load-env.js';
@@ -730,7 +730,7 @@ async function start() {
   server.listen(port, () => {
     const pad = (s) => s.padEnd(42);
     console.log('\n' + '═'.repeat(50));
-    console.log(`  🧠 Vibe-Hub Server v4.1`);
+    console.log(`  🧠 Selina-Hub Server v4.1`);
     console.log('─'.repeat(50));
     console.log(`  ${pad('HTTP  →')} http://localhost:${port}`);
     console.log(`  ${pad('WS    →')} ws://localhost:${port}/ws`);
