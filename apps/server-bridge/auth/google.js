@@ -14,6 +14,10 @@ const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
  * Redirect user to Google's consent screen
  */
 router.get('/google', (req, res) => {
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return res.status(500).json({ error: 'Google OAuth is not configured on the server.' });
+  }
+
   const state = crypto.randomBytes(32).toString('hex');
   res.cookie('google_oauth_state', state, {
     httpOnly: true,
@@ -39,6 +43,10 @@ router.get('/google', (req, res) => {
  * Exchange authorization code for tokens, then create/update user
  */
 router.get('/google/callback', async (req, res) => {
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return res.status(500).json({ error: 'Google OAuth is not configured on the server.' });
+  }
+
   const { code, state } = req.query;
 
   let cookieState = req.cookies?.google_oauth_state;

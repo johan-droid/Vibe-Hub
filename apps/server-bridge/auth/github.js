@@ -15,6 +15,10 @@ const GITHUB_EMAILS_URL = 'https://api.github.com/user/emails';
  * Redirect user to GitHub's consent screen
  */
 router.get('/github', (req, res) => {
+  if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
+    return res.status(500).json({ error: 'GitHub OAuth is not configured on the server.' });
+  }
+
   const state = crypto.randomBytes(32).toString('hex');
   res.cookie('github_oauth_state', state, {
     httpOnly: true,
@@ -37,6 +41,10 @@ router.get('/github', (req, res) => {
  * Exchange code for access token, fetch user profile
  */
 router.get('/github/callback', async (req, res) => {
+  if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
+    return res.status(500).json({ error: 'GitHub OAuth is not configured on the server.' });
+  }
+
   const { code, state } = req.query;
 
   let cookieState = req.cookies?.github_oauth_state;
