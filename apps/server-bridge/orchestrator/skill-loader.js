@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { buildSkillBridgePrompt } from './skill-graph.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SKILLS_DIR = join(__dirname, 'skills');
@@ -75,7 +76,7 @@ const TOKEN_BUDGETS = {
  * Build the system prompt with TOKEN BUDGETING.
  * Skills are loaded in priority order and dropped if over budget.
  */
-export function buildSystemPrompt({ domain, projectTree, packageJson, userMemory, brainJournal, effortLevel = 'standard' }) {
+export function buildSystemPrompt({ domain, projectTree, packageJson, userMemory, brainJournal, effortLevel = 'standard', skillProfile = null }) {
   const budget = TOKEN_BUDGETS[effortLevel] || TOKEN_BUDGETS.standard;
   const sections = [];
   let usedTokens = 0;
@@ -107,14 +108,17 @@ export function buildSystemPrompt({ domain, projectTree, packageJson, userMemory
     addIfBudget(`# Project Memory\n${userMemory}`, 'user memory');
   }
 
-  // Priority 3: Brain journal (recent learnings — high value, low cost)
+  // Priority 3: Skill switcher bridge (CS-wide MOE fabric)
+  addIfBudget(buildSkillBridgePrompt(skillProfile), 'skill switcher bridge');
+
+  // Priority 4: Brain journal (recent learnings — high value, low cost)
   if (brainJournal?.length > 0) {
     const maxEntries = effortLevel === 'quick' ? 5 : 15;
     const entries = brainJournal.slice(-maxEntries).map(e => `- [${e.type}] ${e.content}`).join('\n');
     addIfBudget(`# Brain Journal\n${entries}`, 'brain journal');
   }
 
-  // Priority 4: Domain skill (only for standard+)
+  // Priority 5: Domain skill (only for standard+)
   if (effortLevel !== 'quick') {
     if (['code', 'ui', 'debug'].includes(domain)) {
       addIfBudget(loadSkill('surgical-edit'), 'surgical-edit');
@@ -124,7 +128,7 @@ export function buildSystemPrompt({ domain, projectTree, packageJson, userMemory
     addIfBudget(loadSkill('cloud-sandboxing'), 'cloud-sandboxing');
   }
 
-  // Priority 5: Stack-specific skills (only for deep)
+  // Priority 6: Stack-specific skills (only for deep)
   if (effortLevel === 'deep') {
     const stack = detectStack(projectTree, packageJson);
     for (const tech of stack) {

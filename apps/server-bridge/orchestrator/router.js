@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { selectSkillProfile } from './skill-graph.js';
 
 // Resolve directory for skill files
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -60,11 +61,18 @@ export class Router {
     async route(prompt) {
         console.log(`[Router] Processing intent for prompt: "${prompt.slice(0, 50)}..."`);
 
+        const skillProfile = selectSkillProfile(prompt);
+        if (skillProfile.selectedSkills.length > 0) {
+            const primary = skillProfile.selectedSkills[0];
+            console.log(`[Router] Skill graph match: ${primary.label} -> ${skillProfile.domain}`);
+            return await this.getExpertConfig(skillProfile.domain, skillProfile);
+        }
+
         // L1: Fast Heuristic Pass (Zero Latency)
         for (const [domain, config] of Object.entries(this.domains)) {
             if (config.triggers.some(regex => regex.test(prompt))) {
                 console.log(`[Router] L1 Match: ${domain}`);
-                return await this.getExpertConfig(domain);
+                return await this.getExpertConfig(domain, skillProfile);
             }
         }
 
@@ -96,7 +104,7 @@ export class Router {
             
             if (this.domains[domain]) {
                 console.log(`[Router] L2 Match: ${domain}`);
-                return await this.getExpertConfig(domain);
+                return await this.getExpertConfig(domain, skillProfile);
             }
         } catch (err) {
             console.error(`[Router] L2 classification failed: ${err.message}`);
@@ -104,13 +112,13 @@ export class Router {
 
         // Fallback
         console.log('[Router] Falling back to "code" expert.');
-        return await this.getExpertConfig('code');
+        return await this.getExpertConfig('code', skillProfile);
     }
 
     /**
      * Loads the system instruction (expert skill) from disk with caching.
      */
-    async getExpertConfig(domain) {
+    async getExpertConfig(domain, skillProfile = null) {
         const config = this.domains[domain] || this.domains.code;
         const skillPath = path.join(SKILLS_DIR, config.file);
 
@@ -126,7 +134,8 @@ export class Router {
 
         return {
             domain,
-            systemPrompt: this.skillCache.get(skillPath)
+            systemPrompt: this.skillCache.get(skillPath),
+            skillProfile,
         };
     }
 

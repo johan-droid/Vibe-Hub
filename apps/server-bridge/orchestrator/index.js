@@ -143,9 +143,10 @@ export class AgentOrchestrator {
 
     try {
       if (emitState) emitState('thinking', 'Identifying target expertise...');
-      const { domain } = await this.router.route(prompt);
+      const { domain, skillProfile } = await this.router.route(prompt);
       const expert = this.experts[domain] || this.experts.code;
       expert.effortLevel = effortLevel;
+      this.context.sessionState.skillProfile = skillProfile;
       
       if (emitState) emitState('thinking', `Projecting expertise to the ${domain}Expert...`);
 
@@ -166,6 +167,7 @@ export class AgentOrchestrator {
         userMemory,
         brainJournal,
         effortLevel,
+        skillProfile,
       });
 
       const onMemoryUpdateInternal = async (entry) => {
