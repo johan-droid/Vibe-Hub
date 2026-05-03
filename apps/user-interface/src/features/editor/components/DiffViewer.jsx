@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Eye, Zap, Code, FileCode, GitPullRequest, ChevronRight, X, Check, Github } from 'lucide-react';
+import { Eye, Zap, Code, FileCode, GitPullRequest, ChevronRight, X, Check, Github, Terminal } from 'lucide-react';
 import ReactDiffViewer from 'react-diff-viewer-continued';
 import { useStore } from '../../../store/useStore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -207,32 +207,65 @@ export default function DiffViewer({ onApply, onDiscard }) {
               </Surface>
             </motion.div>
           ) : (
-            <motion.div 
+            <motion.div
               key="empty-state"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="h-full flex flex-col items-center justify-center text-center gap-8"
+              className="h-full flex flex-col"
             >
-              <Surface elevation={1} shape="2xl" className="w-32 h-32 flex items-center justify-center bg-surface-container-high border border-outline-variant/20 relative group">
-                <div className="absolute inset-0 bg-primary/5 rounded-[inherit] scale-0 group-hover:scale-110 transition-transform duration-700 ease-emphasized" />
-                <motion.div
-                  animate={{ 
-                    rotate: [0, 90, 180, 270, 360],
-                    scale: [1, 1.1, 1]
-                  }}
-                  transition={{ repeat: Infinity, duration: 10, ease: "linear" }}
-                >
-                  <Zap size={48} className="text-primary opacity-20" />
-                </motion.div>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-16 h-16 border-2 border-primary/10 border-dashed rounded-full animate-[spin_20s_linear_infinite]" />
+              {/* Empty State Header */}
+              <div className="flex h-14 items-center justify-between px-6 border-b border-outline-variant/20 bg-surface-container-low/30">
+                <div className="flex items-center gap-2 text-xs text-on-surface-variant">
+                  <GitPullRequest size={14} className="text-primary" />
+                  <span>No active diff</span>
                 </div>
-              </Surface>
-              <div className="space-y-3">
-                <h3 className="headline-small text-on-surface opacity-40">Ready for Intelligence</h3>
-                <p className="label-large text-on-surface-variant opacity-30 max-w-xs">
-                  Propose a change through chat to initiate a surgical code mutation.
-                </p>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-on-surface-variant/50">Connected providers:</span>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-5 h-5 rounded bg-surface-container-high flex items-center justify-center" title="GitHub">
+                      <Github size={12} />
+                    </div>
+                    <div className="w-5 h-5 rounded bg-surface-container-high flex items-center justify-center" title="Google">
+                      <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/></svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Empty State Content */}
+              <div className="flex-1 flex flex-col items-center justify-center px-6">
+                <div className="w-full max-w-lg">
+                  {/* Status Cards */}
+                  <div className="grid grid-cols-3 gap-3 mb-8">
+                    <div className="p-4 rounded-xl bg-surface-container-high/50 border border-outline-variant/20 text-center">
+                      <Eye size={20} className="mx-auto mb-2 text-primary/60" />
+                      <p className="text-xs text-on-surface-variant">Review</p>
+                      <p className="text-sm font-medium text-on-surface">Pending</p>
+                    </div>
+                    <div className="p-4 rounded-xl bg-surface-container-high/50 border border-outline-variant/20 text-center">
+                      <Code size={20} className="mx-auto mb-2 text-secondary/60" />
+                      <p className="text-xs text-on-surface-variant">Changes</p>
+                      <p className="text-sm font-medium text-on-surface">None</p>
+                    </div>
+                    <div className="p-4 rounded-xl bg-surface-container-high/50 border border-outline-variant/20 text-center">
+                      <Check size={20} className="mx-auto mb-2 text-tertiary/60" />
+                      <p className="text-xs text-on-surface-variant">Status</p>
+                      <p className="text-sm font-medium text-on-surface">Idle</p>
+                    </div>
+                  </div>
+
+                  {/* Main Message */}
+                  <div className="text-center">
+                    <h3 className="headline-small text-on-surface mb-2">Projection Ready</h3>
+                    <p className="text-sm text-on-surface-variant mb-6 max-w-sm mx-auto">
+                      Ask Selina to make changes, review PRs, or audit code. Diffs will appear here for surgical review.
+                    </p>
+                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-surface-container-high border border-outline-variant/30">
+                      <Zap size={14} className="text-primary" />
+                      <span className="text-xs text-on-surface-variant">AI-powered diff engine active</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </motion.div>
           )}
