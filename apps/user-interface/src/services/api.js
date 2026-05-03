@@ -1,6 +1,15 @@
 const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.PROD
-  ? 'https://selina-bridge.onrender.com'
+  ? 'https://vibe-hub-bridge.onrender.com'
   : '');
+
+async function readError(res) {
+  try {
+    const data = await res.json();
+    return data.error || data.message || res.statusText;
+  } catch {
+    return res.statusText || 'Request failed';
+  }
+}
 
 /**
  * Centralized API client for all REST calls to the backend.
@@ -8,6 +17,15 @@ const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.PROD
 class ApiClient {
   constructor() {
     this.token = localStorage.getItem('selina_token') || null;
+  }
+
+  getToken() {
+    this.token = localStorage.getItem('selina_token') || this.token;
+    return this.token;
+  }
+
+  hasToken() {
+    return Boolean(this.getToken());
   }
 
   setToken(token) {
@@ -22,13 +40,15 @@ class ApiClient {
 
   get headers() {
     const h = { 'Content-Type': 'application/json' };
-    if (this.token) h['Authorization'] = `Bearer ${this.token}`;
+    const token = this.getToken();
+    if (token) h.Authorization = `Bearer ${token}`;
     return h;
   }
 
   async get(path) {
     const res = await fetch(`${API_BASE}${path}`, { headers: this.headers });
-    if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+    if (res.status === 401) this.clearToken();
+    if (!res.ok) throw new Error(await readError(res));
     return res.json();
   }
 
@@ -38,7 +58,8 @@ class ApiClient {
       headers: this.headers,
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+    if (res.status === 401) this.clearToken();
+    if (!res.ok) throw new Error(await readError(res));
     return res.json();
   }
 

@@ -1,21 +1,57 @@
-import React, { useEffect, Suspense, lazy } from 'react';
+import React, { useEffect, Suspense, lazy, useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { useStore } from './store/useStore';
+import { api } from './services/api';
 
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const Workspace = lazy(() => import('./pages/Workspace'));
 const AuthCallback = lazy(() => import('./pages/AuthCallback'));
 
 function App() {
-  const { hydrated, theme } = useStore();
+  const { hydrated, user, setUser } = useStore();
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
     if (hydrated) {
-      document.documentElement.setAttribute('data-theme', 'dark'); // Enforce dark theme
+      document.documentElement.setAttribute('data-theme', 'dark');
     }
   }, [hydrated]);
 
-  if (!hydrated) return null;
+  useEffect(() => {
+    if (!hydrated) return;
+
+    let cancelled = false;
+
+    async function restoreSession() {
+      if (!api.hasToken() || user) {
+        setAuthReady(true);
+        return;
+      }
+
+      try {
+        const profile = await api.me();
+        if (!cancelled) setUser(profile);
+      } catch (err) {
+        api.clearToken();
+        if (!cancelled) setUser(null);
+      } finally {
+        if (!cancelled) setAuthReady(true);
+      }
+    }
+
+    restoreSession();
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, user, setUser]);
+
+  if (!hydrated || !authReady) {
+    return (
+      <div className="w-screen h-screen bg-surface-container-lowest flex items-center justify-center">
+        <div className="h-11 w-11 rounded-2xl border border-outline-variant/40 bg-surface-container animate-pulse" />
+      </div>
+    );
+  }
 
   return (
     <BrowserRouter>

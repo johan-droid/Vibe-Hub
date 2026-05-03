@@ -54,8 +54,8 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        display: ['Outfit', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['Outfit', 'ui-sans-serif', 'sans-serif'],
+        display: ['Outfit', 'ui-sans-serif', 'sans-serif'],
         mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
       },
       borderRadius: {
@@ -65,6 +65,7 @@ export default {
         'shape-lg': '16px',
         'shape-xl': '28px',
         'shape-2xl': '32px',
+        '3xl': '36px',
       },
       transitionTimingFunction: {
         'emphasized': 'cubic-bezier(0.2, 0, 0, 1)',

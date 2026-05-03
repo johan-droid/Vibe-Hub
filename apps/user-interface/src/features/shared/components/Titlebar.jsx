@@ -1,130 +1,112 @@
 import React from 'react';
-import { Settings, Sidebar as SidebarIcon, MessageSquare, Cpu, Layers, Sun, Moon } from 'lucide-react';
+import { Settings, Sidebar as SidebarIcon, MessageSquare, Cpu, Layers, Sun, Moon, Activity } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
 import { IconButton } from './IconButton';
 import { Surface } from './Surface';
 import { Chip } from './Chip';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 /**
- * Titlebar — Material 3 Command Bar
- * The primary orchestration anchor for the workspace.
+ * Titlebar anchors the workspace with compact navigation and reliable status.
  */
 export default function Titlebar({ onOpenSettings }) {
-  const { 
-    vfsStatus, 
+  const {
+    vfsStatus = 'idle',
     sidebarCollapsed, setSidebarCollapsed,
     chatCollapsed, setChatCollapsed,
     activeTab, setActiveTab,
-    theme, toggleTheme
+    theme, toggleTheme,
+    user,
   } = useStore();
 
+  const statusLabel = vfsStatus === 'ready' ? 'Workspace ready' : vfsStatus === 'booting' ? 'Booting VFS' : 'Local session';
+
   return (
-    <Surface 
-      elevation={2} 
-      shape="none" 
-      className="h-16 border-b border-outline-variant/20 flex items-center justify-between px-8 select-none z-50 bg-surface-container-low/50 backdrop-blur-2xl"
+    <Surface
+      elevation={0}
+      shape="none"
+      className="h-16 border-b border-outline-variant/30 bg-surface-container-lowest/82 backdrop-blur-2xl flex items-center justify-between px-4 md:px-6 select-none z-50"
     >
-      <div className="flex items-center gap-8">
-        {/* Brand */}
-        <div className="flex items-center gap-4 group cursor-pointer">
-          <Surface 
-            elevation={4} 
-            shape="lg" 
-            className="w-10 h-10 bg-primary flex items-center justify-center shadow-2xl shadow-primary/30 group-hover:rotate-12 transition-transform duration-700 ease-emphasized"
-          >
-            <Cpu size={22} className="text-on-primary" />
-          </Surface>
-          <div className="flex flex-col">
-            <span className="headline-small font-black tracking-tighter text-on-surface leading-none uppercase">
-              SELINA
-            </span>
-            <span className="label-small font-bold tracking-[0.3em] text-primary uppercase opacity-60">
-              Swarm_Mind
-            </span>
+      <div className="flex min-w-0 items-center gap-4 md:gap-6">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 text-primary shadow-lg shadow-primary/10">
+            <Cpu size={20} />
+          </div>
+          <div className="hidden min-w-0 sm:block">
+            <div className="flex items-center gap-2">
+              <span className="title-small leading-none">Vibe Hub</span>
+              <span className="h-1.5 w-1.5 rounded-full bg-tertiary animate-soft-pulse" />
+            </div>
+            <span className="label-small mt-1 block truncate text-on-surface-variant">{user?.name || 'Selina Workspace'}</span>
           </div>
         </div>
 
-        <div className="h-8 w-px bg-outline-variant/30 mx-2" />
+        <div className="hidden h-8 w-px bg-outline-variant/40 md:block" />
 
-        {/* Tab Switching (M3 Segmented Button Style) */}
-        <Surface elevation={0} shape="full" className="flex items-center bg-surface-container-high/40 p-1 border border-outline-variant/10">
+        <div className="hidden items-center rounded-full border border-outline-variant/35 bg-surface-container-low p-1 md:flex">
           {[
             { id: 'diff', label: 'Projection', icon: Layers },
-            { id: 'editor', label: 'Workspace', icon: SidebarIcon }
+            { id: 'editor', label: 'Editor', icon: SidebarIcon },
           ].map((tab) => (
-            <button 
+            <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className="relative group h-9 flex items-center px-6 rounded-full transition-all duration-500 overflow-hidden"
+              className="relative flex h-9 items-center gap-2 rounded-full px-4 text-on-surface-variant transition hover:text-on-surface"
             >
               {activeTab === tab.id && (
-                <motion.div 
-                  layoutId="active-tab-bg"
-                  className="absolute inset-0 bg-primary rounded-full -z-10 shadow-lg shadow-primary/20"
-                />
+                <motion.div layoutId="active-tab-bg" className="absolute inset-0 rounded-full bg-primary/15 ring-1 ring-primary/25" />
               )}
-              <tab.icon 
-                size={14} 
-                className={`transition-colors duration-500 ${activeTab === tab.id ? 'text-on-primary' : 'text-on-surface-variant opacity-40'}`} 
-              />
-              <span className={`ml-3 label-medium font-bold transition-colors duration-500 ${activeTab === tab.id ? 'text-on-primary' : 'text-on-surface-variant opacity-40'}`}>
-                {tab.label}
-              </span>
+              <tab.icon size={14} className="relative z-10" />
+              <span className="relative z-10 label-small">{tab.label}</span>
             </button>
           ))}
-        </Surface>
+        </div>
       </div>
 
-      <div className="flex items-center gap-6">
-        {/* VFS Status */}
-        <Chip 
-          label={vfsStatus} 
+      <div className="flex items-center gap-2 md:gap-3">
+        <Chip
+          label={statusLabel}
           variant="tonal"
-          color={vfsStatus === 'ready' ? 'secondary' : 'error'}
-          icon={Cpu}
+          color={vfsStatus === 'ready' ? 'secondary' : 'primary'}
+          icon={Activity}
+          className="hidden sm:inline-flex"
         />
-
-        <div className="flex items-center gap-2">
-          <IconButton 
-            icon={theme === 'dark' ? Sun : Moon} 
-            onClick={toggleTheme}
-            variant="standard"
-            size="md"
-            className="text-on-surface-variant hover:text-primary transition-transform duration-700 hover:rotate-45"
-            aria-label="Toggle Theme"
-            title="Toggle Theme"
-          />
-          <div className="w-px h-4 bg-outline-variant/30 mx-1" />
-          <IconButton 
-            icon={SidebarIcon} 
-            active={!sidebarCollapsed}
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            variant="tonal"
-            size="md"
-            aria-label="Toggle Sidebar"
-            title="Toggle Sidebar"
-          />
-          <IconButton 
-            icon={MessageSquare} 
-            active={!chatCollapsed}
-            onClick={() => setChatCollapsed(!chatCollapsed)}
-            variant="tonal"
-            size="md"
-            aria-label="Toggle Chat"
-            title="Toggle Chat"
-          />
-          <div className="w-px h-6 bg-outline-variant/30 mx-3" />
-          <IconButton 
-            icon={Settings} 
-            onClick={onOpenSettings}
-            variant="standard"
-            size="lg"
-            className="bg-surface-container-highest/50 hover:rotate-90 transition-transform duration-700"
-            aria-label="Settings"
-            title="Settings"
-          />
-        </div>
+        <IconButton
+          icon={theme === 'dark' ? Sun : Moon}
+          onClick={toggleTheme}
+          variant="standard"
+          size="md"
+          className="text-on-surface-variant hover:text-primary"
+          aria-label="Toggle theme"
+          title="Toggle theme"
+        />
+        <IconButton
+          icon={SidebarIcon}
+          active={!sidebarCollapsed}
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          variant="tonal"
+          size="md"
+          aria-label="Toggle sidebar"
+          title="Toggle sidebar"
+        />
+        <IconButton
+          icon={MessageSquare}
+          active={!chatCollapsed}
+          onClick={() => setChatCollapsed(!chatCollapsed)}
+          variant="tonal"
+          size="md"
+          aria-label="Toggle chat"
+          title="Toggle chat"
+        />
+        <IconButton
+          icon={Settings}
+          onClick={onOpenSettings}
+          variant="standard"
+          size="md"
+          className="border border-outline-variant/30 bg-surface-container-low hover:text-primary"
+          aria-label="Settings"
+          title="Settings"
+        />
       </div>
     </Surface>
   );

@@ -51,6 +51,7 @@ export const useStore = create(
       terminalOutput: [], // Array<string>, max MAX_TERMINAL_LINES entries
 
       // VFS & Code State
+      vfsStatus: 'idle',
       vfsTree: [],
       openFiles: [], // Array<{ path, content, dirty }>
       activeFilePath: null,
@@ -100,7 +101,8 @@ export const useStore = create(
       })),
 
       // VFS & Code
-      setVfsTree: (tree) => set({ vfsTree: tree }),
+      setVfsStatus: (status) => set({ vfsStatus: status }),
+      setVfsTree: (tree) => set({ vfsTree: tree, vfsStatus: tree?.length ? 'ready' : 'idle' }),
       
       openFile: (path, content) => set((state) => {
         const isAlreadyOpen = state.openFiles.find(f => f.path === path);

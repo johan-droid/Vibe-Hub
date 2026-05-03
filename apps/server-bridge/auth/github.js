@@ -10,6 +10,17 @@ const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 const GITHUB_USER_URL = 'https://api.github.com/user';
 const GITHUB_EMAILS_URL = 'https://api.github.com/user/emails';
 
+function getFrontendUrl() {
+  const origin = process.env.UI_ORIGIN || (process.env.NODE_ENV === 'production'
+    ? 'https://vibe-hub-ui.onrender.com'
+    : 'http://localhost:5173');
+  return origin.replace(/\/$/, '');
+}
+
+function redirectWithError(res, error) {
+  return res.redirect(`${getFrontendUrl()}/auth/callback?error=${encodeURIComponent(error)}`);
+}
+
 // Validate required environment variables
 const requiredEnvVars = ['GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', 'GITHUB_REDIRECT_URI'];
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
@@ -23,10 +34,7 @@ if (missingVars.length > 0) {
  */
 router.get('/github', (req, res) => {
   if (missingVars.length > 0) {
-    return res.status(500).json({
-      error: 'OAuth not configured',
-      message: `Missing required environment variables: ${missingVars.join(', ')}`
-    });
+    return redirectWithError(res, 'oauth_not_configured');
   }
 
   const state = crypto.randomBytes(32).toString('hex');
@@ -34,7 +42,7 @@ router.get('/github', (req, res) => {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: 15 * 60 * 1000, // 15 minutes
+    maxAge: 15 * 60 * 1000,
   });
 
   const params = new URLSearchParams({
@@ -52,10 +60,7 @@ router.get('/github', (req, res) => {
  */
 router.get('/github/callback', async (req, res) => {
   if (missingVars.length > 0) {
-    return res.status(500).json({
-      error: 'OAuth not configured',
-      message: `Missing required environment variables: ${missingVars.join(', ')}`
-    });
+    return redirectWithError(res, 'oauth_not_configured');
   }
 
   const { code, state } = req.query;
@@ -66,17 +71,14 @@ router.get('/github/callback', async (req, res) => {
     if (match) cookieState = match[1];
   }
 
-
-  if (!code) return res.status(400).json({ error: 'Missing authorization code.' });
+  if (!code) return redirectWithError(res, 'missing_code');
   if (!state || !cookieState || state !== cookieState) {
-    return res.status(403).json({ error: 'Invalid OAuth state.' });
+    return redirectWithError(res, 'invalid_state');
   }
 
-  // Clear state cookie
   res.clearCookie('github_oauth_state');
 
   try {
-    // Exchange code for token
     const tokenRes = await fetch(GITHUB_TOKEN_URL, {
       method: 'POST',
       headers: {
@@ -93,13 +95,11 @@ router.get('/github/callback', async (req, res) => {
     const tokens = await tokenRes.json();
     if (tokens.error) throw new Error(tokens.error_description || tokens.error);
 
-    const headers = { Authorization: `Bearer ${tokens.access_token}`, 'User-Agent': 'Selina' };
+    const headers = { Authorization: `Bearer ${tokens.access_token}`, 'User-Agent': 'Vibe-Hub' };
 
-    // Get user profile
     const userRes = await fetch(GITHUB_USER_URL, { headers });
     const profile = await userRes.json();
 
-    // Get primary email (may be private)
     let email = profile.email;
     if (!email) {
       const emailsRes = await fetch(GITHUB_EMAILS_URL, { headers });
@@ -108,7 +108,6 @@ router.get('/github/callback', async (req, res) => {
       email = primary?.email;
     }
 
-    // Upsert user in DB
     const user = await upsertUser({
       email: email || `${profile.login}@github.noreply`,
       name: profile.name || profile.login,
@@ -117,22 +116,11 @@ router.get('/github/callback', async (req, res) => {
       providerId: String(profile.id),
     });
 
-    // Generate JWT and redirect
     const jwt = generateToken(user);
-    const frontendUrl = process.env.NODE_ENV === 'production'
-      ? 'https://vibe-hub-ui.onrender.com'
-      : 'http://localhost:5173';
-    res.redirect(`${frontendUrl}/auth/callback?token=${jwt}`);
+    res.redirect(`${getFrontendUrl()}/auth/callback?token=${encodeURIComponent(jwt)}`);
   } catch (err) {
     console.error('[GitHub OAuth Error]', err);
-    // Provide more detailed error for authentication failures
-    if (err.message?.includes('Bad credentials') || err.message?.includes('invalid')) {
-      return res.status(500).json({
-        error: 'GitHub authentication failed: invalid credentials',
-        message: 'Check that GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET environment variables are correctly set'
-      });
-    }
-    res.status(500).json({ error: 'GitHub authentication failed.' });
+    redirectWithError(res, 'provider_failed');
   }
 });
 

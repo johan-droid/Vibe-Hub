@@ -1,19 +1,16 @@
 import React from 'react';
-import { motion, useScroll, useTransform } from 'framer-motion';
-import { 
-  Brain, Sparkles, ArrowRight, Cpu, Zap, Shield, GitBranch, 
-  MessageSquare, Layout, Terminal, Code2, Globe, Database, Github
+import { motion } from 'framer-motion';
+import {
+  ArrowRight, Brain, CheckCircle2, Code2, Github, GitPullRequestArrow,
+  Layers3, LockKeyhole, MessageSquare, Play, ShieldCheck, Sparkles, TerminalSquare, Zap
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { api } from '../services/api';
-import { Surface } from '../features/shared/components/Surface';
 import { Button } from '../features/shared/components/Button';
-import { BentoGrid, BentoCard } from '../features/shared/components/BentoGrid';
-
 
 const GoogleIcon = ({ size = 18 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <svg width={size} height={size} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
     <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
     <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
@@ -21,217 +18,289 @@ const GoogleIcon = ({ size = 18 }) => (
   </svg>
 );
 
-const SwarmBackground = () => (
-  <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
-    <motion.div 
-      animate={{ 
-        scale: [1, 1.1, 1],
-        rotate: [0, 5, 0],
-        opacity: [0.3, 0.5, 0.3]
-      }}
-      transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-      className="absolute -top-[10%] -left-[10%] w-[60%] h-[60%] bg-primary/5 blur-[120px] rounded-full" 
-    />
-    <motion.div 
-      animate={{ 
-        scale: [1, 1.2, 1],
-        rotate: [0, -10, 0],
-        opacity: [0.2, 0.4, 0.2]
-      }}
-      transition={{ duration: 25, repeat: Infinity, ease: "linear", delay: 2 }}
-      className="absolute -bottom-[10%] -right-[10%] w-[70%] h-[70%] bg-secondary/5 blur-[160px] rounded-full" 
-    />
-    <div className="absolute inset-0 opacity-[0.02] [background-image:linear-gradient(to_right,#888_1px,transparent_1px),linear-gradient(to_bottom,#888_1px,transparent_1px)] [background-size:40px_40px]" />
-  </div>
-);
+const fadeUp = {
+  hidden: { opacity: 0, y: 18 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: [0.2, 0, 0, 1] } },
+};
+
+const errorCopy = {
+  oauth_not_configured: 'OAuth is not configured on the server yet.',
+  invalid_state: 'Your sign-in request expired. Please try again.',
+  missing_code: 'The provider did not return a sign-in code.',
+  provider_failed: 'The provider sign-in failed. Please verify credentials and try again.',
+  profile_failed: 'We could not load your profile after sign-in.',
+};
+
+function AmbientBackground() {
+  return (
+    <div className="absolute inset-0 -z-10 overflow-hidden bg-surface-container-lowest">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,hsl(var(--primary)/0.16),transparent_32%),radial-gradient(circle_at_85%_18%,hsl(var(--secondary)/0.12),transparent_30%),linear-gradient(180deg,hsl(var(--surface-container-lowest)),hsl(var(--surface))_45%,hsl(var(--surface-container-lowest)))]" />
+      <div className="absolute left-[8%] top-20 h-72 w-72 rounded-full bg-primary/10 blur-[120px] animate-drift" />
+      <div className="absolute bottom-20 right-[10%] h-80 w-80 rounded-full bg-secondary/10 blur-[140px] animate-drift [animation-delay:3s]" />
+      <div className="absolute inset-0 opacity-[0.045] [background-image:linear-gradient(to_right,#fff_1px,transparent_1px),linear-gradient(to_bottom,#fff_1px,transparent_1px)] [background-size:56px_56px]" />
+    </div>
+  );
+}
+
+function ProductPreview() {
+  const files = ['src/App.jsx', 'server/auth.js', 'workspace/theme.css'];
+  return (
+    <motion.div variants={fadeUp} className="relative mx-auto w-full max-w-6xl">
+      <div className="absolute -inset-6 rounded-[2.5rem] bg-primary/10 blur-3xl" />
+      <div className="app-chrome relative overflow-hidden rounded-[2rem]">
+        <div className="flex h-12 items-center justify-between border-b border-outline-variant/35 px-5">
+          <div className="flex items-center gap-2">
+            <span className="h-3 w-3 rounded-full bg-error/70" />
+            <span className="h-3 w-3 rounded-full bg-secondary/80" />
+            <span className="h-3 w-3 rounded-full bg-tertiary/80" />
+          </div>
+          <div className="hidden rounded-full border border-outline-variant/30 bg-surface-container-low px-4 py-1.5 text-[10px] font-mono uppercase tracking-[0.22em] text-on-surface-variant sm:block">
+            Vibe Hub Workspace
+          </div>
+          <div className="flex items-center gap-2 text-primary">
+            <Sparkles size={14} />
+            <span className="label-small">Live Agent</span>
+          </div>
+        </div>
+
+        <div className="grid min-h-[520px] grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)_320px]">
+          <aside className="hidden border-r border-outline-variant/30 bg-surface-container-low/70 p-4 md:block">
+            <div className="mb-5 flex items-center justify-between">
+              <span className="label-small text-on-surface-variant">Explorer</span>
+              <GitPullRequestArrow size={14} className="text-tertiary" />
+            </div>
+            <div className="space-y-2">
+              {files.map((file, index) => (
+                <div key={file} className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs ${index === 0 ? 'bg-primary/10 text-primary' : 'text-on-surface-variant'}`}>
+                  <Code2 size={14} />
+                  <span className="truncate">{file}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-8 rounded-2xl border border-outline-variant/30 bg-surface-container p-4">
+              <p className="label-small mb-3 text-secondary">Swarm Queue</p>
+              <div className="space-y-3 text-xs text-on-surface-variant">
+                <div className="flex items-center justify-between"><span>Design audit</span><CheckCircle2 size={14} className="text-tertiary" /></div>
+                <div className="flex items-center justify-between"><span>Auth restore</span><span className="h-2 w-2 rounded-full bg-primary animate-soft-pulse" /></div>
+                <div className="flex items-center justify-between"><span>Build check</span><span className="h-2 w-2 rounded-full bg-outline" /></div>
+              </div>
+            </div>
+          </aside>
+
+          <main className="bg-surface-container-lowest/80 p-4 md:p-6">
+            <div className="mb-4 flex items-center justify-between rounded-2xl border border-outline-variant/30 bg-surface-container-low px-4 py-3">
+              <div>
+                <p className="label-small text-primary">Projection</p>
+                <h3 className="title-small">OAuthCallback.jsx</h3>
+              </div>
+              <Button size="sm" variant="tonal" leadingIcon={Play}>Run check</Button>
+            </div>
+            <div className="rounded-2xl border border-outline-variant/30 bg-[#070b10]/90 p-5 font-mono text-[12px] leading-7 text-on-surface-variant shadow-inner">
+              <p><span className="text-outline">01</span> <span className="text-tertiary">async</span> function restoreSession() {'{'}</p>
+              <p><span className="text-outline">02</span>   <span className="text-secondary">const</span> token = api.getToken();</p>
+              <p><span className="text-outline">03</span>   <span className="text-primary">if</span> (!token) return landing();</p>
+              <p><span className="text-outline">04</span>   profile = <span className="text-tertiary">await</span> api.me();</p>
+              <p><span className="text-outline">05</span>   openWorkspace(profile);</p>
+              <p><span className="text-outline">06</span> {'}'}</p>
+            </div>
+            <div className="mt-4 grid gap-4 sm:grid-cols-3">
+              {['Lint clean', 'Build ready', 'OAuth guarded'].map((label) => (
+                <div key={label} className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-4">
+                  <CheckCircle2 size={18} className="mb-3 text-tertiary" />
+                  <p className="label-small text-on-surface-variant">{label}</p>
+                </div>
+              ))}
+            </div>
+          </main>
+
+          <aside className="border-t border-outline-variant/30 bg-surface-container-low/75 p-4 md:border-l md:border-t-0">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Brain size={20} /></div>
+              <div>
+                <p className="title-small">Selina</p>
+                <p className="label-small text-primary">Ready</p>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div className="rounded-2xl bg-surface-container p-4 text-sm text-on-surface-variant">I can inspect, patch, test, and ship the workspace without making you babysit the repo.</div>
+              <div className="ml-auto max-w-[85%] rounded-2xl bg-primary/15 p-4 text-sm text-on-surface">Fix auth and make this look premium.</div>
+              <div className="rounded-2xl bg-surface-container p-4 text-sm text-on-surface-variant">Already on it. The interface deserves a tailored suit, not a glow-stick hoodie.</div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
 
 export default function LandingPage() {
-  const { scrollYProgress } = useScroll();
-  const y = useTransform(scrollYProgress, [0, 1], [0, -100]);
-  const opacity = useTransform(scrollYProgress, [0, 0.2], [1, 0]);
-  const scale = useTransform(scrollYProgress, [0, 0.2], [1, 0.95]);
-  
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const user = useStore(s => s.user);
+  const authError = searchParams.get('error');
 
   const handleLaunch = (provider = 'google') => {
-    if (localStorage.getItem('selina_token')) {
+    if (user || api.hasToken()) {
       navigate('/workspace');
-    } else {
-      window.location.href = provider === 'github' 
-        ? api.getGithubAuthUrl() 
-        : api.getGoogleAuthUrl();
+      return;
     }
+
+    window.location.href = provider === 'github'
+      ? api.getGithubAuthUrl()
+      : api.getGoogleAuthUrl();
   };
 
+  const features = [
+    { icon: Layers3, title: 'Workspace-first UI', desc: 'Editor, terminal, file tree, and chat stay composed under pressure.' },
+    { icon: LockKeyhole, title: 'OAuth session guard', desc: 'Google and GitHub sign-in restore cleanly and expire safely.' },
+    { icon: Zap, title: 'Agent orchestration', desc: 'A focused chat conduit routes plans, tool calls, and runtime feedback.' },
+    { icon: ShieldCheck, title: 'Production checks', desc: 'Designed around lint, build, server validation, and backend tests.' },
+  ];
+
   return (
-    <div className="min-h-screen bg-surface text-on-surface selection:bg-primary/20 selection:text-primary overflow-x-hidden">
-      <SwarmBackground />
+    <div className="min-h-screen overflow-x-hidden bg-surface-container-lowest text-on-surface selection:bg-primary/20 selection:text-primary">
+      <AmbientBackground />
 
-      {/* Navigation */}
-      <nav className="fixed top-0 inset-x-0 z-[100] h-20 glass border-b border-outline-variant/20">
-        <div className="max-w-7xl mx-auto px-4 md:px-8 h-full flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Surface elevation={3} shape="lg" className="w-10 h-10 bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
-              <Brain size={22} className="text-on-primary" />
-            </Surface>
-            <div className="flex flex-col">
-              <span className="font-display text-lg font-bold tracking-tight">Selina</span>
-              <span className="label-large text-primary opacity-60 !text-[8px]">Autonomous_Intelligence_v4.0</span>
+      <nav className="fixed inset-x-0 top-0 z-50 border-b border-outline-variant/30 bg-surface-container-lowest/70 backdrop-blur-2xl">
+        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-5 md:px-8">
+          <button onClick={() => navigate('/')} className="flex items-center gap-3 text-left">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 text-primary shadow-lg shadow-primary/10">
+              <Brain size={22} />
             </div>
-          </div>
+            <div>
+              <p className="title-small leading-none">Vibe Hub</p>
+              <p className="label-small mt-1 text-primary/80">Agentic IDE</p>
+            </div>
+          </button>
 
-          <div className="hidden lg:flex items-center gap-8">
-            {['Capabilities', 'Intelligence', 'Protocol'].map(item => (
-              <a key={item} href={`#${item.toLowerCase()}`} className="text-xs font-mono font-bold uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors">
+          <div className="hidden items-center gap-8 md:flex">
+            {['Preview', 'System', 'Security'].map((item) => (
+              <a key={item} href={`#${item.toLowerCase()}`} className="label-small text-on-surface-variant transition hover:text-on-surface">
                 {item}
               </a>
             ))}
           </div>
 
-          <div className="flex items-center gap-4">
-            <Button variant="filled" size="sm" leadingIcon={Github} className="hidden sm:flex border-outline-variant/50 bg-[#154634] text-white hover:bg-[#1d5b45]" onClick={() => handleLaunch('github')}>GitHub</Button>
-            <Button variant="filled" size="sm" leadingIcon={GoogleIcon} className="bg-[#3ba2f6] text-white hover:bg-[#2e82c5]" onClick={() => handleLaunch('google')}>Google</Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outlined" size="sm" leadingIcon={Github} className="hidden border-outline-variant/50 text-on-surface sm:flex" onClick={() => handleLaunch('github')}>GitHub</Button>
+            <Button variant="filled" size="sm" leadingIcon={GoogleIcon} onClick={() => handleLaunch('google')}>Sign in</Button>
           </div>
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <section className="relative pt-40 pb-20 px-8 flex flex-col items-center text-center">
-        <motion.div
-          style={{ opacity, scale }}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-          className="max-w-4xl"
-        >
-          <Surface elevation={1} shape="full" className="inline-flex items-center gap-2.5 px-4 py-1.5 border border-outline-variant/20 mb-8 bg-surface-container-low/40 backdrop-blur-md">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-            </span>
-            <span className="label-medium text-on-surface-variant font-mono uppercase tracking-[0.2em] text-[10px]">Neural_Swarm_Operational</span>
-          </Surface>
+      <main>
+        <section className="relative px-5 pb-20 pt-32 md:px-8 md:pb-28 md:pt-40">
+          <motion.div initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.08 } } }} className="mx-auto max-w-7xl">
+            {authError && (
+              <motion.div variants={fadeUp} className="mx-auto mb-8 max-w-3xl rounded-2xl border border-error/30 bg-error/10 px-5 py-4 text-sm text-on-error-container">
+                {errorCopy[authError] || 'Authentication failed. Please try again.'}
+              </motion.div>
+            )}
 
-          <h1 className="display-medium md:text-7xl mb-6 leading-[1.1] tracking-tight font-black">
-            The Agentic <br />
-            <span className="text-[#3ba2f6] italic">Operating System.</span>
-          </h1>
+            <div className="mx-auto max-w-4xl text-center">
+              <motion.div variants={fadeUp} className="mb-7 inline-flex items-center gap-3 rounded-full border border-outline-variant/40 bg-surface-container-low/70 px-4 py-2 text-on-surface-variant shadow-xl shadow-black/20 backdrop-blur-xl">
+                <span className="h-2 w-2 rounded-full bg-tertiary animate-soft-pulse" />
+                <span className="label-small">Premium agent workspace</span>
+              </motion.div>
 
-          <p className="text-lg md:text-xl text-on-surface-variant max-w-xl mx-auto leading-relaxed mb-10 opacity-70">
-            Selina is a professional-grade autonomous workspace. Powered by a specialized swarm of experts, orchestrated for surgical precision.
-          </p>
+              <motion.h1 variants={fadeUp} className="display-large mx-auto max-w-5xl leading-[0.92]">
+                A sharper cockpit for serious agentic work.
+              </motion.h1>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Button size="lg" variant="filled" leadingIcon={Github} className="h-14 px-10 text-base rounded-2xl bg-[#154634] text-white hover:bg-[#1d5b45]" onClick={() => handleLaunch('github')}>
-              Continue with GitHub
-            </Button>
-            <Button size="lg" variant="filled" leadingIcon={GoogleIcon} className="h-14 px-10 text-base rounded-2xl bg-[#3ba2f6] text-white hover:bg-[#2e82c5]" onClick={() => handleLaunch('google')}>
-              Continue with Google
-            </Button>
-          </div>
-        </motion.div>
+              <motion.p variants={fadeUp} className="mx-auto mt-7 max-w-2xl text-base leading-8 text-on-surface-variant md:text-lg">
+                Vibe Hub brings coding agents, OAuth-secured sessions, file context, terminal feedback, and workspace orchestration into one calm, high-signal interface.
+              </motion.p>
 
-        {/* IDE Preview Bento */}
-        <motion.div
-          initial={{ opacity: 0, y: 60 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1, delay: 0.2, ease: [0.2, 0, 0, 1] }}
-          className="mt-32 w-full max-w-6xl px-4 md:px-0"
-        >
-          <Surface elevation={1} shape="2xl" className="p-2 border border-outline-variant/30 shadow-2xl bg-surface-container-low/40 backdrop-blur-2xl overflow-x-auto">
-            <Surface elevation={4} shape="xl" className="aspect-[16/9] overflow-hidden border border-outline-variant/20">
-               <div className="w-full h-full flex flex-col">
-                  {/* Mock IDE Header */}
-                  <div className="h-12 border-b border-outline-variant/20 flex items-center px-6 gap-3 bg-surface-container/50">
-                    <div className="flex gap-1.5">
-                      {[1,2,3].map(i => <div key={i} className="w-2.5 h-2.5 rounded-full bg-on-surface/10" />)}
-                    </div>
-                    <div className="flex-1" />
-                    <div className="flex items-center gap-4">
-                       <div className="flex items-center gap-2 label-large text-primary opacity-40"><Database size={12} /> Local_VFS</div>
-                       <div className="flex items-center gap-2 label-large text-secondary opacity-40"><Globe size={12} /> Neural_Sync</div>
-                    </div>
-                  </div>
-                  {/* Mock IDE Body */}
-                  <div className="flex-1 flex p-6 gap-6 bg-surface-container-lowest/30">
-                    <Surface elevation={1} shape="lg" className="w-64 border border-outline-variant/10 p-4 bg-surface-container/20">
-                       <div className="space-y-3">
-                          {[1,2,3,4,5].map(i => <div key={i} className="h-2 w-full bg-on-surface/5 rounded-full" />)}
-                       </div>
-                    </Surface>
-                    <div className="flex-1 flex flex-col gap-6">
-                       <Surface elevation={1} shape="lg" className="flex-1 border border-outline-variant/10 p-6 bg-surface-container/20">
-                          <div className="font-mono text-xs text-primary/40 space-y-2">
-                             <div>selina@hub:~$ agent --init --bento</div>
-                             <div className="text-on-surface/30">Initializing Material 3 protocol...</div>
-                             <div className="text-secondary/60">✓ Design system generated.</div>
-                          </div>
-                       </Surface>
-                       <Surface elevation={1} shape="lg" className="h-32 border border-outline-variant/10 p-4 bg-surface-container/20" />
-                    </div>
-                  </div>
-               </div>
-            </Surface>
-          </Surface>
-        </motion.div>
-      </section>
+              <motion.div variants={fadeUp} className="mt-10 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
+                <Button size="lg" leadingIcon={GoogleIcon} trailingIcon={ArrowRight} onClick={() => handleLaunch('google')} className="h-14 px-8">
+                  Continue with Google
+                </Button>
+                <Button size="lg" variant="elevated" leadingIcon={Github} onClick={() => handleLaunch('github')} className="h-14 px-8 border border-outline-variant/40">
+                  Continue with GitHub
+                </Button>
+              </motion.div>
 
-      {/* Expertise Section */}
-      <section id="capabilities" className="py-24 relative">
-        <div className="max-w-6xl mx-auto px-4 md:px-8">
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <h2 className="headline-small md:text-4xl mb-4 font-bold tracking-tight">Selina: Expert Orchestration.</h2>
-            <p className="text-on-surface-variant max-w-lg mx-auto text-base opacity-60">
-              Generic models fail at scale. Selina uses a specialized swarm to handle domain-specific logic.
-            </p>
+              <motion.div variants={fadeUp} className="mt-7 flex flex-wrap justify-center gap-3 text-xs text-on-surface-variant">
+                {['No password layer', 'JWT session restore', 'Protected workspace'].map((item) => (
+                  <span key={item} className="inline-flex items-center gap-2 rounded-full border border-outline-variant/30 bg-surface-container-low/60 px-3 py-1.5">
+                    <CheckCircle2 size={13} className="text-tertiary" /> {item}
+                  </span>
+                ))}
+              </motion.div>
+            </div>
+
+            <div id="preview" className="mt-20">
+              <ProductPreview />
+            </div>
           </motion.div>
+        </section>
 
-          <BentoGrid cols={4}>
-            {[
-              { icon: Code2, title: 'Logic Architect', desc: 'Surgical code generation and recursive pattern analysis.', span: 2, color: 'text-primary' },
-              { icon: Layout, title: 'UX Architect', desc: 'Material 3 design systems and motion engineering.', span: 2, color: 'text-secondary' },
-              { icon: Zap, title: 'Neural Debugger', desc: 'Root-cause isolation through automated sandboxing.', span: 2, color: 'text-error' },
-              { icon: GitBranch, title: 'Git Master', desc: 'Secure repository sync and conflict resolution.', span: 2, color: 'text-tertiary' },
-            ].map((feature, i) => (
-              <BentoCard key={i} span={feature.span} className="group hover:bg-surface-container-high transition-colors duration-500">
+        <section id="system" className="px-5 py-20 md:px-8">
+          <div className="mx-auto max-w-7xl">
+            <div className="mb-10 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+              <div>
+                <p className="label-small mb-4 text-primary">System Design</p>
+                <h2 className="headline-large max-w-2xl">Premium where it matters: hierarchy, trust, speed.</h2>
+              </div>
+              <p className="max-w-md text-sm leading-7 text-on-surface-variant">
+                The new direction removes visual clutter while preserving a distinct technical identity: crisp panels, confident spacing, meaningful status, and calm motion.
+              </p>
+            </div>
+
+            <div className="bento-grid">
+              {features.map((feature, index) => (
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  whileInView={{ opacity: 1, scale: 1 }}
+                  key={feature.title}
+                  initial={{ opacity: 0, y: 18 }}
+                  whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
-                  transition={{ delay: i * 0.1 }}
+                  transition={{ delay: index * 0.06, duration: 0.5 }}
+                  className="bento-card min-h-[220px]"
                 >
-                  <div className="w-10 h-10 flex items-center justify-center mb-5 bg-on-surface/5 rounded-xl group-hover:scale-110 transition-transform duration-500">
-                    <feature.icon size={20} className={feature.color} />
+                  <div className="mb-8 flex h-12 w-12 items-center justify-center rounded-2xl border border-outline-variant/35 bg-surface-container-high text-primary">
+                    <feature.icon size={22} />
                   </div>
-                  <h3 className="title-small text-lg mb-2 font-bold">{feature.title}</h3>
-                  <p className="text-sm text-on-surface-variant leading-relaxed opacity-60">{feature.desc}</p>
+                  <h3 className="title-large mb-3">{feature.title}</h3>
+                  <p className="text-sm leading-7 text-on-surface-variant">{feature.desc}</p>
                 </motion.div>
-              </BentoCard>
-            ))}
-          </BentoGrid>
-        </div>
-      </section>
+              ))}
+            </div>
+          </div>
+        </section>
 
-      {/* Footer */}
-      <footer className="py-20 border-t border-outline-variant/30 bg-surface-container-lowest">
-        <div className="max-w-7xl mx-auto px-8 flex flex-col md:flex-row justify-between items-center gap-10">
-          <div className="flex items-center gap-4 opacity-50">
-            <Brain size={24} className="text-primary" />
-            <span className="font-display font-bold text-xl">Selina</span>
+        <section id="security" className="px-5 pb-24 md:px-8">
+          <div className="mx-auto max-w-7xl rounded-[2rem] border border-outline-variant/35 bg-surface-container-low/75 p-6 shadow-2xl shadow-black/25 backdrop-blur-2xl md:p-10">
+            <div className="grid gap-8 md:grid-cols-[1fr_1.2fr] md:items-center">
+              <div>
+                <p className="label-small mb-4 text-secondary">OAuth Repair</p>
+                <h2 className="headline-large mb-4">Sign-in now has one source of truth.</h2>
+                <p className="text-sm leading-7 text-on-surface-variant">
+                  Frontend API URLs are centralized, token failures clear stale state, callback errors become readable UI, and backend redirects return to `UI_ORIGIN`.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {['Google OAuth', 'GitHub OAuth', 'Session restore', 'Protected route'].map((item) => (
+                  <div key={item} className="rounded-2xl border border-outline-variant/30 bg-surface-container p-4">
+                    <ShieldCheck size={18} className="mb-3 text-tertiary" />
+                    <p className="label-small text-on-surface-variant">{item}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-          <div className="flex gap-12 label-large text-on-surface-variant">
-            <a href="#" className="hover:text-primary transition-colors">Documentation</a>
-            <a href="#" className="hover:text-primary transition-colors">Security</a>
-            <a href="#" className="hover:text-primary transition-colors">API</a>
+        </section>
+      </main>
+
+      <footer className="border-t border-outline-variant/30 px-5 py-10 md:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col justify-between gap-5 text-sm text-on-surface-variant md:flex-row md:items-center">
+          <div className="flex items-center gap-3">
+            <Brain size={18} className="text-primary" />
+            <span>Vibe Hub / Selina</span>
           </div>
-          <div className="text-[10px] font-mono text-on-surface-variant font-bold uppercase tracking-[0.3em] opacity-30">
-            © 2026 Agentic Design Systems
+          <div className="flex flex-wrap gap-5 label-small">
+            <a href="#preview" className="hover:text-on-surface">Preview</a>
+            <a href="#system" className="hover:text-on-surface">System</a>
+            <a href="#security" className="hover:text-on-surface">Security</a>
           </div>
         </div>
       </footer>

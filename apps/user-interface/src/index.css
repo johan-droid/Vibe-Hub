@@ -4,40 +4,39 @@
 
 @layer base {
   :root {
-    /* --- Material 3 Tonal Palette (Dark Mode Base) --- */
-    --primary: 210 100% 56%; 
-    --on-primary: 210 100% 100%;
-    --primary-container: 210 80% 20%;
-    --on-primary-container: 210 100% 90%;
-    
-    --secondary: 165 80% 45%;
-    --on-secondary: 165 100% 100%;
-    --secondary-container: 165 80% 15%;
-    --on-secondary-container: 165 100% 85%;
-    
-    --tertiary: 280 60% 60%;
-    --on-tertiary: 280 100% 100%;
-    --tertiary-container: 280 60% 20%;
-    --on-tertiary-container: 280 100% 90%;
-    
-    --error: 0 75% 55%;
-    --on-error: 0 100% 100%;
-    --error-container: 0 75% 15%;
-    --on-error-container: 0 100% 85%;
-    
-    --surface-dim: 222 47% 5%;
-    --surface: 222 47% 7%;
-    --surface-bright: 222 30% 11%;
-    --surface-container-lowest: 222 47% 4%;
-    --surface-container-low: 222 47% 6%;
-    --surface-container: 222 30% 9%;
-    --surface-container-high: 222 25% 13%;
-    --surface-container-highest: 222 20% 17%;
-    
-    --on-surface: 222 10% 93%;
-    --on-surface-variant: 222 10% 65%;
-    --outline: 222 10% 25%;
-    --outline-variant: 222 8% 18%;
+    --primary: 188 92% 55%;
+    --on-primary: 206 38% 8%;
+    --primary-container: 190 62% 16%;
+    --on-primary-container: 187 100% 88%;
+
+    --secondary: 35 92% 62%;
+    --on-secondary: 34 45% 10%;
+    --secondary-container: 33 55% 15%;
+    --on-secondary-container: 38 100% 86%;
+
+    --tertiary: 152 58% 54%;
+    --on-tertiary: 152 42% 8%;
+    --tertiary-container: 154 45% 15%;
+    --on-tertiary-container: 148 82% 86%;
+
+    --error: 4 83% 62%;
+    --on-error: 0 0% 100%;
+    --error-container: 3 54% 17%;
+    --on-error-container: 6 100% 88%;
+
+    --surface-dim: 220 29% 5%;
+    --surface: 220 26% 7%;
+    --surface-bright: 219 19% 16%;
+    --surface-container-lowest: 222 34% 4%;
+    --surface-container-low: 220 29% 7%;
+    --surface-container: 220 24% 10%;
+    --surface-container-high: 219 21% 14%;
+    --surface-container-highest: 218 18% 18%;
+
+    --on-surface: 42 24% 93%;
+    --on-surface-variant: 218 12% 68%;
+    --outline: 218 13% 38%;
+    --outline-variant: 218 15% 22%;
 
     --radius-full: 9999px;
     --radius-2xl: 1.5rem;
@@ -45,133 +44,107 @@
     --radius-lg: 0.75rem;
     --radius-md: 0.5rem;
     --radius-sm: 0.25rem;
-
-    /* --- Glassmorphism 2.0 Tokens --- */
-    --glass-blur: 24px;
-    --glass-opacity: 0.7;
-    --glass-border: 1px solid rgba(255, 255, 255, 0.05);
+    --glass-blur: 28px;
   }
 
   [data-theme='light'] {
-    /* --- Material 3 Tonal Palette (Light Mode) --- */
-    --primary: 210 100% 45%; 
-    --on-primary: 210 100% 100%;
-    --primary-container: 210 100% 90%;
-    --on-primary-container: 210 100% 15%;
-    
-    --secondary: 165 80% 35%;
-    --on-secondary: 165 100% 100%;
-    --secondary-container: 165 80% 90%;
-    --on-secondary-container: 165 100% 10%;
-    
-    --tertiary: 280 60% 45%;
-    --on-tertiary: 280 100% 100%;
-    --tertiary-container: 280 60% 90%;
-    --on-tertiary-container: 280 100% 15%;
-    
-    --error: 0 75% 45%;
-    --on-error: 0 100% 100%;
-    --error-container: 0 100% 90%;
-    --on-error-container: 0 100% 10%;
-    
-    --surface-dim: 222 10% 90%;
-    --surface: 222 10% 98%;
-    --surface-bright: 222 10% 100%;
-    --surface-container-lowest: 222 10% 100%;
-    --surface-container-low: 222 10% 96%;
-    --surface-container: 222 10% 94%;
-    --surface-container-high: 222 10% 92%;
-    --surface-container-highest: 222 10% 90%;
-    
-    --on-surface: 222 10% 15%;
-    --on-surface-variant: 222 10% 45%;
-    --outline: 222 10% 70%;
-    --outline-variant: 222 8% 85%;
+    --primary: 190 88% 36%;
+    --on-primary: 0 0% 100%;
+    --primary-container: 188 100% 89%;
+    --on-primary-container: 190 76% 13%;
+    --secondary: 33 86% 45%;
+    --on-secondary: 0 0% 100%;
+    --secondary-container: 38 100% 88%;
+    --on-secondary-container: 31 74% 15%;
+    --tertiary: 154 52% 36%;
+    --on-tertiary: 0 0% 100%;
+    --tertiary-container: 150 80% 88%;
+    --on-tertiary-container: 152 58% 14%;
+    --error: 4 76% 46%;
+    --on-error: 0 0% 100%;
+    --error-container: 6 100% 91%;
+    --on-error-container: 3 70% 18%;
+    --surface-dim: 42 18% 89%;
+    --surface: 42 34% 97%;
+    --surface-bright: 0 0% 100%;
+    --surface-container-lowest: 0 0% 100%;
+    --surface-container-low: 42 24% 95%;
+    --surface-container: 42 18% 92%;
+    --surface-container-high: 40 16% 88%;
+    --surface-container-highest: 40 14% 84%;
+    --on-surface: 220 20% 12%;
+    --on-surface-variant: 220 10% 38%;
+    --outline: 220 10% 66%;
+    --outline-variant: 220 12% 82%;
   }
 
-  * {
-    border-color: hsl(var(--outline-variant));
-  }
+  * { border-color: hsl(var(--outline-variant)); }
+
+  html { scroll-behavior: smooth; }
 
   body {
     @apply bg-surface text-on-surface font-sans antialiased overflow-hidden;
-    font-feature-settings: "rlig" 1, "calt" 1;
-    transition: background-color 0.5s cubic-bezier(0.2, 0, 0, 1), color 0.5s cubic-bezier(0.2, 0, 0, 1);
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    text-rendering: geometricPrecision;
   }
 
-  ::selection {
-    @apply bg-primary/20 text-primary;
-  }
-
-  ::-webkit-scrollbar { @apply w-1.5 h-1.5; }
+  ::selection { @apply bg-primary/20 text-primary; }
+  ::-webkit-scrollbar { @apply w-2 h-2; }
   ::-webkit-scrollbar-track { @apply bg-transparent; }
-  ::-webkit-scrollbar-thumb { @apply bg-on-surface/10 rounded-full hover:bg-on-surface/20 transition-colors; }
+  ::-webkit-scrollbar-thumb { @apply rounded-full bg-white/10 hover:bg-white/20; }
 }
 
 @layer components {
-  /* Bento Grid System */
+  .app-chrome {
+    @apply border border-outline-variant/40 bg-surface-container-low/80 shadow-2xl shadow-black/30 backdrop-blur-2xl;
+  }
+
+  .premium-panel {
+    @apply border border-outline-variant/35 bg-surface-container/80 shadow-xl shadow-black/20 backdrop-blur-xl;
+  }
+
+  .hairline-panel {
+    @apply border border-outline-variant/25 bg-surface-container-low/70;
+  }
+
+  .glass {
+    @apply border border-white/10 bg-surface-container-low/75 shadow-2xl shadow-black/25 backdrop-blur-[var(--glass-blur)];
+  }
+
   .bento-grid {
-    @apply grid gap-6 p-6;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    grid-auto-rows: minmax(220px, auto);
+    @apply grid gap-4 md:gap-5;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   }
 
   .bento-card {
-    @apply relative overflow-hidden transition-all duration-700 emphasized;
-    @apply bg-surface-container border border-outline-variant/30 rounded-[var(--radius-xl)];
+    @apply premium-panel relative overflow-hidden rounded-[var(--radius-xl)] p-6 transition duration-500 ease-emphasized;
   }
 
-  .bento-card:hover {
-    @apply bg-surface-container-high border-primary/30 -translate-y-1 shadow-2xl shadow-black/10;
-  }
+  .bento-card:hover { @apply -translate-y-1 border-primary/30 bg-surface-container-high/90; }
 
-  /* Glass Effects */
-  .glass {
-    @apply backdrop-blur-[var(--glass-blur)] bg-surface-container-lowest/70 border border-white/5 shadow-xl relative overflow-hidden;
-  }
-  
-  .glass::after {
-    content: '';
-    @apply absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none;
-  }
-
-  /* M3 Typography */
-  .display-large { @apply font-display text-6xl font-black tracking-tighter; }
-  .display-medium { @apply font-display text-4xl font-black tracking-tighter; }
-  .display-small { @apply font-display text-2xl font-black tracking-tight; }
-  
-  .headline-large { @apply font-display text-3xl font-bold tracking-tight; }
-  .headline-medium { @apply font-display text-2xl font-bold tracking-tight; }
-  .headline-small { @apply font-display text-xl font-bold tracking-tight; }
-
-  .title-large { @apply font-sans text-xl font-semibold; }
-  .title-medium { @apply font-sans text-lg font-semibold; }
-  .title-small { @apply font-sans text-base font-semibold; }
-
+  .display-large { @apply font-display text-6xl md:text-7xl font-black tracking-[-0.07em]; }
+  .display-medium { @apply font-display text-4xl md:text-6xl font-black tracking-[-0.06em]; }
+  .display-small { @apply font-display text-3xl font-black tracking-[-0.04em]; }
+  .headline-large { @apply font-display text-3xl md:text-4xl font-bold tracking-[-0.04em]; }
+  .headline-medium { @apply font-display text-2xl md:text-3xl font-bold tracking-[-0.035em]; }
+  .headline-small { @apply font-display text-xl font-bold tracking-[-0.025em]; }
+  .title-large { @apply font-display text-xl font-semibold tracking-[-0.02em]; }
+  .title-medium { @apply font-display text-lg font-semibold tracking-[-0.02em]; }
+  .title-small { @apply font-display text-base font-semibold tracking-[-0.01em]; }
   .body-large { @apply font-sans text-base font-medium; }
   .body-medium { @apply font-sans text-sm font-medium; }
   .body-small { @apply font-sans text-xs font-medium; }
+  .label-large { @apply font-mono text-[11px] uppercase tracking-[0.2em] font-bold; }
+  .label-medium { @apply font-mono text-[10px] uppercase tracking-[0.18em] font-bold; }
+  .label-small { @apply font-mono text-[9px] uppercase tracking-[0.16em] font-bold; }
 
-  .label-large { @apply font-mono text-[11px] uppercase tracking-[0.25em] font-black; }
-  .label-medium { @apply font-mono text-[10px] uppercase tracking-[0.2em] font-bold; }
-  .label-small { @apply font-mono text-[9px] uppercase tracking-[0.15em] font-bold; }
-
-  /* M3 Elevation Layers */
   .elevation-1 { @apply bg-surface-container-low shadow-sm; }
   .elevation-2 { @apply bg-surface-container shadow-md; }
   .elevation-3 { @apply bg-surface-container-high shadow-lg; }
   .elevation-4 { @apply bg-surface-container-highest shadow-xl; }
 
-  /* M3 State Layers */
-  .state-layer {
-    @apply absolute inset-0 bg-current opacity-0 transition-opacity duration-300 pointer-events-none;
-  }
-  .hover-layer:hover .state-layer { @apply opacity-[0.08]; }
-  .press-layer:active .state-layer { @apply opacity-[0.12]; }
-
-  /* Custom Utilities */
   .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-br from-primary via-primary/80 to-secondary;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-on-surface via-primary to-secondary;
   }
 
   .scrollbar-none::-webkit-scrollbar { display: none; }
@@ -182,21 +155,16 @@
   .ease-emphasized { transition-timing-function: cubic-bezier(0.2, 0, 0, 1); }
   .ease-standard { transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
 
-  @keyframes scan {
-    from { transform: translateY(-100%); }
-    to { transform: translateY(100%); }
+  @keyframes soft-pulse {
+    0%, 100% { opacity: 0.55; transform: scale(1); }
+    50% { opacity: 0.9; transform: scale(1.03); }
   }
 
-  @keyframes scan-reverse {
-    from { transform: translateY(100%); }
-    to { transform: translateY(-100%); }
+  @keyframes drift {
+    0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+    50% { transform: translate3d(16px, -18px, 0) rotate(2deg); }
   }
 
-  .animate-scan {
-    animation: scan 4s linear infinite;
-  }
-
-  .animate-scan-reverse {
-    animation: scan-reverse 4s linear infinite;
-  }
+  .animate-soft-pulse { animation: soft-pulse 3.2s ease-in-out infinite; }
+  .animate-drift { animation: drift 16s ease-in-out infinite; }
 }
