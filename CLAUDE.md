@@ -45,7 +45,7 @@ Any other language request defaults to `en`. This is enforced in `user_env/conte
 
 ### 3. Deployment Lock
 
-All deployments must use **local Docker sandbox only**. No cloud deployment is permitted. This is enforced in `org_core/context_builder.js`.
+All deployments must use **GitHub Actions sandbox only**. No cloud deployment is permitted. This is enforced in `org_core/context_builder.js`.
 
 ### 4. XState Machine with Rollback
 
@@ -80,13 +80,13 @@ const graph = await semanticGraphBuilder.buildSemanticGraph(filePath);
 // Returns: { strict_imports, strict_exports, internal_functions, ast_node_count }
 ```
 
-### 6. Docker Sandbox Execution
+### 6. GitHub Actions Execution
 
-All generated code runs in ephemeral Alpine containers:
+All generated code runs in GitHub Actions runners:
 
 ```javascript
-// sandbox/docker_executor.js - SandboxExecutor
-const result = await SandboxExecutor.executeLocalDockerSandbox(codeToTest);
+// sandbox/github_executor.js - SandboxExecutor
+const result = await SandboxExecutor.triggerGitHubActionSandbox(codeToTest);
 // 10-second timeout, --network none, auto-cleanup
 ```
 
@@ -119,7 +119,7 @@ const result = await SandboxExecutor.executeLocalDockerSandbox(codeToTest);
 2. **Always validate user input** at API boundaries
 3. **Use parameterized queries** for database operations
 4. **Sanitize file paths** to prevent directory traversal
-5. **Docker containers run with `--network none'`** to prevent external calls
+5. **GitHub Actions containers run with `--network none'`** to prevent external calls
 
 ## Testing
 
@@ -183,7 +183,7 @@ Before committing changes:
 - [ ] No `require()` in new files (use `import`)
 - [ ] No `module.exports` (use `export`)
 - [ ] No cross-imports between `org_core/` and `user_env/`
-- [ ] Docker sandbox used for all code execution
+- [ ] GitHub Actions used for all code execution
 - [ ] Language restrictions enforced (en/hi/or only)
 
 ## Troubleshooting
@@ -194,9 +194,9 @@ Before committing changes:
 **"MODULE_NOT_FOUND" for local files**
 → Ensure file extensions included: `import x from './file.js'`
 
-**Docker sandbox fails**
-→ Verify Docker Desktop is running locally
-→ Check container logs with `docker logs <container>`
+**GitHub Actions sandbox fails**
+→ Verify GitHub tokens are active
+→ Check container logs with `GitHub Actions workflow logs`
 
 **State machine stuck in loop**
 → Check `maxRetries` limit (default: 3)
@@ -238,14 +238,14 @@ When working with Claude on this codebase, leverage these specific capabilities:
 - Always include **`.js` extension** in relative imports
 - Never **cross-import** between `org_core/` and `user_env/`
 - Always **enforce language lock** (en/hi/or only)
-- Always **use Docker sandbox** for code execution
+- Always **use GitHub Actions sandbox** for code execution
 - **WebSocket streaming** via Socket.io for XState transitions
 
 ## Architecture Decisions
 
 1. **Why XState?** — Deterministic state management with rollback capability
 2. **Why AST over vectors?** — Eliminates hallucinations in code dependencies
-3. **Why Docker sandbox?** — Offline execution, prevents malicious code
+3. **Why GitHub Actions sandbox?** — Offline execution, prevents malicious code
 4. **Why strict isolation?** — Prevents org constraints from bleeding into user prefs
 
 ## Contact & Resources

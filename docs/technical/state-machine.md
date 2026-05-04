@@ -42,7 +42,7 @@ The XState state machine is the core orchestration engine that manages the agent
                   ▼                  │
           ┌──────────────┐          │
           │  sandboxing  │          │
-          │(Docker exec) │          │
+          │(GitHub Actions) │          │
           └──────┬───────┘          │
                  │ success           │
                  │ error             │
@@ -104,7 +104,7 @@ Terminal States:
 
 ### sandboxing
 - **Purpose:** Execute code in Docker sandbox
-- **Service:** `executeLocalDockerSandbox`
+- **Service:** `triggerGitHubActionSandbox`
 - **Conditions:**
   - Success → `success`
   - Error → `evaluating_failure` (assign `sandboxError`)
@@ -201,10 +201,10 @@ async (context) => {
 }
 ```
 
-### executeLocalDockerSandbox
+### triggerGitHubActionSandbox
 ```javascript
 async (context) => {
-  return await SandboxExecutor.executeLocalDockerSandbox(context.generatedCode);
+  return await SandboxExecutor.triggerGitHubActionSandbox(context.generatedCode);
 }
 ```
 
@@ -313,7 +313,7 @@ expect(service.state.value).toBe('loading_contexts');
 ```
 
 ### Integration Tests
-- Mock services (LLM, Docker)
+- Mock services (LLM, GitHub Actions)
 - Verify full flow: idle → ... → success/fatal_failure
 - Test retry logic (3 failures → rollback)
 
@@ -324,7 +324,7 @@ expect(service.state.value).toBe('loading_contexts');
 - `orchestrator/state_machine.js` — Machine definition
 - `orchestrator/router.js` — Service interpreter
 - `orchestrator/llm_client.js` — LLM service
-- `sandbox/docker_executor.js` — Docker service
+- `sandbox/github_executor.js` — GitHub Actions service
 - `memory/loader.js` — AST service
 
 ---

@@ -100,7 +100,7 @@ Vibe-Hub is a self-contained system with three layers:
 
 1. **AI Code Generation** — Generate code via LLM with structured prompts
 2. **AST Analysis** — Parse code dependencies deterministically
-3. **Sandbox Testing** — Execute code in isolated Docker containers
+3. **Sandbox Testing** — Execute code in isolated GitHub Actions runners
 4. **Rollback Handling** — Retry failed attempts, pivot after 3 failures
 5. **User Approval** — Stage changes in VFS, require explicit approval
 6. **Real-time Streaming** — WebSocket updates during orchestration
@@ -122,7 +122,7 @@ Vibe-Hub is a self-contained system with three layers:
 
 - **Server:** Node.js 18+ LTS
 - **Database:** PostgreSQL 14+ with pgvector extension
-- **Docker:** Docker Desktop 4.0+ (local) or Docker Engine (production)
+- **Execution:** GitHub Actions runner
 - **Client:** Modern browsers (Chrome, Firefox, Safari, Edge)
 - **Network:** HTTPS required for production, WebSocket support
 
@@ -301,7 +301,7 @@ None (browser-based application)
 - **HTTP/HTTPS:** REST API calls
 - **WebSocket:** Real-time bidirectional (Socket.io)
 - **Database:** PostgreSQL TCP/IP
-- **Docker:** Docker Engine API (local socket)
+- **Execution:** GitHub REST API
 
 ---
 
@@ -323,8 +323,8 @@ None (browser-based application)
 | ID | Requirement | Priority |
 |----|-------------|----------|
 | NF-007 | No auto-disk-write without approval | Critical |
-| NF-008 | Sandbox network isolation (`--network none`) | Critical |
-| NF-009 | Sandbox resource limits (256MB memory, 0.5 CPU, 50 PID limit) | High |
+| NF-008 | GitHub Actions isolation | Critical |
+| NF-009 | GitHub Actions runner limits | High |
 | NF-010 | Input sanitization (path traversal prevention) | Critical |
 | NF-011 | Helmet.js security headers (CSP, HSTS, X-Frame-Options) | High |
 | NF-012 | Rate limiting (100/15min general, 30/min API, 5/min LLM) | High |
@@ -353,7 +353,7 @@ None (browser-based application)
 |-----------|-------------|-------------|
 | **Availability** | 99.5% uptime | Monitoring |
 | **Maintainability** | Modular architecture | Code review |
-| **Portability** | Docker containerization | Deployment test |
+| **Portability** | GitHub Actions / Render Hybrid | Deployment test |
 | **Scalability** | Horizontal scaling ready | Load test |
 | **Testability** | Unit + integration tests | Coverage > 80% |
 | **Usability** | Clear diff visualization | User feedback |
@@ -378,7 +378,7 @@ apps/server-bridge/
 ├── user_env/           [FLEXIBLE - No external deps]
 ├── orchestrator/       [INTEGRATION - Can import both]
 ├── memory/             [DATA ACCESS]
-├── sandbox/            [ISOLATION - Docker + resource limits]
+├── sandbox/            [ISOLATION - GitHub Actions + resource limits]
 ├── vfs/                [STAGING - Audit logging]
 ├── auth/               [SECURITY]
 ├── utils/              [UTILITIES - Logging, validation, security]
@@ -412,8 +412,8 @@ buildSemanticGraph error: parsing_ast → fatal_failure
 generateLLMCode success: drafting_code → sandboxing
 generateLLMCode error: drafting_code → rollback
 
-executeLocalDockerSandbox success: sandboxing → success
-executeLocalDockerSandbox error: sandboxing → evaluating_failure
+triggerGitHubActionSandbox success: sandboxing → success
+triggerGitHubActionSandbox error: sandboxing → evaluating_failure
 
 // Evaluating Failure (always transitions)
 retries < maxRetries: evaluating_failure → drafting_code (+ increment retries)
@@ -517,7 +517,7 @@ sessions (id, user_id, token, expires_at)
 
 ### 8.4 Secure Execution
 
-- **Docker Isolation:** No network, resource limits, ephemeral
+- **GitHub Actions Isolation:** No network, resource limits, ephemeral
 - **Filesystem:** VFS staging, no direct disk writes
 - **Secrets:** Environment variables only, no logging
 
@@ -535,7 +535,7 @@ sessions (id, user_id, token, expires_at)
 
 - **Antigravity:** The rollback mechanism that forces a new architectural approach after 3 failed attempts
 - **Deterministic:** Producing the same output given the same input (no randomness)
-- **Ephemeral:** Short-lived, destroyed after use (Docker containers)
+- **Ephemeral:** Short-lived, destroyed after use (GitHub Actions runners)
 - **Hallucination:** AI generating false or non-existent information
 - **Orchestration:** Coordinated management of multiple components
 - **Staging:** Holding area before final commit (VFS concept)
@@ -546,7 +546,7 @@ sessions (id, user_id, token, expires_at)
 2. Tree-sitter Documentation: https://tree-sitter.github.io/
 3. Socket.io Documentation: https://socket.io/
 4. Material 3 Design: https://m3.material.io/
-5. Docker Security: https://docs.docker.com/engine/security/
+5. GitHub Actions Security: https://docs.github.com/en/actions/security-guides
 
 ## Appendix C: Revision History
 
