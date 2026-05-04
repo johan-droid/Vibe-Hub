@@ -2,6 +2,8 @@ import { WebContainer } from '@webcontainer/api';
 import git from 'isomorphic-git';
 import http from 'isomorphic-git/http/web';
 
+const IGNORED_PATHS_REGEX = /(?:^|\/)(node_modules|\.git|dist|\.next|out|build)(?:\/|$)/;
+
 /**
  * VFS Container — Browser-Side WebContainer Executor (v3.0)
  * 
@@ -149,7 +151,7 @@ export class VFSContainer {
       // Hardcoded defaults for WebContainer speed
       // Using pre-compiled stateless regex for O(1) matching, avoiding slower .some() and .includes()
       // This also correctly matches whole directories, avoiding false positives like 'my_build.js'
-      if (/(?:^|\/)(node_modules|\.git|dist|\.next|out|build)(?:\/|$)/.test(filepath)) {
+      if (IGNORED_PATHS_REGEX.test(filepath)) {
         return true;
       }
       

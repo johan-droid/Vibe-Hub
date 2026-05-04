@@ -24,15 +24,15 @@ function redirectWithError(res, error) {
 
 // Validate required environment variables
 const requiredEnvVars = ['GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', 'GITHUB_REDIRECT_URI', 'UI_ORIGIN'];
-const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 
 /**
  * GET /api/auth/github
  * Redirect user to GitHub's consent screen
  */
 router.get('/github', (req, res) => {
+  const missingVars = requiredEnvVars.filter(v => !process.env[v]);
   if (missingVars.length > 0) {
-    return redirectWithError(res, 'oauth_not_configured');
+    return res.status(500).json({ error: 'oauth_not_configured' });
   }
 
   const state = crypto.randomBytes(32).toString('hex');
@@ -57,8 +57,9 @@ router.get('/github', (req, res) => {
  * Exchange code for access token, fetch user profile
  */
 router.get('/github/callback', async (req, res) => {
+  const missingVars = requiredEnvVars.filter(v => !process.env[v]);
   if (missingVars.length > 0) {
-    return redirectWithError(res, 'oauth_not_configured');
+    return res.status(500).json({ error: 'oauth_not_configured' });
   }
 
   const { code, state } = req.query;

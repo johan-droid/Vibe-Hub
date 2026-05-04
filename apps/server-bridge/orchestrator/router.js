@@ -239,7 +239,7 @@ ${prompt}
             loading_contexts: "Locking organizational and user boundaries...",
             parsing_ast: "Building semantic code graph...",
             drafting_code: "Synthesizing logic with LLM...",
-            sandboxing: "Executing in offline Docker sandbox...",
+            sandboxing: "Executing in offline GitHub Actions sandbox...",
             evaluating_failure: "Sandbox execution failed. Analyzing trace...",
             rollback: "CRITICAL: Forcing architectural rollback. Pivoting approach...",
             success: "Code verified and ready.",

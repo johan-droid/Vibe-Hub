@@ -23,15 +23,15 @@ function redirectWithError(res, error) {
 
 // Validate required environment variables
 const requiredEnvVars = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REDIRECT_URI', 'UI_ORIGIN'];
-const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 
 /**
  * GET /api/auth/google
  * Redirect user to Google's consent screen
  */
 router.get('/google', (req, res) => {
+  const missingVars = requiredEnvVars.filter(v => !process.env[v]);
   if (missingVars.length > 0) {
-    return redirectWithError(res, 'oauth_not_configured');
+    return res.status(500).json({ error: 'oauth_not_configured' });
   }
 
   const state = crypto.randomBytes(32).toString('hex');
@@ -59,8 +59,9 @@ router.get('/google', (req, res) => {
  * Exchange authorization code for tokens, then create/update user
  */
 router.get('/google/callback', async (req, res) => {
+  const missingVars = requiredEnvVars.filter(v => !process.env[v]);
   if (missingVars.length > 0) {
-    return redirectWithError(res, 'oauth_not_configured');
+    return res.status(500).json({ error: 'oauth_not_configured' });
   }
 
   const { code, state } = req.query;
