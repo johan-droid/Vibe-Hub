@@ -8,12 +8,177 @@
 
 import { EventEmitter } from 'events';
 import { logVfsOperation } from '../utils/logger.js';
+import { writeAuditLogLater } from '../utils/audit.js';
+import { recordVfsOperationMetric, setVfsStats } from '../utils/metrics.js';
 
 class VirtualFileSystem extends EventEmitter {
   constructor() {
     super();
     // Map: filePath -> { originalContent, proposedContent, metadata, status }
     this.staging = new Map();
+    this.redis = null;
+    this.redisSubscriber = null;
+    this.redisSourceId = null;
+    this.redisEntriesKey = 'vfs:entries';
+    this.redisChannel = 'vfs:events';
+    this.redisTtlSeconds = Number.parseInt(process.env.VFS_TTL_SECONDS || '86400', 10);
+  }
+
+  async configureRedis({ client, subscriber, sourceId }) {
+    if (!client || !subscriber) return false;
+
+    this.redis = client;
+    this.redisSubscriber = subscriber;
+    this.redisSourceId = sourceId;
+
+    await this.hydrateFromRedis();
+    await this.redisSubscriber.subscribe(this.redisChannel);
+    this.redisSubscriber.on('message', (channel, message) => {
+      if (channel !== this.redisChannel) return;
+      this.applyRedisEvent(message);
+    });
+
+    return true;
+  }
+
+  entryKey(filePath) {
+    return `vfs:entry:${encodeURIComponent(filePath)}`;
+  }
+
+  serializeEntry(entry) {
+    return {
+      filePath: entry.filePath,
+      originalContent: entry.originalContent,
+      proposedContent: entry.proposedContent,
+      metadata: JSON.stringify(entry.metadata || {}),
+      status: entry.status,
+    };
+  }
+
+  deserializeEntry(hash) {
+    if (!hash?.filePath) return null;
+    let metadata = {};
+    try {
+      metadata = hash.metadata ? JSON.parse(hash.metadata) : {};
+    } catch {
+      metadata = {};
+    }
+
+    return {
+      filePath: hash.filePath,
+      originalContent: hash.originalContent || '',
+      proposedContent: hash.proposedContent || '',
+      metadata,
+      status: hash.status || 'pending_review',
+    };
+  }
+
+  async hydrateFromRedis() {
+    try {
+      const filePaths = await this.redis.smembers(this.redisEntriesKey);
+      if (!filePaths.length) return;
+
+      const rows = await Promise.all(
+        filePaths.map(async filePath => [filePath, await this.redis.hgetall(this.entryKey(filePath))])
+      );
+
+      for (const [filePath, hash] of rows) {
+        if (!hash || Object.keys(hash).length === 0) {
+          await this.redis.srem(this.redisEntriesKey, filePath);
+          continue;
+        }
+        const entry = this.deserializeEntry(hash);
+        if (entry?.filePath) this.staging.set(entry.filePath, entry);
+      }
+      setVfsStats(this.getStats());
+    } catch (error) {
+      console.warn(`[VFS] Redis hydration failed: ${error.message}`);
+    }
+  }
+
+  applyRedisEvent(message) {
+    try {
+      const payload = JSON.parse(message);
+      if (!payload || payload.sourceId === this.redisSourceId) return;
+
+      if (payload.type === 'delete') {
+        this.staging.delete(payload.filePath);
+      } else if (payload.entry?.filePath) {
+        this.staging.set(payload.entry.filePath, payload.entry);
+      }
+      setVfsStats(this.getStats());
+
+      if (payload.eventName && payload.entry) {
+        this.emit(payload.eventName, payload.entry);
+      }
+    } catch (error) {
+      console.warn(`[VFS] Redis event ignored: ${error.message}`);
+    }
+  }
+
+  persistEntry(eventName, entry) {
+    if (!this.redis) return;
+
+    const entryKey = this.entryKey(entry.filePath);
+    const serializedEntry = this.serializeEntry(entry);
+    const serializedFields = Object.entries(serializedEntry).flat();
+    const payload = {
+      type: 'upsert',
+      sourceId: this.redisSourceId,
+      eventName,
+      entry,
+    };
+
+    this.redis
+      .multi()
+      .hset(entryKey, ...serializedFields)
+      .expire(entryKey, this.redisTtlSeconds)
+      .sadd(this.redisEntriesKey, entry.filePath)
+      .publish(this.redisChannel, JSON.stringify(payload))
+      .exec()
+      .catch(error => console.warn(`[VFS] Redis persist failed: ${error.message}`));
+  }
+
+  deleteEntry(eventName, filePath, entry) {
+    if (!this.redis) return;
+
+    const payload = {
+      type: 'delete',
+      sourceId: this.redisSourceId,
+      eventName,
+      filePath,
+      entry,
+    };
+
+    this.redis
+      .multi()
+      .del(this.entryKey(filePath))
+      .srem(this.redisEntriesKey, filePath)
+      .publish(this.redisChannel, JSON.stringify(payload))
+      .exec()
+      .catch(error => console.warn(`[VFS] Redis delete failed: ${error.message}`));
+  }
+
+  audit(operation, entry, payload = {}) {
+    const filePath = typeof entry === 'string' ? entry : entry.filePath;
+    const metadata = typeof entry === 'string' ? {} : entry.metadata || {};
+    const userId = payload.userId || metadata.userId;
+    const requestId = payload.requestId || metadata.requestId;
+
+    logVfsOperation(operation, filePath, userId, payload);
+    recordVfsOperationMetric(operation, typeof entry === 'string' ? payload.previousStatus : entry.status);
+    setVfsStats(this.getStats());
+    writeAuditLogLater({
+      eventType: `vfs.${operation}`,
+      resourceId: filePath,
+      userId,
+      requestId,
+      payload: {
+        status: typeof entry === 'string' ? undefined : entry.status,
+        metadata,
+        ...payload,
+      },
+    });
   }
 
   /**
@@ -36,12 +201,13 @@ class VirtualFileSystem extends EventEmitter {
     };
 
     this.staging.set(filePath, entry);
+    this.persistEntry('file_staged', entry);
     
     // Emit event for WebSocket broadcasting
     this.emit('file_staged', entry);
     
     // Audit logging
-    logVfsOperation('stage', filePath, metadata.userId, {
+    this.audit('stage', entry, {
       retries: metadata.retries,
       sandboxVerified: metadata.sandboxVerified,
       size: proposedContent.length
@@ -61,16 +227,23 @@ class VirtualFileSystem extends EventEmitter {
   /**
    * Get all pending files awaiting user review.
    */
-  getPendingFiles() {
+  getPendingFiles(options = {}) {
+    const userId = options && typeof options === 'object' ? options.userId : options;
+    return this.getPendingFilesForUser(userId);
+  }
+
+  getPendingFilesForUser(userId = null) {
+    const requestedUserId = userId == null ? null : String(userId);
     return Array.from(this.staging.values())
-      .filter(entry => entry.status === 'pending_review');
+      .filter(entry => entry.status === 'pending_review')
+      .filter(entry => !requestedUserId || String(entry.metadata?.userId) === requestedUserId);
   }
 
   /**
    * Approve a staged file for commit (called by frontend approval).
    * Marks the entry as ready for physical disk write.
    */
-  approveFile(filePath) {
+  approveFile(filePath, context = {}) {
     const entry = this.staging.get(filePath);
     if (!entry) {
       throw new Error(`File not found in staging: ${filePath}`);
@@ -82,11 +255,13 @@ class VirtualFileSystem extends EventEmitter {
 
     entry.status = 'approved';
     entry.metadata.approvedAt = new Date().toISOString();
+    if (context.requestId) entry.metadata.requestId = context.requestId;
     
+    this.persistEntry('file_approved', entry);
     this.emit('file_approved', entry);
     
     // Audit logging
-    logVfsOperation('approve', filePath, entry.metadata.userId, {
+    this.audit('approve', entry, {
       approvedAt: entry.metadata.approvedAt
     });
     
@@ -99,7 +274,7 @@ class VirtualFileSystem extends EventEmitter {
    * Reject a staged file (called by frontend rejection).
    * Drops the proposed changes, keeping original intact.
    */
-  rejectFile(filePath, reason = 'User rejected changes') {
+  rejectFile(filePath, reason = 'User rejected changes', context = {}) {
     const entry = this.staging.get(filePath);
     if (!entry) {
       throw new Error(`File not found in staging: ${filePath}`);
@@ -108,11 +283,13 @@ class VirtualFileSystem extends EventEmitter {
     entry.status = 'rejected';
     entry.metadata.rejectedAt = new Date().toISOString();
     entry.metadata.rejectionReason = reason;
+    if (context.requestId) entry.metadata.requestId = context.requestId;
 
+    this.persistEntry('file_rejected', entry);
     this.emit('file_rejected', entry);
     
     // Audit logging
-    logVfsOperation('reject', filePath, entry.metadata.userId, {
+    this.audit('reject', entry, {
       rejectedAt: entry.metadata.rejectedAt,
       reason
     });
@@ -127,7 +304,7 @@ class VirtualFileSystem extends EventEmitter {
    * Commit approved file to physical disk.
    * ONLY this method performs actual fs.writeFile.
    */
-  async commitToDisk(filePath, fsModule) {
+  async commitToDisk(filePath, fsModule, context = {}) {
     const entry = this.staging.get(filePath);
     if (!entry) {
       throw new Error(`File not found in staging: ${filePath}`);
@@ -136,6 +313,7 @@ class VirtualFileSystem extends EventEmitter {
     if (entry.status !== 'approved') {
       throw new Error(`File must be approved before commit. Current status: ${entry.status}`);
     }
+    if (context.requestId) entry.metadata.requestId = context.requestId;
 
     try {
       // Write to physical disk
@@ -144,10 +322,11 @@ class VirtualFileSystem extends EventEmitter {
       entry.status = 'committed';
       entry.metadata.committedAt = new Date().toISOString();
       
+      this.persistEntry('file_committed', entry);
       this.emit('file_committed', entry);
       
       // Audit logging
-      logVfsOperation('commit', filePath, entry.metadata.userId, {
+      this.audit('commit', entry, {
         committedAt: entry.metadata.committedAt,
         size: entry.proposedContent.length
       });
@@ -159,7 +338,7 @@ class VirtualFileSystem extends EventEmitter {
       console.error(`[VFS] Commit failed: ${filePath}`, error);
       
       // Audit logging for failed commit
-      logVfsOperation('commit_failed', filePath, entry.metadata.userId, {
+      this.audit('commit_failed', entry, {
         error: error.message
       });
       
@@ -178,6 +357,7 @@ class VirtualFileSystem extends EventEmitter {
       const entryTime = new Date(entry.metadata.timestamp).getTime();
       if (entryTime < cutoff && entry.status !== 'pending_review') {
         this.staging.delete(filePath);
+        this.deleteEntry('file_expired', filePath, entry);
         cleared++;
       }
     }
@@ -190,10 +370,48 @@ class VirtualFileSystem extends EventEmitter {
   }
 
   /**
+   * Clear expired entries using the SRS TTL policy:
+   * - non-pending entries always expire after maxAgeMs
+   * - pending_review entries expire only when their user has no active session
+   */
+  clearExpiredEntries({ maxAgeMs = 24 * 60 * 60 * 1000, activeUserIds = new Set() } = {}) {
+    const cutoff = Date.now() - maxAgeMs;
+    let cleared = 0;
+
+    for (const [filePath, entry] of this.staging) {
+      const entryTime = new Date(entry.metadata.timestamp).getTime();
+      if (!Number.isFinite(entryTime) || entryTime >= cutoff) continue;
+
+      const userId = entry.metadata.userId;
+      const userActive = userId && activeUserIds.has(String(userId));
+      const canExpire = entry.status !== 'pending_review' || !userActive;
+
+      if (canExpire) {
+        this.staging.delete(filePath);
+        this.deleteEntry('file_expired', filePath, entry);
+        cleared++;
+        this.audit('expire', entry, {
+          previousStatus: entry.status,
+          expiredAt: new Date().toISOString()
+        });
+      }
+    }
+
+    if (cleared > 0) {
+      console.log(`[VFS] Expired ${cleared} stale entries`);
+    }
+
+    return cleared;
+  }
+
+  /**
    * Get VFS statistics for monitoring.
    */
-  getStats() {
-    const entries = Array.from(this.staging.values());
+  getStats({ userId = null } = {}) {
+    const requestedUserId = userId == null ? null : String(userId);
+    const entries = Array.from(this.staging.values())
+      .filter(entry => !requestedUserId || String(entry.metadata?.userId) === requestedUserId);
+
     return {
       total: entries.length,
       pending: entries.filter(e => e.status === 'pending_review').length,

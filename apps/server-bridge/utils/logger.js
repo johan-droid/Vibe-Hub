@@ -7,6 +7,7 @@
 
 import winston from 'winston';
 import { v4 as uuid } from 'uuid';
+import { recordStateTransitionMetric } from './metrics.js';
 
 // Log format with structured JSON output
 const jsonFormat = winston.format.combine(
@@ -119,6 +120,7 @@ export function logVfsOperation(operation, filePath, userId, metadata = {}) {
  * State machine transition logging
  */
 export function logStateTransition(from, to, context, userId) {
+  recordStateTransitionMetric(from, to, userId);
   logger.info('State transition', {
     type: 'state_machine',
     from,

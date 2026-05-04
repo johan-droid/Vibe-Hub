@@ -7,7 +7,7 @@
  * to parent nodes with alternate strategy injection.
  */
 
-import { createMachine, createActor, assign } from 'xstate';
+import { createMachine, createActor, assign, fromPromise } from 'xstate';
 import { v4 as uuid } from 'uuid';
 
 // ─── DAG Node Structure ───────────────────────────────────────────────────────
@@ -154,8 +154,9 @@ export const createAgentMachine = (deps) => {
           executionHistory: ({ context }) => [...context.executionHistory, 'executing']
         }),
         invoke: {
-          src: async ({ context }) => {
-            const node = context.currentNode;
+          input: ({ context }) => context,
+          src: fromPromise(async ({ input }) => {
+            const node = input.currentNode;
             node.state = 'running';
             
             // Execute the action (tool call)
@@ -163,7 +164,7 @@ export const createAgentMachine = (deps) => {
             node.result = result;
             
             return { result };
-          },
+          }),
           onDone: {
             target: 'verifying',
             actions: assign({
@@ -191,8 +192,9 @@ export const createAgentMachine = (deps) => {
           executionHistory: ({ context }) => [...context.executionHistory, 'verifying']
         }),
         invoke: {
-          src: async ({ context }) => {
-            const node = context.currentNode;
+          input: ({ context }) => context,
+          src: fromPromise(async ({ input }) => {
+            const node = input.currentNode;
             node.verification.attempts++;
             
             // Run verification (e.g., build, test, lint)
@@ -200,7 +202,7 @@ export const createAgentMachine = (deps) => {
             node.verification.passed = verification.passed;
             
             return verification;
-          },
+          }),
           onDone: [
             {
               guard: ({ event }) => event.output.passed,
@@ -228,11 +230,12 @@ export const createAgentMachine = (deps) => {
           executionHistory: ({ context }) => [...context.executionHistory, 'debating']
         }),
         invoke: {
-          src: async ({ context }) => {
+          input: ({ context }) => context,
+          src: fromPromise(async ({ input }) => {
             // Peer review phase
-            const debateResult = await onDebate(context.currentNode);
+            const debateResult = await onDebate(input.currentNode);
             return debateResult;
-          },
+          }),
           onDone: [
             {
               guard: ({ event }) => event.output.approved,
@@ -258,10 +261,11 @@ export const createAgentMachine = (deps) => {
           rollbackCount: ({ context }) => context.rollbackCount + 1
         }),
         invoke: {
-          src: async ({ context }) => {
-            const rollbackResult = await onRollback(context.currentNode);
+          input: ({ context }) => context,
+          src: fromPromise(async ({ input }) => {
+            const rollbackResult = await onRollback(input.currentNode);
             return rollbackResult;
-          },
+          }),
           onDone: [
             {
               guard: ({ context }) => context.rollbackCount >= context.maxRollbacks,

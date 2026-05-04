@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { OrchestratorSocket } from '../services/socket';
+import { api } from '../services/api';
 
 /**
  * Virtual File System (VFS) State Manager
@@ -47,15 +48,9 @@ export const useVfsStore = create((set, get) => ({
     if (!activeDiff) return;
 
     try {
-      // Notify backend of rejection
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      await fetch(`${API_URL}/api/fs/commit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filePath: activeDiff.filePath,
-          approved: false
-        })
+      await api.post('/api/fs/commit', {
+        filePath: activeDiff.filePath,
+        approved: false
       });
 
       set((state) => ({
@@ -79,22 +74,10 @@ export const useVfsStore = create((set, get) => ({
     if (!activeDiff) return;
 
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${API_URL}/api/fs/commit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filePath: activeDiff.filePath,
-          approved: true
-        })
+      const result = await api.post('/api/fs/commit', {
+        filePath: activeDiff.filePath,
+        approved: true
       });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Physical commit failed');
-      }
-
-      const result = await response.json();
 
       // Clear VFS after successful physical write
       set((state) => ({
@@ -117,9 +100,7 @@ export const useVfsStore = create((set, get) => ({
    */
   fetchPendingFiles: async () => {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${API_URL}/api/fs/pending`);
-      const data = await response.json();
+      const data = await api.get('/api/fs/pending');
       
       if (data.success) {
         set({ pendingFiles: data.files });
@@ -134,9 +115,7 @@ export const useVfsStore = create((set, get) => ({
    */
   fetchVfsStats: async () => {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${API_URL}/api/fs/stats`);
-      const data = await response.json();
+      const data = await api.get('/api/fs/stats');
       
       if (data.success) {
         set({ vfsStats: data.stats });

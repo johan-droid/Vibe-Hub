@@ -38,97 +38,88 @@ export default function Titlebar({ onOpenSettings }) {
 
   return (
     <div
-      className="relative z-50 flex h-20 shrink-0 items-center justify-between bg-white border-b border-black/[0.03] px-10 text-on-surface shadow-sm backdrop-blur-md"
+      className="relative z-50 flex h-14 shrink-0 items-center justify-between border-b border-outline-variant bg-surface-container-lowest/95 px-4 text-on-surface shadow-sm backdrop-blur-md md:px-6"
     >
-      <div className="flex min-w-0 items-center gap-12">
-        {/* Brand Section */}
-        <button onClick={() => navigate('/')} className="flex min-w-0 items-center gap-5 group">
-          <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-[1.3rem] bg-google-blue text-white shadow-2xl shadow-google-blue/20 overflow-hidden group-hover:scale-105 transition-transform">
+      <div className="flex min-w-0 items-center gap-5">
+        <button onClick={() => navigate('/')} className="group flex min-w-0 items-center gap-3">
+          <div className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary text-on-primary shadow-sm transition-transform group-hover:scale-[1.03]">
             <motion.div 
-              className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute inset-0 bg-white/10 opacity-0 transition-opacity group-hover:opacity-100"
               animate={isThinking ? { opacity: [0.1, 0.4, 0.1] } : {}}
               transition={{ repeat: Infinity, duration: 1.5 }}
             />
-            <Brain size={24} className="relative z-10" />
+            <Brain size={19} className="relative z-10" />
             {isThinking && (
-              <span className="absolute -right-0.5 -top-0.5 h-4 w-4 rounded-full border-2 border-white bg-google-blue animate-pulse" />
+              <span className="absolute -right-0.5 -top-0.5 h-3 w-3 animate-pulse rounded-full border-2 border-white bg-primary" />
             )}
           </div>
           <div className="hidden min-w-0 sm:block text-left">
-            <div className="flex flex-col">
-              <span className="text-2xl font-black tracking-tighter leading-none text-on-surface">Selina</span>
-              <div className="flex items-center gap-2 mt-2">
-                 <span className="text-[9px] font-black tracking-[0.4em] text-google-blue uppercase opacity-60">
-                   Workspace v4.1
-                 </span>
-              </div>
-            </div>
+            <span className="block text-base font-black leading-none tracking-tight text-on-surface">Selina</span>
+            <span className="mt-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant">Workspace</span>
           </div>
         </button>
 
-        {/* Global Search Bar (Premium Mock) */}
-        <div className="hidden lg:flex items-center group relative w-96">
-           <Search size={16} className="absolute left-6 text-on-surface-variant/20 group-focus-within:text-google-blue transition-colors" />
+        <div className="group relative hidden w-[22rem] items-center lg:flex">
+           <Search size={15} className="absolute left-3.5 text-on-surface-variant transition-colors group-focus-within:text-primary" />
            <input 
              type="text" 
              placeholder="Search workspace..." 
-             className="w-full h-12 bg-[#faf8f5] border border-black/[0.03] rounded-2xl pl-14 pr-16 text-xs font-bold text-on-surface placeholder:text-on-surface-variant/20 focus:outline-none focus:border-google-blue/30 focus:bg-white focus:shadow-2xl focus:shadow-black/[0.02] transition-all"
+             className="h-9 w-full rounded-lg border border-outline-variant bg-surface-container-low pl-10 pr-14 text-sm font-medium text-on-surface placeholder:text-on-surface-variant/55 transition-all focus:border-primary/40 focus:bg-surface-container-lowest focus:outline-none"
            />
-           <div className="absolute right-4 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-black/[0.05] shadow-sm opacity-40 group-hover:opacity-100 transition-opacity">
+           <div className="absolute right-2.5 flex items-center gap-1 rounded border border-outline-variant bg-surface-container-lowest px-1.5 py-0.5 text-on-surface-variant">
               <Command size={10} />
-              <span className="text-[9px] font-black uppercase">K</span>
+              <span className="text-[9px] font-bold uppercase">K</span>
            </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-6">
-        {/* Node Connectivity Segment */}
-        <div className="hidden lg:flex items-center gap-5 px-6 py-2.5 rounded-2xl bg-[#faf8f5] border border-black/[0.03] shadow-inner group">
-           <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3">
+        <div className="hidden items-center gap-4 rounded-lg border border-outline-variant bg-surface-container-low px-3 py-1.5 lg:flex">
+           <div className="flex items-center gap-2">
               <div className="relative">
                 <div className="h-2 w-2 rounded-full bg-google-green" />
-                <div className="absolute inset-0 bg-google-green blur-[4px] rounded-full animate-pulse" />
+                <div className="absolute inset-0 animate-pulse rounded-full bg-google-green blur-[4px]" />
               </div>
-              <span className="text-[10px] font-black uppercase tracking-widest text-on-surface/40">Secure Node</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant">Secure Node</span>
            </div>
-           <div className="h-4 w-[1px] bg-black/[0.05]" />
-           <div className="flex items-center gap-3 text-google-blue">
+           <div className="h-4 w-px bg-outline-variant" />
+           <div className="flex items-center gap-2 text-primary">
               <Globe size={12} className="opacity-60" />
-              <span className="text-[10px] font-black uppercase tracking-widest opacity-60">West-1</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.12em] opacity-75">West-1</span>
            </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1">
           <IconButton
             icon={Bell}
             variant="ghost"
-            className="!h-11 !w-11 rounded-[1.2rem] text-on-surface-variant/30 hover:text-on-surface hover:bg-black/5"
+            className="text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
           />
           <IconButton
             icon={HelpCircle}
             variant="ghost"
-            className="!h-11 !w-11 rounded-[1.2rem] text-on-surface-variant/30 hover:text-on-surface hover:bg-black/5"
+            className="hidden text-on-surface-variant hover:bg-surface-container hover:text-on-surface sm:flex"
           />
-          <div className="mx-2 h-6 w-[1px] bg-black/[0.05]" />
+          <div className="mx-1 h-5 w-px bg-outline-variant" />
           <IconButton
             icon={theme === 'dark' ? Sun : Moon}
             onClick={toggleTheme}
             variant="ghost"
-            className="!h-11 !w-11 rounded-[1.2rem] text-on-surface-variant/30 hover:text-google-blue hover:bg-google-blue/5 transition-all"
+            className="text-on-surface-variant hover:bg-primary/5 hover:text-primary"
             aria-label="Toggle theme"
           />
           <IconButton
             icon={Settings}
             onClick={onOpenSettings}
             variant="ghost"
-            className="!h-11 !w-11 rounded-[1.2rem] text-on-surface-variant/30 hover:text-google-blue hover:bg-google-blue/5 transition-all"
+            className="text-on-surface-variant hover:bg-primary/5 hover:text-primary"
             aria-label="Settings"
           />
         </div>
         
         {user?.avatarUrl && (
-          <button className="ml-3 h-12 w-12 rounded-[1.4rem] overflow-hidden border border-black/[0.05] shadow-lg hover:scale-105 active:scale-95 transition-all ring-offset-4 hover:ring-2 ring-google-blue/20 p-0.5 bg-white">
-             <img src={user.avatarUrl} alt={user.name} className="h-full w-full object-cover rounded-[1.2rem]" />
+          <button className="ml-1 h-9 w-9 overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest p-0.5 shadow-sm transition-all hover:scale-[1.03]">
+             <img src={user.avatarUrl} alt={user.name} className="h-full w-full rounded-md object-cover" />
           </button>
         )}
       </div>

@@ -12,7 +12,7 @@ import SettingsModal from '../features/shared/components/SettingsModal';
 import { Surface } from '../features/shared/components/Surface';
 import { ResizeHandle } from '../features/shared/components/ResizeHandle';
 import { NavIcon } from '../features/shared/components/NavIcon';
-import { NeuralProjection } from '../features/shared/components/NeuralProjection';
+import NeuralProjection from '../features/shared/components/NeuralProjection';
 
 import SidebarFileTree from '../features/editor/components/SidebarFileTree';
 import ChatInterface from '../features/chat/components/ChatInterface';
@@ -118,18 +118,17 @@ export default function Workspace() {
   const isWorkbenchMode = effectiveTab === 'editor' || effectiveTab === 'diff';
 
   return (
-    <div className="isolate flex h-dvh w-full flex-col overflow-hidden bg-surface-container-lowest font-sans text-on-surface selection:bg-primary/10 selection:text-primary">
+    <div className="isolate flex h-dvh w-full flex-col overflow-hidden bg-surface font-sans text-on-surface selection:bg-primary/10 selection:text-primary">
       <Titlebar onOpenSettings={() => setIsSettingsOpen(true)} />
 
-      <div className="relative z-0 flex min-h-0 flex-1 overflow-hidden bg-surface-container-lowest">
-        {/* ── Nav Rail ── */}
-        <div className="fixed inset-x-0 bottom-0 z-40 flex h-16 flex-row items-center justify-around border-t border-outline-variant/10 bg-surface-container-lowest/80 px-3 backdrop-blur-3xl md:relative md:inset-auto md:h-auto md:w-14 md:shrink-0 md:flex-col md:justify-start md:gap-4 md:border-r md:border-t-0 md:py-6">
+      <div className="relative z-0 flex min-h-0 flex-1 overflow-hidden bg-surface">
+        <div className="fixed inset-x-0 bottom-0 z-40 flex h-14 flex-row items-center justify-around border-t border-outline-variant bg-surface-container-lowest/95 px-3 backdrop-blur-xl md:relative md:inset-auto md:h-auto md:w-14 md:shrink-0 md:flex-col md:justify-start md:gap-3 md:border-r md:border-t-0 md:py-4">
           <NavIcon icon={Gauge} active={isDashboardMode && dashboardSegment === 'overview'} onClick={() => goDashboardPage('overview')} ariaLabel="Overview" />
           <NavIcon icon={LayoutGrid} active={isWorkbenchMode} onClick={goWorkbench} ariaLabel="Workbench" />
           <NavIcon icon={Activity} active={isDashboardMode && dashboardSegment === 'activity'} onClick={() => goDashboardPage('activity')} ariaLabel="Activity" />
           <NavIcon icon={Code2} active={isDashboardMode && dashboardSegment === 'runtime'} onClick={() => goDashboardPage('runtime')} ariaLabel="Runtime" />
           
-          <div className="mx-2 hidden h-px w-6 bg-outline-variant/10 md:block" />
+          <div className="mx-2 hidden h-px w-6 bg-outline-variant md:block" />
           
           <NavIcon 
             icon={SidebarIcon} 
@@ -149,8 +148,8 @@ export default function Workspace() {
         <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
           {/* Dashboard Mode */}
           {!isWorkbenchMode && (
-            <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest pb-16 md:pb-0">
-              <React.Suspense fallback={<div className="h-full animate-pulse bg-surface-container-lowest" />}>
+              <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface pb-14 md:pb-0">
+              <React.Suspense fallback={<div className="h-full animate-pulse bg-surface" />}>
                 <IntelligenceDashboard page={isDashboardRoute && dashboardPages.has(dashboardSegment) ? dashboardSegment : 'overview'} />
               </React.Suspense>
             </main>
@@ -167,26 +166,26 @@ export default function Workspace() {
                     animate={{ width: isMobile ? '100vw' : sidebarW }}
                     exit={{ width: 0 }}
                     transition={{ type: 'spring', damping: 35, stiffness: 400 }}
-                    className="relative z-30 flex h-full shrink-0 flex-col overflow-hidden border-r border-outline-variant/10 bg-surface-container-lowest"
+                    className="relative z-30 flex h-full shrink-0 flex-col overflow-hidden border-r border-outline-variant bg-surface-container-lowest"
                   >
                     <div className="min-h-0 flex-1">
-                      <React.Suspense fallback={<div className="h-full animate-pulse bg-surface-container-lowest" />}>
+                      <React.Suspense fallback={<div className="h-full animate-pulse bg-surface" />}>
                         {sidebarMode === 'explorer' && <SidebarFileTree />}
                         {sidebarMode === 'swarm' && <IntelligenceDashboard page="activity" />}
                       </React.Suspense>
                     </div>
                     {sidebarMode === 'explorer' && !isMobile && (
-                      <div className="h-[30%] min-h-[180px] overflow-hidden border-t border-outline-variant/10 bg-on-surface/[0.01]">
+                      <div className="h-[30%] min-h-[180px] overflow-hidden border-t border-outline-variant bg-surface-container-low">
                         <ActivityFeed />
                       </div>
                     )}
-                    <ResizeHandle direction="horizontal" onDrag={onSidebarDrag} className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/20 transition-colors" />
+                    <ResizeHandle direction="horizontal" onDrag={onSidebarDrag} className="absolute right-0 top-0 h-full w-1 cursor-col-resize transition-colors hover:bg-primary/20" />
                   </motion.div>
                 )}
               </AnimatePresence>
 
               {/* Editor + Terminal */}
-              <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface-container-lowest">
+              <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface">
                 <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden ${(isMobile && mobileView === 'terminal') ? 'hidden' : ''}`}>
                   {openFiles.length > 0 && <EditorTabs />}
                   <div className="relative min-h-0 flex-1 overflow-hidden">
@@ -200,19 +199,19 @@ export default function Workspace() {
                 </div>
 
                 <div className="hidden md:block">
-                  <ResizeHandle direction="vertical" onDrag={onTerminalDrag} className="h-1 cursor-row-resize hover:bg-primary/20 transition-colors" />
+                  <ResizeHandle direction="vertical" onDrag={onTerminalDrag} className="h-1 cursor-row-resize transition-colors hover:bg-primary/20" />
                 </div>
 
                 <div 
-                  className={`shrink-0 overflow-hidden border-t border-outline-variant/10 bg-surface-container-lowest ${(isMobile && mobileView !== 'terminal') ? 'hidden' : ''}`}
+                  className={`shrink-0 overflow-hidden border-t border-outline-variant bg-surface-container-lowest ${(isMobile && mobileView !== 'terminal') ? 'hidden' : ''}`}
                   style={{ height: isMobile ? '100%' : terminalH }}
                 >
-                  <div className="flex h-9 items-center justify-between neural-glass border-x-0 border-t-0 px-5">
-                    <div className="flex items-center gap-2.5">
-                      <TerminalIcon size={12} className="text-primary opacity-60" />
-                      <span className="label-small uppercase tracking-[0.2em] opacity-60 font-bold">Terminal</span>
+                  <div className="flex h-9 items-center justify-between border-b border-outline-variant bg-surface-container-low px-4">
+                    <div className="flex items-center gap-2">
+                      <TerminalIcon size={13} className="text-primary" />
+                      <span className="text-xs font-bold uppercase tracking-[0.12em] text-on-surface-variant">Terminal</span>
                     </div>
-                    <div className="flex items-center gap-3 label-small opacity-30 uppercase tracking-widest font-mono">
+                    <div className="hidden items-center gap-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant/70 sm:flex">
                       <span className="flex items-center gap-1.5"><Cpu size={10} /> BUS: 0x24</span>
                       <span>Link: active</span>
                     </div>
@@ -233,7 +232,7 @@ export default function Workspace() {
                     animate={{ width: isMobile ? '100vw' : chatW }}
                     exit={{ width: 0 }}
                     transition={{ type: 'spring', damping: 35, stiffness: 400 }}
-                    className="relative z-30 h-full shrink-0 overflow-hidden border-l border-outline-variant/10 bg-surface-container-lowest"
+                    className="relative z-30 h-full shrink-0 overflow-hidden border-l border-outline-variant bg-surface-container-lowest"
                   >
                     <ResizeHandle direction="horizontal" onDrag={onChatDrag} className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/20 transition-colors" />
                     <ChatInterface onSend={sendPrompt} />

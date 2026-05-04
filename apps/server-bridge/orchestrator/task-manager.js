@@ -255,6 +255,8 @@ export class TaskManager extends EventEmitter {
       task.completedAt = new Date().toISOString();
       task.error = err.message;
       this._broadcast('task:failed', { id: task.id, title: task.title, error: err.message });
+    } finally {
+      this.orchestrator.flushContext?.();
     }
 
     this._broadcast('queue:update', this._snapshot());

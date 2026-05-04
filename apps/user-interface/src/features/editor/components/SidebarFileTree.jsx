@@ -68,11 +68,11 @@ const FileNode = memo(function FileNode({ item, depth, expanded, onToggle, onSel
         tabIndex={0}
         onKeyDown={(e) => e.key === 'Enter' && handleClick()}
         className={`
-          flex items-center gap-3.5 h-10 px-4 rounded-2xl cursor-pointer select-none
-          transition-all duration-300 group relative mx-2
+          flex items-center gap-2.5 h-8 px-3 rounded-md cursor-pointer select-none
+          transition-all duration-200 group relative mx-1
           ${isActive 
-            ? 'bg-google-blue/[0.08] text-google-blue shadow-sm' 
-            : 'text-on-surface-variant/80 hover:bg-white hover:text-on-surface hover:shadow-sm'}
+            ? 'bg-primary/10 text-primary' 
+            : 'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface'}
         `}
         style={{ paddingLeft: `${depth * 16 + 16}px` }}
       >
@@ -80,7 +80,7 @@ const FileNode = memo(function FileNode({ item, depth, expanded, onToggle, onSel
         {isActive && (
           <motion.div 
             layoutId="active-vfs-marker"
-            className="absolute left-1.5 top-2 bottom-2 w-1.5 bg-google-blue rounded-full" 
+            className="absolute left-1 top-1.5 bottom-1.5 w-1 rounded-full bg-primary" 
           />
         )}
 
@@ -103,7 +103,7 @@ const FileNode = memo(function FileNode({ item, depth, expanded, onToggle, onSel
         </div>
 
         {/* Name */}
-        <span className={`truncate text-[13px] leading-none flex-1 min-w-0 tracking-tight ${isActive ? 'font-bold' : 'font-semibold opacity-70'}`}>
+        <span className={`min-w-0 flex-1 truncate text-[13px] leading-none tracking-tight ${isActive ? 'font-bold' : 'font-medium'}`}>
           {item.name}
         </span>
 
@@ -178,57 +178,53 @@ export default function FileTree() {
   const isEmpty = vfsTree.length === 0;
 
   return (
-    <div className="flex flex-col h-full bg-[#faf8f5] overflow-hidden border-r border-black/[0.03]">
-      {/* Header */}
-      <div className="h-16 px-8 flex items-center justify-between bg-white/50 border-b border-black/[0.03] shrink-0 backdrop-blur-md">
-        <div className="flex items-center gap-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-google-blue/5 text-google-blue shadow-sm">
+    <div className="flex h-full flex-col overflow-hidden border-r border-outline-variant bg-surface-container-lowest">
+      <div className="flex h-12 shrink-0 items-center justify-between border-b border-outline-variant bg-surface-container-lowest px-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
              <Box size={14} />
           </div>
-          <span className="text-[10px] font-black uppercase tracking-[0.4em] opacity-40">
+          <span className="text-xs font-bold uppercase tracking-[0.12em] text-on-surface-variant">
             Explorer
           </span>
         </div>
         {vfsStatus === 'booting' && (
-          <div className="flex items-center gap-3">
-             <Loader2 size={12} className="text-google-blue animate-spin" />
-             <span className="text-[9px] font-black uppercase tracking-widest text-google-blue opacity-40">Scanning</span>
+          <div className="flex items-center gap-2">
+             <Loader2 size={12} className="animate-spin text-primary" />
+             <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-primary">Scanning</span>
           </div>
         )}
       </div>
 
-      {/* Search Container */}
-      <div className="p-6 shrink-0">
+      <div className="shrink-0 p-4">
         <div className="relative flex items-center group">
-          <Search size={16} className="absolute left-5 text-on-surface-variant/20 pointer-events-none group-focus-within:text-google-blue/40 transition-colors" />
+          <Search size={15} className="pointer-events-none absolute left-3.5 text-on-surface-variant transition-colors group-focus-within:text-primary" />
           <input
             type="text"
             placeholder="Search files..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="
-              w-full h-12 bg-white border border-outline-variant/30 rounded-2xl pl-12 pr-5 
-              text-sm font-bold text-on-surface placeholder:text-on-surface-variant/20
-              focus:outline-none focus:border-google-blue/30 focus:shadow-2xl focus:shadow-black/[0.02]
-              transition-all duration-500
+              h-9 w-full rounded-lg border border-outline-variant bg-surface-container-low pl-10 pr-4
+              text-sm font-medium text-on-surface placeholder:text-on-surface-variant/55
+              transition-all focus:border-primary/40 focus:bg-surface-container-lowest focus:outline-none
             "
           />
         </div>
       </div>
 
-      {/* List Container */}
-      <div className="flex-1 overflow-y-auto px-1 pb-10 space-y-0.5 scrollbar-none">
+      <div className="scrollbar-none flex-1 space-y-0.5 overflow-y-auto px-1 pb-6">
         {isEmpty ? (
-          <div className="flex flex-col items-center justify-center h-64 gap-8 px-10 text-center">
+          <div className="flex h-64 flex-col items-center justify-center gap-5 px-8 text-center">
             <div className={`h-3 w-3 rounded-full bg-google-blue/10 ${vfsStatus === 'booting' ? 'animate-pulse bg-google-blue/40' : ''}`} />
-            <span className="text-[10px] font-black uppercase tracking-[0.4em] opacity-20 leading-loose">
+            <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant">
               {vfsStatus === 'booting' ? 'Preparing Workspace...' : 'No files found.'}
             </span>
           </div>
         ) : visibleTree.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 gap-4">
-            <Search size={24} className="opacity-5" />
-            <span className="text-[10px] font-black uppercase tracking-[0.4em] opacity-10">No Matches</span>
+            <Search size={24} className="text-on-surface-variant/25" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant">No Matches</span>
           </div>
         ) : (
           <div className="pt-2">
@@ -247,9 +243,8 @@ export default function FileTree() {
         )}
       </div>
 
-      {/* Footer Meta */}
-      <div className="p-6 border-t border-black/[0.03] bg-white/30 backdrop-blur-sm">
-         <div className="flex items-center justify-between px-2 text-[9px] font-black opacity-20 tracking-widest uppercase">
+      <div className="border-t border-outline-variant bg-surface-container-low px-4 py-3">
+         <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant">
            <span className="flex items-center gap-2"><GitBranch size={10} /> Main</span>
            <span className="flex items-center gap-2"><HardDrive size={10} /> Ready</span>
          </div>

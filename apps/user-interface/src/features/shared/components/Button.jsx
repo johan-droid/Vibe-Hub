@@ -2,10 +2,6 @@ import React from 'react';
 import { twMerge } from 'tailwind-merge';
 import { motion } from 'framer-motion';
 
-/**
- * Premium button primitive refined for a professional "common people" perspective.
- * Features ultra-smooth transitions, deep shadows, and Google-inspired accents.
- */
 export const Button = React.forwardRef(({
   variant = 'filled',
   size = 'md',
@@ -16,20 +12,20 @@ export const Button = React.forwardRef(({
   disabled,
   ...props
 }, ref) => {
-  const baseClasses = 'relative inline-flex items-center justify-center gap-3 font-sans font-black uppercase tracking-widest transition-all duration-500 overflow-hidden active:scale-[0.95] disabled:opacity-30 disabled:pointer-events-none group whitespace-nowrap shadow-sm';
+  const baseClasses = 'relative inline-flex items-center justify-center gap-2.5 whitespace-nowrap font-sans font-bold transition-all duration-200 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30';
 
   const variantClasses = {
-    filled: 'bg-primary text-on-primary shadow-xl shadow-primary/20 hover:shadow-2xl hover:shadow-primary/30 hover:-translate-y-0.5',
-    tonal: 'bg-google-blue/5 text-google-blue border border-google-blue/10 hover:bg-google-blue/10',
-    outlined: 'bg-white border border-black/[0.05] text-on-surface hover:border-google-blue/40 hover:bg-google-blue/[0.02] hover:text-google-blue',
-    text: 'bg-transparent text-on-surface-variant/60 hover:text-google-blue hover:bg-google-blue/5',
-    elevated: 'bg-white text-on-surface shadow-2xl shadow-black/[0.05] hover:bg-surface-container-low',
+    filled: 'bg-primary text-on-primary shadow-sm hover:bg-primary/90',
+    tonal: 'bg-primary/8 text-primary border border-primary/10 hover:bg-primary/12',
+    outlined: 'bg-surface-container-lowest border border-outline-variant text-on-surface hover:border-primary/40 hover:bg-primary/5',
+    text: 'bg-transparent text-on-surface-variant hover:text-primary hover:bg-primary/5',
+    elevated: 'bg-surface-container-lowest text-on-surface border border-outline-variant shadow-sm hover:bg-surface-container-low',
   };
 
   const sizeClasses = {
-    sm: 'px-6 py-2.5 text-[9px] rounded-xl',
-    md: 'px-8 py-4 text-[11px] rounded-2xl',
-    lg: 'px-10 py-5 text-[13px] rounded-[1.5rem]',
+    sm: 'h-8 px-3 text-xs rounded-md',
+    md: 'h-10 px-4 text-sm rounded-lg',
+    lg: 'h-12 px-5 text-base rounded-lg',
   };
 
   const iconSize = size === 'sm' ? 14 : size === 'md' ? 18 : 22;
@@ -41,16 +37,10 @@ export const Button = React.forwardRef(({
       className={twMerge(baseClasses, variantClasses[variant], sizeClasses[size], className)}
       {...props}
     >
-      {/* Glossy Overlay */}
-      <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-      
-      {/* State Layer */}
-      <div className="absolute inset-0 bg-white opacity-0 transition-opacity duration-300 pointer-events-none group-hover:opacity-[0.05] group-active:opacity-[0.1]" />
-      
       {LeadingIcon && (
         <LeadingIcon 
           size={iconSize} 
-          className="relative z-10 transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-6" 
+          className="relative z-10" 
         />
       )}
       
@@ -59,7 +49,7 @@ export const Button = React.forwardRef(({
       {TrailingIcon && (
         <TrailingIcon 
           size={iconSize} 
-          className="relative z-10 transition-transform duration-500 group-hover:scale-110 group-hover:rotate-6" 
+          className="relative z-10" 
         />
       )}
     </button>

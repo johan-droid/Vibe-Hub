@@ -21,12 +21,20 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
+      - key: CSRF_SECRET
+        sync: false
       - key: SESSION_SECRET
         sync: false
       - key: LOG_LEVEL
         value: info
       - key: DATABASE_URL
         sync: true
+      - key: REDIS_URL
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: ORCHESTRATION_WORKER_CONCURRENCY
+        value: 2
       - key: GITHUB_TOKEN
         sync: false
       - key: GITHUB_APP_ID

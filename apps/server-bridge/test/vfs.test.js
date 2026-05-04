@@ -108,6 +108,16 @@ describe('Virtual File System', () => {
       const pending = vfs.getPendingFiles();
       expect(pending).toEqual([]);
     });
+
+    it('should scope pending files by user', () => {
+      vfs.stageFile('/user-1.js', 'a', 'b', { userId: 'user-1' });
+      vfs.stageFile('/user-2.js', 'c', 'd', { userId: 'user-2' });
+
+      const pending = vfs.getPendingFiles({ userId: 'user-1' });
+
+      expect(pending).toHaveLength(1);
+      expect(pending[0].filePath).toBe('/user-1.js');
+    });
   });
 
   describe('approveFile', () => {
@@ -278,6 +288,57 @@ describe('Virtual File System', () => {
       expect(stats.approved).toBe(1);
       expect(stats.rejected).toBe(1);
       expect(stats.committed).toBe(0);
+    });
+
+    it('should scope counts by user', () => {
+      vfs.stageFile('/user-1-pending.js', 'a', 'b', { userId: 'user-1' });
+      vfs.stageFile('/user-1-rejected.js', 'c', 'd', { userId: 'user-1' });
+      vfs.rejectFile('/user-1-rejected.js');
+      vfs.stageFile('/user-2-pending.js', 'e', 'f', { userId: 'user-2' });
+
+      const stats = vfs.getStats({ userId: 'user-1' });
+
+      expect(stats.total).toBe(2);
+      expect(stats.pending).toBe(1);
+      expect(stats.rejected).toBe(1);
+    });
+  });
+
+  describe('Redis persistence', () => {
+    it('should write staged entries as expiring Redis hashes', () => {
+      const operations = [];
+      const redis = {
+        multi: () => ({
+          hset: (...args) => {
+            operations.push(['hset', ...args]);
+            return redis.multiChain;
+          },
+          expire: (...args) => {
+            operations.push(['expire', ...args]);
+            return redis.multiChain;
+          },
+          sadd: (...args) => {
+            operations.push(['sadd', ...args]);
+            return redis.multiChain;
+          },
+          publish: (...args) => {
+            operations.push(['publish', ...args]);
+            return redis.multiChain;
+          },
+          exec: () => Promise.resolve([])
+        })
+      };
+      redis.multiChain = redis.multi();
+      vfs.redis = redis;
+      vfs.redisSourceId = 'test-source';
+
+      vfs.stageFile('/redis.js', 'old', 'next', { userId: 'user-1' });
+
+      expect(operations[0][0]).toBe('hset');
+      expect(operations[0][1]).toBe('vfs:entry:%2Fredis.js');
+      expect(operations[0]).toContain('metadata');
+      expect(operations[1]).toEqual(['expire', 'vfs:entry:%2Fredis.js', 86400]);
+      expect(operations.some(([name]) => name === 'publish')).toBe(true);
     });
   });
 

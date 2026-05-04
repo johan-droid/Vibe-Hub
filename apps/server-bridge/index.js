@@ -7,13 +7,25 @@ import express            from 'express';
 import cors               from 'cors';
 import helmet             from 'helmet';
 import rateLimit          from 'express-rate-limit';
+import { RedisStore }     from 'rate-limit-redis';
 import { createServer }   from 'http';
 import { WebSocketServer } from 'ws';
 import { Server as SocketIOServer } from 'socket.io';
 import { v4 as uuid }     from 'uuid';
-import { logger, requestContext } from './utils/logger.js';
+import { logger, requestContext, logError } from './utils/logger.js';
 import { codeRequestSchema, vfsCommitSchema, validateRequest } from './utils/validation.js';
-import { handleCodeRequest, handleCommitRequest, handleGetPendingFiles, handleGetVfsStats } from './orchestrator/router.js';
+import { handleCodeJobStatus, handleCodeRequest, handleCommitRequest, handleGetPendingFiles, handleGetVfsStats, router } from './orchestrator/router.js';
+import { csrfProtection, csrfTokenHandler } from './utils/csrf.js';
+import { getReadiness, registerReadinessCheck, requireReadiness } from './utils/health.js';
+import { metricsMiddleware, renderMetrics, setActiveWebsocketConnections } from './utils/metrics.js';
+import { idempotencyMiddleware } from './utils/idempotency.js';
+import { captureException, initSentry, sentryErrorHandler } from './utils/sentry.js';
+import { apiDocsHtml, buildOpenApiSpec } from './utils/openapi.js';
+import { closeRedisClients, configureSocketRedisAdapter, createRedisClients } from './utils/redis.js';
+import { listAuditLogs } from './utils/audit.js';
+import { configureCache } from './utils/cache.js';
+import { createCodeQueue } from './orchestrator/job-queue.js';
+import { validateEnvironment } from './utils/env.js';
 
 import { initDB }                from './db.js';
 import { requireAuth, verifyToken } from './auth/middleware.js';
@@ -26,12 +38,31 @@ import { creativeService }       from './creative/index.js';
 import { uiVariantService }      from './creative/generate-ui-variant.js';
 import { modelService }          from './orchestrator/models.js';
 import { listSkillGraph }        from './orchestrator/skill-graph.js';
+import { vfs }                   from './vfs/container.js';
 
 // ─── Express + HTTP server ────────────────────────────────────────────────────
+
+validateEnvironment();
 
 const app    = express();
 const server = createServer(app);
 const port   = process.env.PORT || 3001;
+const instanceId = uuid();
+const redisClients = createRedisClients();
+
+configureCache({ redis: redisClients?.command || null });
+
+await initSentry(app);
+
+process.on('unhandledRejection', (reason) => {
+  const error = reason instanceof Error ? reason : new Error(String(reason));
+  captureException(error, { type: 'unhandled_rejection' });
+});
+
+process.on('uncaughtException', (error) => {
+  captureException(error, { type: 'uncaught_exception' });
+  process.exit(1);
+});
 
 // ── Security Middleware ─────────────────────────────────────────────────────
 
@@ -40,8 +71,8 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"], // Required for some UI libraries
-      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"], // Required for Swagger UI and some UI libraries
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", process.env.UI_ORIGIN || "*"],
     },
@@ -56,12 +87,23 @@ const parseLimit = (value, fallback) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+server.keepAliveTimeout = parseLimit(process.env.HTTP_KEEP_ALIVE_TIMEOUT_MS, 65_000);
+server.headersTimeout = parseLimit(process.env.HTTP_HEADERS_TIMEOUT_MS, 70_000);
+
+const redisRateStore = (prefix) => redisClients
+  ? new RedisStore({
+      prefix: `rl:${prefix}:`,
+      sendCommand: (command, ...args) => redisClients.command.call(command, ...args),
+    })
+  : undefined;
+
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: parseLimit(process.env.RATE_LIMIT_GENERAL, isProd ? 100 : 1000),
   message: { error: 'Too many requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
+  store: redisRateStore('global'),
 });
 
 const apiLimiter = rateLimit({
@@ -70,6 +112,7 @@ const apiLimiter = rateLimit({
   message: { error: 'API rate limit exceeded.' },
   standardHeaders: true,
   legacyHeaders: false,
+  store: redisRateStore('api'),
 });
 
 const orchestrationLimiter = rateLimit({
@@ -78,11 +121,77 @@ const orchestrationLimiter = rateLimit({
   message: { error: 'Orchestration rate limit exceeded. Please wait.' },
   standardHeaders: true,
   legacyHeaders: false,
+  store: redisRateStore('code'),
 });
 
 app.use(generalLimiter); // Apply to all requests
 app.use('/api/', apiLimiter); // Stricter for API
 app.use('/api/code', orchestrationLimiter); // Strictest for LLM calls
+app.use('/api/v6/code', orchestrationLimiter);
+
+const WS_RATE_WINDOW_MS = parseLimit(process.env.WS_RATE_WINDOW_MS, 60 * 1000);
+const WS_MAX_CONNECTIONS_PER_WINDOW = parseLimit(process.env.WS_MAX_CONNECTIONS_PER_WINDOW, isProd ? 30 : 300);
+const WS_MAX_ACTIVE_PER_IP = parseLimit(process.env.WS_MAX_ACTIVE_PER_IP, isProd ? 50 : 500);
+const WS_MAX_ACTIVE_PER_USER = parseLimit(process.env.WS_MAX_ACTIVE_PER_USER, isProd ? 5 : 50);
+const wsBuckets = new Map();
+const wsActiveByIp = new Map();
+const wsActiveByUser = new Map();
+
+function getRequestIp(req) {
+  return String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown')
+    .split(',')[0]
+    .trim();
+}
+
+function getSocketIp(socket) {
+  return String(socket.handshake.headers['x-forwarded-for'] || socket.handshake.address || 'unknown')
+    .split(',')[0]
+    .trim();
+}
+
+function registerWsConnection(ip) {
+  const now = Date.now();
+  const bucket = wsBuckets.get(ip) || { count: 0, resetAt: now + WS_RATE_WINDOW_MS };
+  if (now > bucket.resetAt) {
+    bucket.count = 0;
+    bucket.resetAt = now + WS_RATE_WINDOW_MS;
+  }
+
+  bucket.count += 1;
+  wsBuckets.set(ip, bucket);
+
+  const active = wsActiveByIp.get(ip) || 0;
+  if (bucket.count > WS_MAX_CONNECTIONS_PER_WINDOW || active >= WS_MAX_ACTIVE_PER_IP) {
+    return false;
+  }
+
+  wsActiveByIp.set(ip, active + 1);
+  setActiveWebsocketConnections(Array.from(wsActiveByIp.values()).reduce((sum, count) => sum + count, 0));
+  return true;
+}
+
+function releaseWsConnection(ip) {
+  const active = wsActiveByIp.get(ip) || 0;
+  if (active <= 1) wsActiveByIp.delete(ip);
+  else wsActiveByIp.set(ip, active - 1);
+  setActiveWebsocketConnections(Array.from(wsActiveByIp.values()).reduce((sum, count) => sum + count, 0));
+}
+
+function registerWsUser(userId) {
+  const key = String(userId);
+  const active = wsActiveByUser.get(key) || 0;
+  if (active >= WS_MAX_ACTIVE_PER_USER) return false;
+  wsActiveByUser.set(key, active + 1);
+  return true;
+}
+
+function releaseWsUser(userId) {
+  if (!userId) return;
+  const key = String(userId);
+  const active = wsActiveByUser.get(key) || 0;
+  if (active <= 1) wsActiveByUser.delete(key);
+  else wsActiveByUser.set(key, active - 1);
+}
 
 // ── Standard Middleware ───────────────────────────────────────────────────────
 
@@ -93,47 +202,76 @@ app.use(cors({ origin: UI_ORIGIN, credentials: true }));
 
 // Request context logging (adds requestId and logs requests)
 app.use(requestContext);
+app.use(metricsMiddleware);
+
+// Raw body parser for webhook signature verification (must come before JSON).
+app.use(['/api/github/webhook', '/api/v6/github/webhook'], express.raw({ type: 'application/json' }));
 
 // 5 MB JSON cap — large enough for paste-in files, prevents body-flood DoS.
 app.use(express.json({ limit: '5mb' }));
 
-// Raw body parser for webhook signature verification (must come before JSON).
-app.use('/api/github/webhook', express.raw({ type: 'application/json' }));
+// ── API documentation + metrics ───────────────────────────────────────────────
+app.get('/swagger.json', (_req, res) => res.json(buildOpenApiSpec()));
+app.get('/api-docs', (_req, res) => res.type('html').send(apiDocsHtml()));
+app.get('/metrics', async (_req, res) => res.type('text/plain; version=0.0.4').send(await renderMetrics()));
 
 // ── Auth routes ───────────────────────────────────────────────────────────────
 app.use('/api/auth', googleAuth);
 app.use('/api/auth', githubAuth);
+app.use('/api/v6/auth', googleAuth);
+app.use('/api/v6/auth', githubAuth);
 
 // ── Health endpoint ───────────────────────────────────────────────────────────
-app.get('/health', (_req, res) => {
-  res.json({
-    status:  'active',
-    version: '4.1.0',
-    uptime:  process.uptime(),
-    memory:  process.memoryUsage().heapUsed,
-  });
+app.get('/health', async (_req, res) => {
+  const readiness = await getReadiness();
+  res.status(readiness.ready ? 200 : 503).json(readiness);
 });
 
 // ── User profile (protected) ──────────────────────────────────────────────────
-app.get('/api/me', requireAuth, (req, res) => {
+function handleMe(req, res) {
   const { id, email, name, avatar_url, provider } = req.user;
   res.json({ id, email, name, avatarUrl: avatar_url, provider });
-});
+}
+
+app.get('/api/me', requireAuth, handleMe);
+app.get('/api/v6/me', requireAuth, handleMe);
+app.get('/api/csrf-token', requireAuth, csrfTokenHandler);
+app.get('/api/v6/csrf-token', requireAuth, csrfTokenHandler);
 
 // Runtime diagnostics for SaaS observability. Secrets are never returned.
-app.get('/api/runtime/diagnostics', requireAuth, (_req, res) => {
+function handleRuntimeDiagnostics(_req, res) {
   res.json(modelService.diagnostics());
-});
+}
 
-app.get('/api/runtime/skills', requireAuth, (_req, res) => {
+function handleRuntimeSkills(_req, res) {
   res.json({
     mode: 'mixture-of-experts',
     graph: listSkillGraph(),
   });
-});
+}
+
+async function handleAuditLogs(req, res, next) {
+  try {
+    const logs = await listAuditLogs({
+      userId: req.user.id,
+      resourceId: req.query.resourceId,
+      limit: req.query.limit,
+    });
+    res.json({ success: true, logs });
+  } catch (error) {
+    next(error);
+  }
+}
+
+app.get('/api/runtime/diagnostics', requireAuth, handleRuntimeDiagnostics);
+app.get('/api/v6/runtime/diagnostics', requireAuth, handleRuntimeDiagnostics);
+app.get('/api/runtime/skills', requireAuth, handleRuntimeSkills);
+app.get('/api/v6/runtime/skills', requireAuth, handleRuntimeSkills);
+app.get('/api/audit-logs', requireAuth, handleAuditLogs);
+app.get('/api/v6/audit-logs', requireAuth, handleAuditLogs);
 
 // ── GitHub webhooks ───────────────────────────────────────────────────────────
-app.post('/api/github/webhook', async (req, res) => {
+async function handleGithubWebhook(req, res) {
   // The body arrives as a raw Buffer because of the express.raw() middleware
   // above. We must verify the HMAC signature before processing anything.
   const signature = req.headers['x-hub-signature-256'];
@@ -193,23 +331,42 @@ app.post('/api/github/webhook', async (req, res) => {
   }
 
   res.status(200).send('OK');
-});
+}
+
+app.post('/api/github/webhook', handleGithubWebhook);
+app.post('/api/v6/github/webhook', handleGithubWebhook);
 
 // ── Agent Orchestration (V6 XState) ───────────────────────────────────────────
 // Main endpoint for AI code generation with rollback and VFS approval
-app.post('/api/code', requireAuth, validateRequest(codeRequestSchema), handleCodeRequest);
+const codePipeline = [
+  requireAuth,
+  requireReadiness,
+  csrfProtection,
+  idempotencyMiddleware(),
+  validateRequest(codeRequestSchema),
+  handleCodeRequest,
+];
+
+app.post('/api/code', ...codePipeline);
+app.post('/api/v6/code', ...codePipeline);
+app.get('/api/code/jobs/:jobId', requireAuth, handleCodeJobStatus);
+app.get('/api/v6/code/jobs/:jobId', requireAuth, handleCodeJobStatus);
 
 // ── Virtual File System API ───────────────────────────────────────────────────
 // Secure commit endpoint with user approval gate
-app.post('/api/fs/commit', requireAuth, validateRequest(vfsCommitSchema), handleCommitRequest);
+const commitPipeline = [requireAuth, csrfProtection, validateRequest(vfsCommitSchema), handleCommitRequest];
+app.post('/api/fs/commit', ...commitPipeline);
+app.post('/api/v6/fs/commit', ...commitPipeline);
 app.get('/api/fs/pending', requireAuth, handleGetPendingFiles);
+app.get('/api/v6/fs/pending', requireAuth, handleGetPendingFiles);
 app.get('/api/fs/stats', requireAuth, handleGetVfsStats);
+app.get('/api/v6/fs/stats', requireAuth, handleGetVfsStats);
 
 // ── GitHub Copilot Extension endpoint ─────────────────────────────────────────
 // Copilot Extensions use the OpenAI streaming chat completions protocol.
 // We translate it to our agent and stream back in SSE format here (the ONE
 // place SSE is appropriate: Copilot already handles the bidirectional channel).
-app.post('/api/copilot/chat', requireAuth, async (req, res) => {
+async function handleCopilotChat(req, res) {
   const { messages } = req.body;
   const lastUserMsg = messages?.findLast(m => m.role === 'user')?.content ?? '';
 
@@ -243,7 +400,10 @@ app.post('/api/copilot/chat', requireAuth, async (req, res) => {
   } finally {
     res.end();
   }
-});
+}
+
+app.post('/api/copilot/chat', requireAuth, handleCopilotChat);
+app.post('/api/v6/copilot/chat', requireAuth, handleCopilotChat);
 
 // ─── WebSocket Server ─────────────────────────────────────────────────────────
 
@@ -254,6 +414,11 @@ app.set('wss', wss);
 
 const io = new SocketIOServer(server, {
   path: '/socket.io',
+  perMessageDeflate: {
+    threshold: Number.parseInt(process.env.SOCKET_COMPRESSION_THRESHOLD || '1024', 10),
+  },
+  pingInterval: Number.parseInt(process.env.SOCKET_PING_INTERVAL_MS || '25000', 10),
+  pingTimeout: Number.parseInt(process.env.SOCKET_PING_TIMEOUT_MS || '20000', 10),
   cors: {
     origin: process.env.UI_ORIGIN || "*",
     methods: ["GET", "POST"],
@@ -261,20 +426,88 @@ const io = new SocketIOServer(server, {
   }
 });
 
+if (redisClients) {
+  registerReadinessCheck('redis', async () => {
+    await redisClients.command.ping();
+  });
+}
+configureSocketRedisAdapter(io, redisClients);
+const codeQueue = createCodeQueue({
+  io,
+  processor: async (data) => {
+    const result = await router.executeWithStateMachine(
+      data.prompt,
+      data.userId,
+      data.targetFile,
+      io,
+      data.socketId,
+      data.requestId,
+    );
+    if (io && data.socketId) {
+      io.to(data.socketId).emit('agent_status', {
+        status: 'job_completed',
+        message: `Orchestration job completed.`,
+        jobId: data.jobId,
+        requestId: data.requestId,
+        timestamp: new Date().toISOString(),
+      });
+    }
+    return result;
+  },
+});
+app.set('codeQueue', codeQueue);
+vfs.configureRedis({
+  client: redisClients?.command,
+  subscriber: redisClients?.vfsSubscriber,
+  sourceId: instanceId,
+}).catch(error => {
+  logger.error('VFS Redis coordination failed to initialize', { error: error.message });
+});
+
 // Inject the io instance into the Express app for the router to use
 app.set('io', io);
 
+io.use((socket, next) => {
+  const ip = getSocketIp(socket);
+  if (!registerWsConnection(ip)) {
+    return next(new Error('WebSocket rate limit exceeded.'));
+  }
+
+  const token =
+    socket.handshake.auth?.token ||
+    socket.handshake.query?.token ||
+    String(socket.handshake.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  const decoded = verifyToken(token);
+
+  if (!decoded) {
+    releaseWsConnection(ip);
+    return next(new Error('Unauthenticated.'));
+  }
+
+  if (!registerWsUser(decoded.id)) {
+    releaseWsConnection(ip);
+    return next(new Error('WebSocket user connection limit exceeded.'));
+  }
+
+  socket.data.ip = ip;
+  socket.data.user = decoded;
+  next();
+});
+
 io.on('connection', (socket) => {
   console.log(`[Socket.io] Client connected: ${socket.id}`);
+  socket.join(`user_${socket.data.user.id}`);
   
   socket.on('join', (data) => {
-    if (data.userId) {
-      socket.join(`user_${data.userId}`);
-      console.log(`[Socket.io] Socket ${socket.id} joined room user_${data.userId}`);
+    if (data.userId && String(data.userId) === String(socket.data.user.id)) {
+      socket.join(`user_${socket.data.user.id}`);
+      console.log(`[Socket.io] Socket ${socket.id} joined room user_${socket.data.user.id}`);
     }
   });
   
   socket.on('disconnect', () => {
+    releaseWsConnection(socket.data.ip);
+    releaseWsUser(socket.data.user?.id);
     console.log(`[Socket.io] Client disconnected: ${socket.id}`);
   });
 });
@@ -317,18 +550,56 @@ const heartbeatInterval = setInterval(() => {
   }
 }, PING_INTERVAL_MS);
 
+const VFS_CLEANUP_INTERVAL_MS = 30 * 60 * 1000;
+const VFS_ENTRY_TTL_MS = 24 * 60 * 60 * 1000;
+const vfsCleanupInterval = setInterval(() => {
+  const activeUserIds = new Set(
+    Array.from(sessions.values())
+      .map(session => session.user?.id)
+      .filter(Boolean)
+      .map(String)
+  );
+  vfs.clearExpiredEntries({ maxAgeMs: VFS_ENTRY_TTL_MS, activeUserIds });
+}, VFS_CLEANUP_INTERVAL_MS);
+vfsCleanupInterval.unref?.();
+
 // Clean up the interval on server shutdown so Node.js can exit cleanly.
-server.on('close', () => clearInterval(heartbeatInterval));
+server.on('close', () => {
+  clearInterval(heartbeatInterval);
+  clearInterval(vfsCleanupInterval);
+  codeQueue?.close?.().catch(() => {});
+  closeRedisClients(redisClients).catch(() => {});
+});
 
 // ── Connection handler ────────────────────────────────────────────────────────
 wss.on('connection', (ws, req) => {
+  const ip = getRequestIp(req);
+  if (!registerWsConnection(ip)) {
+    ws.close(1013, 'WebSocket rate limit exceeded.');
+    return;
+  }
+
+  let released = false;
+  const releaseConnection = () => {
+    if (released) return;
+    released = true;
+    releaseWsConnection(ip);
+    releaseWsUser(decoded?.id);
+  };
+
   // ── Authentication ─────────────────────────────────────────────────────
   const url     = new URL(req.url, `http://${req.headers.host}`);
   const token   = url.searchParams.get('token');
   const decoded = verifyToken(token);
 
   if (!decoded) {
+    releaseConnection();
     ws.close(4001, 'Unauthenticated.');
+    return;
+  }
+  if (!registerWsUser(decoded.id)) {
+    releaseConnection();
+    ws.close(1013, 'WebSocket user connection limit exceeded.');
     return;
   }
 
@@ -764,6 +1035,7 @@ wss.on('connection', (ws, req) => {
 
   // ── Disconnection cleanup ─────────────────────────────────────────────────
   ws.on('close', () => {
+    releaseConnection();
     // Cancel all pending timeouts so they don't fire after GC
     clearTimeout(session.pingTimeout);
 
@@ -778,6 +1050,7 @@ wss.on('connection', (ws, req) => {
   });
 
   ws.on('error', () => {
+    releaseConnection();
     sessions.delete(sessionId);
   });
 });
@@ -808,6 +1081,8 @@ async function start() {
     });
   });
   
+  app.use(sentryErrorHandler());
+
   // Global error handler
   app.use((err, req, res, next) => {
     logError(err, {

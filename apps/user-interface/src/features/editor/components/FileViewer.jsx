@@ -6,15 +6,14 @@ import { useStore } from '../../../store/useStore';
 import { motion } from 'framer-motion';
 
 const QuickAction = ({ icon: Icon, label, detail, color }) => (
-  <div className="flex flex-col gap-6 rounded-[2.5rem] bg-white p-8 border border-black/[0.03] shadow-sm transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-black/[0.04] group relative overflow-hidden">
-    <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${color} shadow-lg shadow-black/[0.02] transition-transform duration-500 group-hover:scale-110 group-hover:rotate-6`}>
-      <Icon size={24} />
+  <div className="panel flex items-start gap-4 p-5 transition-colors hover:border-primary/30">
+    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${color}`}>
+      <Icon size={18} />
     </div>
-    <div>
-      <p className="text-[10px] font-black uppercase tracking-[0.4em] text-on-surface/40 mb-3">{label}</p>
-      <p className="text-sm font-semibold text-on-surface-variant/60 leading-relaxed">{detail}</p>
+    <div className="min-w-0">
+      <p className="text-sm font-black text-on-surface">{label}</p>
+      <p className="mt-1 text-sm font-medium leading-6 text-on-surface-variant">{detail}</p>
     </div>
-    <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-black/[0.01] rounded-full blur-2xl group-hover:bg-black/[0.02] transition-colors" />
   </div>
 );
 
@@ -53,38 +52,31 @@ export const FileViewer = React.memo(function FileViewer({ path, content }) {
 
   if (!content) {
     return (
-      <div className="flex h-full flex-col bg-[#faf8f5]">
-        {/* Header Segment */}
-        <div className="h-14 shrink-0 flex items-center justify-between border-b border-black/[0.03] px-10 bg-white/50 backdrop-blur-md">
-          <div className="flex items-center gap-4">
-            <div className="h-2 w-2 rounded-full bg-google-green animate-pulse" />
-            <span className="text-[10px] font-black uppercase tracking-[0.4em] opacity-40">System Core Active</span>
+      <div className="flex h-full flex-col bg-surface">
+        <div className="flex h-12 shrink-0 items-center justify-between border-b border-outline-variant bg-surface-container-lowest px-4 md:px-6">
+          <div className="flex items-center gap-3">
+            <div className="h-2 w-2 animate-pulse rounded-full bg-google-green" />
+            <span className="text-xs font-bold uppercase tracking-[0.12em] text-on-surface-variant">System active</span>
           </div>
-          <div className="flex items-center gap-8 text-[9px] font-black opacity-20 tracking-widest uppercase">
+          <div className="hidden items-center gap-5 text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant sm:flex">
             <span className="flex items-center gap-2"><Globe size={11} /> Global Link</span>
             <span className="flex items-center gap-2"><Shield size={11} /> Encrypted</span>
           </div>
         </div>
 
-        {/* Empty State / Welcome Surface */}
-        <div className="flex-1 overflow-y-auto px-10 py-16 scrollbar-none">
+        <div className="flex-1 overflow-y-auto px-5 py-8 md:px-8">
           <div className="mx-auto max-w-5xl">
-            <header className="mb-20 text-center space-y-6">
-              <div className="relative mx-auto mb-10 flex h-24 w-24 items-center justify-center rounded-[3rem] bg-white shadow-2xl shadow-black/[0.04] ring-1 ring-black/[0.02]">
-                <Sparkles size={40} className="text-google-blue transition-transform hover:scale-110" />
-                <motion.div 
-                  animate={{ opacity: [0.1, 0.3, 0.1] }} 
-                  transition={{ repeat: Infinity, duration: 3 }}
-                  className="absolute inset-0 bg-google-blue blur-[40px] rounded-full"
-                />
+            <header className="mb-8 max-w-2xl">
+              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-lg border border-outline-variant bg-surface-container-lowest text-primary shadow-sm">
+                <Sparkles size={22} />
               </div>
-              <h2 className="text-4xl font-black text-on-surface tracking-tighter leading-none">Ready to Build?</h2>
-              <p className="mx-auto max-w-2xl text-lg font-semibold text-on-surface-variant/40 leading-relaxed">
+              <h2 className="headline-medium">Ready to build?</h2>
+              <p className="mt-3 text-base font-medium leading-7 text-on-surface-variant">
                 Your workspace is optimized and connected. Select an asset from the explorer or use the assistant to generate new ideas.
               </p>
             </header>
 
-            <div className="grid gap-10 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               <QuickAction 
                 icon={FolderOpen} 
                 label="Asset Library" 
@@ -113,43 +105,41 @@ export const FileViewer = React.memo(function FileViewer({ path, content }) {
           </div>
         </div>
 
-        {/* Footer Meta */}
-        <div className="h-10 shrink-0 flex items-center justify-between border-t border-black/[0.03] px-10 bg-white/50 backdrop-blur-sm">
-           <div className="flex items-center gap-10">
-              <div className="flex items-center gap-3 text-[9px] font-black text-on-surface-variant/30 uppercase tracking-widest">
+        <div className="flex h-9 shrink-0 items-center justify-between border-t border-outline-variant bg-surface-container-lowest px-4 md:px-6">
+           <div className="flex items-center gap-5">
+              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant">
                  <GitBranch size={11} /> 
                  <span>Main Instance</span>
               </div>
-              <div className="h-3 w-px bg-black/[0.05]" />
-              <div className="flex items-center gap-3 text-[9px] font-black text-on-surface-variant/30 uppercase tracking-widest">
+              <div className="h-3 w-px bg-outline-variant" />
+              <div className="hidden items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant sm:flex">
                  <Search size={11} /> 
                  <span>Indexing Complete</span>
               </div>
            </div>
-           <span className="text-[9px] font-black text-on-surface-variant/10 uppercase tracking-[0.4em]">Selina_Workspace_v4.1</span>
+           <span className="hidden text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant md:inline">Selina Workspace</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-white">
-      {/* Editor Header */}
-      <div className="h-14 shrink-0 flex items-center justify-between border-b border-black/[0.03] px-10 bg-[#faf8f5]/50 backdrop-blur-md">
+    <div className="flex h-full flex-col overflow-hidden bg-surface-container-lowest">
+      <div className="flex h-12 shrink-0 items-center justify-between border-b border-outline-variant bg-surface-container-lowest px-4 md:px-6">
         <div className="flex items-center gap-5 min-w-0">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-google-blue/5 text-google-blue border border-google-blue/10">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/10 bg-primary/10 text-primary">
             <FileCode2 size={16} />
           </div>
           <div className="flex items-center gap-3 min-w-0">
-             <span className="text-[10px] font-black text-on-surface-variant/40 uppercase tracking-[0.3em] shrink-0">Path</span>
+             <span className="hidden shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant sm:inline">Path</span>
              <ChevronRight size={10} className="text-on-surface-variant/20" />
              <span className="text-sm font-bold text-on-surface truncate tracking-tight">{path}</span>
           </div>
         </div>
         
-        <div className="flex items-center gap-4">
-           <Button variant="tonal" size="sm" className="h-8 rounded-lg text-[9px] px-4">Explain Code</Button>
-           <Button variant="filled" size="sm" className="h-8 rounded-lg text-[9px] px-4 bg-google-blue border-none">Optimize</Button>
+        <div className="hidden items-center gap-2 sm:flex">
+           <Button variant="tonal" size="sm">Explain</Button>
+           <Button variant="filled" size="sm">Optimize</Button>
         </div>
       </div>
 
@@ -162,10 +152,10 @@ export const FileViewer = React.memo(function FileViewer({ path, content }) {
           wrapLines={false}
           customStyle={{
             margin: 0,
-            padding: '3rem',
+            padding: '2rem',
             background: 'transparent',
             fontSize: '14px',
-            lineHeight: '1.9',
+            lineHeight: '1.75',
             fontFamily: 'JetBrains Mono, monospace',
             minHeight: '100%',
           }}
@@ -173,7 +163,7 @@ export const FileViewer = React.memo(function FileViewer({ path, content }) {
             color: 'hsl(var(--on-surface))', 
             opacity: 0.1, 
             minWidth: '4em', 
-            paddingRight: '3rem', 
+            paddingRight: '2rem', 
             textAlign: 'right', 
             userSelect: 'none',
             fontSize: '11px',

@@ -10,9 +10,10 @@ const pool = new pg.Pool({
         }),
       }
     : false,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  max: Number.parseInt(process.env.PG_POOL_MAX || '10', 10),
+  min: Number.parseInt(process.env.PG_POOL_MIN || '0', 10),
+  idleTimeoutMillis: Number.parseInt(process.env.PG_IDLE_TIMEOUT_MS || '30000', 10),
+  connectionTimeoutMillis: Number.parseInt(process.env.PG_CONNECTION_TIMEOUT_MS || '2000', 10),
 });
 
 pool.on('error', () => {
@@ -133,6 +134,21 @@ export async function initDB(retries = 5) {
 
       CREATE INDEX IF NOT EXISTS idx_ast_graphs_project ON ast_graphs(project_name);
       CREATE INDEX IF NOT EXISTS idx_ast_graphs_file ON ast_graphs(file_path);
+
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        event_type VARCHAR(100) NOT NULL,
+        resource_type VARCHAR(80) NOT NULL DEFAULT 'vfs',
+        resource_id TEXT,
+        user_id TEXT,
+        request_id TEXT,
+        payload JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_event_type ON audit_logs(event_type);
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_user_created ON audit_logs(user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_resource ON audit_logs(resource_type, resource_id);
     `);
   } catch (err) {
     if (retries > 0) {

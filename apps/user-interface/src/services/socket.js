@@ -9,6 +9,7 @@
  */
 
 import { io } from 'socket.io-client';
+import { api } from './api';
 export class SwarmSocket {
   constructor(token) {
     this.token = token;
@@ -186,11 +187,19 @@ export class OrchestratorSocket {
     
     this.socket = io(SOCKET_URL, {
       path: '/socket.io',
+      auth: { token: api.getToken() },
       autoConnect: true,
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 10000,
+      randomizationFactor: 0.5,
+      timeout: 10000,
       transports: ['websocket', 'polling']
+    });
+
+    this.socket.io.on('reconnect_attempt', () => {
+      this.socket.auth = { token: api.getToken() };
     });
 
     this.socket.on('connect', () => {

@@ -27,6 +27,8 @@ async function readError(res) {
 class ApiClient {
   constructor() {
     this.token = localStorage.getItem('selina_token') || null;
+    this.csrfToken = null;
+    this.csrfPromise = null;
   }
 
   getToken() {
@@ -48,15 +50,49 @@ class ApiClient {
     localStorage.removeItem('selina_token');
   }
 
-  get headers() {
+  get baseHeaders() {
     const h = { 'Content-Type': 'application/json' };
     const token = this.getToken();
     if (token) h.Authorization = `Bearer ${token}`;
     return h;
   }
 
+  async fetchCsrfToken() {
+    if (this.csrfToken) return this.csrfToken;
+    if (this.csrfPromise) return this.csrfPromise;
+
+    this.csrfPromise = fetch(`${API_BASE}/api/csrf-token`, {
+      headers: this.baseHeaders,
+      credentials: 'include',
+    })
+      .then(async (res) => {
+        if (res.status === 401) {
+          this.clearToken();
+          useStore.getState().logout();
+        }
+        if (!res.ok) throw new ApiError(await readError(res), res.status);
+        const data = await res.json();
+        this.csrfToken = data.csrfToken;
+        return this.csrfToken;
+      })
+      .finally(() => {
+        this.csrfPromise = null;
+      });
+
+    return this.csrfPromise;
+  }
+
+  async requestHeaders({ csrf = false } = {}) {
+    const headers = this.baseHeaders;
+    if (csrf) headers['X-CSRF-Token'] = await this.fetchCsrfToken();
+    return headers;
+  }
+
   async get(path) {
-    const res = await fetch(`${API_BASE}${path}`, { headers: this.headers });
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers: await this.requestHeaders(),
+      credentials: 'include',
+    });
     if (res.status === 401) {
       this.clearToken();
       useStore.getState().logout();
@@ -65,16 +101,21 @@ class ApiClient {
     return res.json();
   }
 
-  async post(path, body) {
+  async post(path, body, options = {}) {
+    const headers = await this.requestHeaders({ csrf: true });
+    if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
+
     const res = await fetch(`${API_BASE}${path}`, {
       method: 'POST',
-      headers: this.headers,
+      headers,
+      credentials: 'include',
       body: JSON.stringify(body),
     });
     if (res.status === 401) {
       this.clearToken();
       useStore.getState().logout();
     }
+    if (res.status === 403) this.csrfToken = null;
     if (!res.ok) throw new ApiError(await readError(res), res.status);
     return res.json();
   }

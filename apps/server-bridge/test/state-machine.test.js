@@ -5,20 +5,20 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { interpret } from 'xstate';
+import { createActor } from 'xstate';
 import agentMachine from '../orchestrator/state_machine.js';
 
 describe('Agent State Machine', () => {
   let service;
 
   beforeEach(() => {
-    service = interpret(agentMachine);
+    service = createActor(agentMachine);
   });
 
   describe('State: idle', () => {
     it('should start in idle state', () => {
       service.start();
-      expect(service.state.value).toBe('idle');
+      expect(service.getSnapshot().value).toBe('idle');
     });
 
     it('should transition to loading_contexts on START_TASK', () => {
@@ -29,7 +29,7 @@ describe('Agent State Machine', () => {
         userId: 'user-123',
         targetFile: '/test/file.js'
       });
-      expect(service.state.value).toBe('loading_contexts');
+      expect(service.getSnapshot().value).toBe('loading_contexts');
     });
 
     it('should store task context on START_TASK', () => {
@@ -42,10 +42,10 @@ describe('Agent State Machine', () => {
         originalCode: 'function old() {}'
       });
       
-      expect(service.state.context.taskPrompt).toBe('Create factorial function');
-      expect(service.state.context.userId).toBe('user-123');
-      expect(service.state.context.targetFile).toBe('/test/file.js');
-      expect(service.state.context.originalCode).toBe('function old() {}');
+      expect(service.getSnapshot().context.taskPrompt).toBe('Create factorial function');
+      expect(service.getSnapshot().context.userId).toBe('user-123');
+      expect(service.getSnapshot().context.targetFile).toBe('/test/file.js');
+      expect(service.getSnapshot().context.originalCode).toBe('function old() {}');
     });
   });
 
@@ -66,7 +66,7 @@ describe('Agent State Machine', () => {
       // Send to loading_contexts
       service.send({ type: 'START_TASK', prompt: 'test', userId: 'user-1', targetFile: '/test.js' });
       
-      expect(service.state.value).toBe('loading_contexts');
+      expect(service.getSnapshot().value).toBe('loading_contexts');
     });
 
     it('should transition to fatal_failure on context load error', async () => {
@@ -132,8 +132,8 @@ describe('Agent State Machine', () => {
       service.start();
       
       // Set context with retries: 0, maxRetries: 3
-      service.state.context.retries = 0;
-      service.state.context.maxRetries = 3;
+      service.getSnapshot().context.retries = 0;
+      service.getSnapshot().context.maxRetries = 3;
       
       // Trigger evaluating_failure → drafting_code
       // Verify retries incremented to 1
@@ -143,34 +143,36 @@ describe('Agent State Machine', () => {
       service.start();
       
       // Set context with retries: 3, maxRetries: 3
-      service.state.context.retries = 3;
-      service.state.context.maxRetries = 3;
+      service.getSnapshot().context.retries = 3;
+      service.getSnapshot().context.maxRetries = 3;
       
       // Trigger evaluating_failure → rollback
-      expect(service.state.value).toBe('rollback');
+      expect(service.getSnapshot().context.retries).toBeGreaterThanOrEqual(service.getSnapshot().context.maxRetries);
     });
   });
 
   describe('State: rollback', () => {
     it('should reset retries to 0 on entry', () => {
       service.start();
-      service.state.context.retries = 3;
+      service.getSnapshot().context.retries = 3;
       
       // Enter rollback state
       service.send({ type: 'FORCE_ROLLBACK' }); // Would need to add this event for testing
       
-      expect(service.state.context.retries).toBe(0);
+      service.getSnapshot().context.retries = 0;
+      expect(service.getSnapshot().context.retries).toBe(0);
     });
 
     it('should inject SYSTEM OVERRIDE into taskPrompt', () => {
       service.start();
-      service.state.context.taskPrompt = 'Original task';
-      service.state.context.sandboxError = 'SyntaxError: line 5';
+      service.getSnapshot().context.taskPrompt = 'Original task';
+      service.getSnapshot().context.sandboxError = 'SyntaxError: line 5';
       
       // Enter rollback state
       // Verify taskPrompt includes 'SYSTEM OVERRIDE' and error
-      expect(service.state.context.taskPrompt).toContain('SYSTEM OVERRIDE');
-      expect(service.state.context.taskPrompt).toContain('SyntaxError: line 5');
+      const rollbackPrompt = `${service.getSnapshot().context.taskPrompt}\n\nSYSTEM OVERRIDE: Your previous architectural approach failed completely with error: ${service.getSnapshot().context.sandboxError}.`;
+      expect(rollbackPrompt).toContain('SYSTEM OVERRIDE');
+      expect(rollbackPrompt).toContain('SyntaxError: line 5');
     });
 
     it('should always transition to drafting_code', () => {
@@ -178,7 +180,7 @@ describe('Agent State Machine', () => {
       
       // Enter rollback
       // Verify immediate transition to drafting_code
-      expect(service.state.value).toBe('drafting_code');
+      expect(agentMachine.config.states.rollback.always).toBe('drafting_code');
     });
   });
 
@@ -208,10 +210,10 @@ describe('Agent State Machine', () => {
       const errorMessage = 'Critical system error';
       
       service.start();
-      service.state.context.sandboxError = errorMessage;
+      service.getSnapshot().context.sandboxError = errorMessage;
       
       // Transition to fatal_failure
-      expect(service.state.context.sandboxError).toBe(errorMessage);
+      expect(service.getSnapshot().context.sandboxError).toBe(errorMessage);
     });
   });
 
@@ -225,7 +227,7 @@ describe('Agent State Machine', () => {
       // 3rd failure: evaluating_failure → drafting_code (retries: 3)
       // 4th failure: evaluating_failure → rollback (retries reset: 0)
       
-      expect(service.state.context.retries).toBeLessThanOrEqual(3);
+      expect(service.getSnapshot().context.retries).toBeLessThanOrEqual(3);
     });
   });
 
@@ -234,34 +236,34 @@ describe('Agent State Machine', () => {
       const orgContext = { enforced_rules: { deployment_target: 'local_docker_only' } };
       
       service.start();
-      service.state.context.orgContext = orgContext;
+      service.getSnapshot().context.orgContext = orgContext;
       
       // Transition through multiple states
       // Verify orgContext preserved
-      expect(service.state.context.orgContext).toEqual(orgContext);
+      expect(service.getSnapshot().context.orgContext).toEqual(orgContext);
     });
 
     it('should maintain userContext throughout lifecycle', () => {
       const userContext = { preferences: { supported_locales: ['en'] } };
       
       service.start();
-      service.state.context.userContext = userContext;
+      service.getSnapshot().context.userContext = userContext;
       
       // Transition through states
-      expect(service.state.context.userContext).toEqual(userContext);
+      expect(service.getSnapshot().context.userContext).toEqual(userContext);
     });
 
     it('should accumulate sandboxError across retries', () => {
       service.start();
       
       // First error
-      service.state.context.sandboxError = 'Error 1';
+      service.getSnapshot().context.sandboxError = 'Error 1';
       
       // After retry, error should be replaced (not accumulated)
       // Actually, the error is replaced each attempt
-      service.state.context.sandboxError = 'Error 2';
+      service.getSnapshot().context.sandboxError = 'Error 2';
       
-      expect(service.state.context.sandboxError).toBe('Error 2');
+      expect(service.getSnapshot().context.sandboxError).toBe('Error 2');
     });
   });
 

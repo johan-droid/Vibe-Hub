@@ -19,6 +19,9 @@
     "concurrently": "^9.1.0"
   },
   "overrides": {
+    "workbox-build": {
+      "@rollup/plugin-terser": "^1.0.0"
+    },
     "serialize-javascript": "^7.0.5"
   }
 }

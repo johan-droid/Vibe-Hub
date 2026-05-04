@@ -1,8 +1,18 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { withJsonCache } from '../utils/cache.js';
 
 class UserContextBuilder {
   static async buildUserPreferences(userId) {
+    const { value } = await withJsonCache(
+      `cache:context:user:${userId}`,
+      Number.parseInt(process.env.CONTEXT_CACHE_TTL_SECONDS || '300', 10),
+      async () => this.loadUserPreferences(userId)
+    );
+    return value;
+  }
+
+  static async loadUserPreferences(userId) {
     // Static example matching your architectural requirements.
     const userPrefs = {
       aesthetics: "minimalist, clean UI, similar to Vercel/Fly.io",

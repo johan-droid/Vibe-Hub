@@ -226,7 +226,7 @@ export default function SettingsModal({ isOpen, onClose }) {
             </button>
             <Button variant="filled" size="lg" onClick={handleSave} className="h-14 px-10 rounded-2xl bg-google-blue shadow-2xl shadow-google-blue/20 border-none font-black uppercase tracking-widest text-xs">
               Save Configuration
-            </button>
+            </Button>
           </footer>
         </div>
       </motion.div>

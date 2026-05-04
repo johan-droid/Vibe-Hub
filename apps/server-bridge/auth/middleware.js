@@ -23,13 +23,12 @@ export function generateToken(user) {
  * Express middleware: Verify JWT and attach user to req
  */
 export async function requireAuth(req, res, next) {
-  const header = req.headers.authorization;
-  if (!header || !header.startsWith('Bearer ')) {
+  const token = readToken(req);
+  if (!token) {
     return res.status(401).json({ error: 'Authentication required.' });
   }
 
   try {
-    const token = header.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET);
     const user = await getUserById(decoded.id);
     if (!user) return res.status(401).json({ error: 'User not found.' });
@@ -49,4 +48,27 @@ export function verifyToken(token) {
   } catch {
     return null;
   }
+}
+function parseCookies(header = '') {
+  try {
+    return Object.fromEntries(
+      header
+        .split(';')
+        .map(part => part.trim())
+        .filter(Boolean)
+        .map(part => {
+          const index = part.indexOf('=');
+          if (index === -1) return [part, ''];
+          return [part.slice(0, index), decodeURIComponent(part.slice(index + 1))];
+        })
+    );
+  } catch {
+    return {};
+  }
+}
+
+function readToken(req) {
+  const header = req.headers.authorization;
+  if (header?.startsWith('Bearer ')) return header.split(' ')[1];
+  return parseCookies(req.headers.cookie).selina_token;
 }

@@ -1,8 +1,18 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { withJsonCache } from '../utils/cache.js';
 
 class OrgContextBuilder {
   static async buildGlobalConstraints() {
+    const { value } = await withJsonCache(
+      'cache:context:org:global',
+      Number.parseInt(process.env.CONTEXT_CACHE_TTL_SECONDS || '300', 10),
+      async () => this.loadGlobalConstraints()
+    );
+    return value;
+  }
+
+  static async loadGlobalConstraints() {
     try {
       // In a real scenario, you'd populate these files. 
       // We wrap in try/catch to return defaults if files don't exist yet during setup.

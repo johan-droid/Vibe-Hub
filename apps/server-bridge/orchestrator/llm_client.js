@@ -1,4 +1,7 @@
+import CircuitBreaker from 'opossum';
 import { PromptOrchestrator } from './context.js';
+import { recordLlmCost, recordLlmDuration } from '../utils/metrics.js';
+import { hashValue, withJsonCache } from '../utils/cache.js';
 
 class LLMClient {
   constructor() {
@@ -6,24 +9,84 @@ class LLMClient {
     this.apiKey = process.env.GEMINI_API_KEY || process.env.LLM_API_KEY; 
     this.endpoint = process.env.LLM_API_ENDPOINT || 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
     this.model = process.env.LLM_MODEL || 'gemini-2.0-flash';
+    this.openaiApiKey = process.env.OPENAI_API_KEY;
+    this.openaiModel = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+    this.anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+    this.anthropicModel = process.env.ANTHROPIC_MODEL || 'claude-3-5-haiku-latest';
+    this.breakers = new Map([
+      ['gemini', this.createBreaker('gemini', (payload) => this.callGemini(payload))],
+      ['openai', this.createBreaker('openai', (payload) => this.callOpenAI(payload))],
+      ['anthropic', this.createBreaker('anthropic', (payload) => this.callAnthropic(payload))],
+    ]);
+  }
+
+  createBreaker(provider, action) {
+    return new CircuitBreaker(action, {
+      timeout: Number.parseInt(process.env.LLM_PROVIDER_TIMEOUT_MS || '45000', 10),
+      resetTimeout: Number.parseInt(process.env.LLM_CIRCUIT_RESET_MS || '30000', 10),
+      errorThresholdPercentage: 50,
+      volumeThreshold: 3,
+      name: provider,
+    });
   }
 
   /**
    * Executes the API call using the strictly formatted prompts.
    */
   async generateCode(orgContext, userContext, taskPrompt, astGraph, sandboxError = null) {
-    if (!this.apiKey) {
+    if (!this.apiKey && !this.openaiApiKey && !this.anthropicApiKey) {
       throw new Error("CRITICAL: LLM API key is missing. Cannot generate code.");
     }
 
     // 1. Compile the strict prompt structures
     const systemInstruction = PromptOrchestrator.buildSystemPrompt(orgContext, userContext);
     const userInstruction = PromptOrchestrator.buildTaskPrompt(taskPrompt, astGraph, sandboxError);
+    const cacheKey = `cache:llm:${hashValue({
+      model: this.model,
+      openaiModel: this.openaiModel,
+      anthropicModel: this.anthropicModel,
+      systemInstruction,
+      userInstruction,
+      temperature: 0.2,
+    })}`;
 
+    const { value } = await withJsonCache(
+      cacheKey,
+      Number.parseInt(process.env.LLM_CACHE_TTL_SECONDS || '1800', 10),
+      () => this.generateWithFallback({ systemInstruction, userInstruction })
+    );
+
+    return value;
+  }
+
+  async generateWithFallback(payload) {
+    const providers = [
+      this.apiKey && ['gemini', { ...payload, apiKey: this.apiKey, endpoint: this.endpoint, model: this.model }],
+      this.openaiApiKey && ['openai', { ...payload, apiKey: this.openaiApiKey, model: this.openaiModel }],
+      this.anthropicApiKey && ['anthropic', { ...payload, apiKey: this.anthropicApiKey, model: this.anthropicModel }],
+    ].filter(Boolean);
+
+    let lastError = null;
+    for (const [provider, providerPayload] of providers) {
+      const started = Date.now();
+      try {
+        const result = await this.breakers.get(provider).fire(providerPayload);
+        recordLlmDuration((Date.now() - started) / 1000, { provider, model: providerPayload.model, success: true });
+        return result;
+      } catch (error) {
+        recordLlmDuration((Date.now() - started) / 1000, { provider, model: providerPayload.model, success: false });
+        lastError = error;
+      }
+    }
+
+    throw new Error(`Failed to communicate with all LLM providers: ${lastError?.message || 'no provider configured'}`);
+  }
+
+  async callGemini({ systemInstruction, userInstruction, apiKey, endpoint, model }) {
     try {
       // 2. Execute the network request
       // Using Gemini API format (adjust if using OpenAI/Anthropic)
-      const response = await fetch(`${this.endpoint}?key=${this.apiKey}`, {
+      const response = await fetch(`${endpoint}?key=${apiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -48,6 +111,14 @@ class LLMClient {
       }
 
       const data = await response.json();
+      const totalTokens = data.usageMetadata?.totalTokenCount || 0;
+      if (totalTokens > 0) {
+        const costPerThousand = Number.parseFloat(process.env.LLM_COST_PER_1K_TOKENS || '0');
+        recordLlmCost((totalTokens / 1000) * costPerThousand, {
+          model,
+          provider: 'gemini',
+        });
+      }
       
       // Extract the raw code from the response
       let rawCode = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
@@ -62,8 +133,58 @@ class LLMClient {
       return rawCode;
 
     } catch (error) {
-      throw new Error(`Failed to communicate with LLM provider: ${error.message}`);
+      throw new Error(`Gemini provider failed: ${error.message}`);
     }
+  }
+
+  async callOpenAI({ systemInstruction, userInstruction, apiKey, model }) {
+    const response = await fetch(`${process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        messages: [
+          { role: 'system', content: systemInstruction },
+          { role: 'user', content: userInstruction },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API returned status ${response.status}: ${await response.text()}`);
+    }
+
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content?.trim() || '';
+  }
+
+  async callAnthropic({ systemInstruction, userInstruction, apiKey, model }) {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        max_tokens: 8192,
+        system: systemInstruction,
+        messages: [{ role: 'user', content: userInstruction }],
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Anthropic API returned status ${response.status}: ${await response.text()}`);
+    }
+
+    const data = await response.json();
+    return data.content?.map(part => part.text || '').join('').trim() || '';
   }
 }
 
