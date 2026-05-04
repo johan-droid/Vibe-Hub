@@ -28,10 +28,10 @@ const fadeUp = {
 };
 
 const features = [
-  { title: 'Agent orchestration', desc: 'Coordinate planning, coding, review, and deployment from one workspace.', icon: Brain },
-  { title: 'Live workbench', desc: 'Inspect files, terminal output, diffs, and assistant context without switching tools.', icon: Layout },
-  { title: 'Guarded execution', desc: 'Keep actions scoped, auditable, and tied to the current project session.', icon: ShieldCheck },
-  { title: 'Deploy-ready flow', desc: 'Move from local changes to cloud release with fewer handoffs.', icon: Globe },
+  { title: 'Model Context Protocol', desc: 'Native MCP integration connecting Claude, Cursor, and Continue.dev directly to your workspace tools.', icon: Layout },
+  { title: 'Persistent Neural Memory', desc: 'Dual-tier memory system with auto-learned brain journals backed by a PostgreSQL database.', icon: Brain },
+  { title: 'Hybrid Sandbox Architecture', desc: 'Secure execution split across Render hosting and strict GitHub Actions sandboxing.', icon: Globe },
+  { title: 'Hardened Security', desc: 'HMAC-SHA256 verified webhooks, WSS with JWT, and TLS database connections for production-grade safety.', icon: ShieldCheck },
 ];
 
 const previewFiles = [
@@ -262,7 +262,7 @@ export default function LandingPage() {
               </div>
               <h1 className="display-large">Selina</h1>
               <p className="mt-5 max-w-[24rem] text-xl font-medium leading-8 text-on-surface-variant md:max-w-2xl">
-                A coding agent command center for planning, patching, sandboxing, and shipping with visible control.
+                A SaaS-grade coding agent command center. Powered by Gemini 2.0 Flash, featuring persistent neural memory, native MCP, and heavily hardened GitHub Actions sandboxing.
               </p>
               <div className="mt-8 flex max-w-[21rem] flex-col gap-3 sm:max-w-none sm:flex-row">
                 <Button size="lg" variant="filled" trailingIcon={ArrowRight} onClick={() => window.location.href = api.getGoogleAuthUrl()}>
@@ -355,13 +355,49 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer className="border-t border-outline-variant bg-surface-container-lowest px-5 py-8 md:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 text-sm font-medium text-on-surface-variant md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-3">
-            <BrandMark />
-            <span>Selina Intelligence Labs</span>
+      <footer className="border-t border-outline-variant bg-surface-container-lowest px-5 py-12 md:px-8">
+        <div className="mx-auto max-w-7xl grid gap-8 md:grid-cols-4 lg:grid-cols-5">
+          <div className="lg:col-span-2">
+            <div className="flex items-center gap-3 mb-4">
+              <BrandMark />
+              <span className="text-lg font-black tracking-normal text-on-surface">Selina Intelligence Labs</span>
+            </div>
+            <p className="text-sm font-medium text-on-surface-variant max-w-sm">
+              Built for focused autonomous engineering. Integrating advanced agent orchestration with strict security sandboxing to ship faster and safer.
+            </p>
           </div>
-          <span>© 2026. Built for focused autonomous engineering.</span>
+          <div>
+            <h4 className="text-sm font-bold text-on-surface mb-4">Product</h4>
+            <ul className="space-y-3 text-sm font-medium text-on-surface-variant">
+              <li><a href="#platform" className="hover:text-google-blue transition-colors">Platform Overview</a></li>
+              <li><a href="#security" className="hover:text-google-blue transition-colors">Security Features</a></li>
+              <li><a href="#" className="hover:text-google-blue transition-colors">Pricing</a></li>
+              <li><a href="#" className="hover:text-google-blue transition-colors">Changelog</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-on-surface mb-4">Resources</h4>
+            <ul className="space-y-3 text-sm font-medium text-on-surface-variant">
+              <li><a href="https://github.com/vibe-platform/vibe-hub" target="_blank" rel="noreferrer" className="hover:text-google-blue transition-colors">Documentation</a></li>
+              <li><a href="https://github.com/vibe-platform/vibe-hub" target="_blank" rel="noreferrer" className="hover:text-google-blue transition-colors">GitHub Repository</a></li>
+              <li><a href="#" className="hover:text-google-blue transition-colors">API Reference</a></li>
+              <li><a href="#" className="hover:text-google-blue transition-colors">Community</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-on-surface mb-4">Legal</h4>
+            <ul className="space-y-3 text-sm font-medium text-on-surface-variant">
+              <li><a href="#" className="hover:text-google-blue transition-colors">Privacy Policy</a></li>
+              <li><a href="#" className="hover:text-google-blue transition-colors">Terms of Service</a></li>
+              <li><a href="#" className="hover:text-google-blue transition-colors">Security Disclosure</a></li>
+            </ul>
+          </div>
+        </div>
+        <div className="mx-auto max-w-7xl mt-12 pt-8 border-t border-outline-variant flex flex-col md:flex-row items-center justify-between gap-4">
+          <span className="text-xs font-medium text-on-surface-variant">© {new Date().getFullYear()} Vibe Hub Engineering. All rights reserved.</span>
+          <div className="flex gap-4 text-on-surface-variant">
+            <a href="https://github.com/vibe-platform/vibe-hub" target="_blank" rel="noreferrer" className="hover:text-google-blue transition-colors"><Github size={18} /></a>
+          </div>
         </div>
       </footer>
     </div>
