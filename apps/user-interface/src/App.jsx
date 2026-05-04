@@ -7,6 +7,7 @@ import { useStore } from './store/useStore';
 // ── Lazy Pages (Performance) ──────────────────────────────────────────────────
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const Workspace = lazy(() => import('./pages/Workspace'));
+const AuthCallback = lazy(() => import('./pages/AuthCallback'));
 
 // ── Premium Initialization Loader ──────────────────────────────────────────────
 function LoadingScreen() {
@@ -86,6 +87,7 @@ export default function App() {
           <Suspense fallback={<LoadingScreen />}>
             <Routes location={location} key={location.pathname}>
               <Route path="/" element={<LandingPage />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
               <Route 
                 path="/dashboard/*" 
                 element={user ? <Workspace /> : <Navigate to="/" replace />} 
