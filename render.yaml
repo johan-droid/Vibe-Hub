@@ -27,8 +27,12 @@ services:
         generateValue: true
       - key: LOG_LEVEL
         value: info
+      - key: TRUST_PROXY_HOPS
+        value: 1
       - key: DATABASE_URL
         sync: true
+      - key: DATABASE_SSL_MODE
+        value: verify-full
       - key: REDIS_URL
         sync: false
       - key: SENTRY_DSN

@@ -1,7 +1,27 @@
 import pg from 'pg';
 
+const SSL_MODES_WITH_CURRENT_VERIFY_FULL_BEHAVIOR = new Set(['prefer', 'require', 'verify-ca']);
+
+export function normalizeDatabaseUrl(connectionString = process.env.DATABASE_URL, env = process.env) {
+  if (!connectionString || env.NODE_ENV !== 'production') return connectionString;
+
+  try {
+    const url = new URL(connectionString);
+    const sslMode = url.searchParams.get('sslmode')?.toLowerCase();
+    const desiredSslMode = env.DATABASE_SSL_MODE || 'verify-full';
+
+    if (!sslMode || SSL_MODES_WITH_CURRENT_VERIFY_FULL_BEHAVIOR.has(sslMode)) {
+      url.searchParams.set('sslmode', desiredSslMode);
+    }
+
+    return url.toString();
+  } catch {
+    return connectionString;
+  }
+}
+
 const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: normalizeDatabaseUrl(),
   ssl: process.env.NODE_ENV === 'production'
     ? {
         rejectUnauthorized: true,

@@ -49,6 +49,11 @@ const server = createServer(app);
 const port   = process.env.PORT || 3001;
 const instanceId = uuid();
 const redisClients = createRedisClients();
+const isProd = process.env.NODE_ENV === 'production';
+const parseLimit = (value, fallback) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
 
 configureCache({ redis: redisClients?.command || null });
 
@@ -81,11 +86,10 @@ app.use(helmet({
 }));
 
 // Rate limiting - Prevent abuse
-const isProd = process.env.NODE_ENV === 'production';
-const parseLimit = (value, fallback) => {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
+const trustProxyHops = parseLimit(process.env.TRUST_PROXY_HOPS, process.env.RENDER || isProd ? 1 : 0);
+if (trustProxyHops > 0) {
+  app.set('trust proxy', trustProxyHops);
+}
 
 server.keepAliveTimeout = parseLimit(process.env.HTTP_KEEP_ALIVE_TIMEOUT_MS, 65_000);
 server.headersTimeout = parseLimit(process.env.HTTP_HEADERS_TIMEOUT_MS, 70_000);
@@ -211,6 +215,15 @@ app.use(['/api/github/webhook', '/api/v6/github/webhook'], express.raw({ type: '
 app.use(express.json({ limit: '5mb' }));
 
 // ── API documentation + metrics ───────────────────────────────────────────────
+app.get('/', (_req, res) => {
+  res.json({
+    service: 'server-bridge',
+    status: 'ok',
+    health: '/health',
+    readiness: '/ready',
+    docs: '/api-docs',
+  });
+});
 app.get('/swagger.json', (_req, res) => res.json(buildOpenApiSpec()));
 app.get('/api-docs', (_req, res) => res.type('html').send(apiDocsHtml()));
 app.get('/metrics', async (_req, res) => res.type('text/plain; version=0.0.4').send(await renderMetrics()));
@@ -223,6 +236,14 @@ app.use('/api/v6/auth', githubAuth);
 
 // ── Health endpoint ───────────────────────────────────────────────────────────
 app.get('/health', async (_req, res) => {
+  const readiness = await getReadiness();
+  res.status(200).json({
+    ...readiness,
+    liveness: true,
+  });
+});
+
+app.get('/ready', async (_req, res) => {
   const readiness = await getReadiness();
   res.status(readiness.ready ? 200 : 503).json(readiness);
 });
