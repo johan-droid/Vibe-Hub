@@ -173,7 +173,7 @@ function Header({ page, signals, user, providerLabel, online }) {
             <Pill icon={Clock3}>{signals.lastSyncedAt ? `Synced ${signals.lastSyncedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Not synced yet'}</Pill>
           </div>
           <p className="text-sm font-semibold text-[#8a6a33]">Selina workspace</p>
-          <h1 className="mt-2 max-w-4xl text-4xl font-semibold tracking-[-0.065em] text-[#17201b] md:text-6xl">
+          <h1 className="mt-2 max-w-4xl text-3xl font-semibold tracking-[-0.04em] text-[#17201b] md:text-4xl">
             {page === 'overview' ? `Good to see you, ${displayName}` : PAGES[page]}
           </h1>
           <p className="mt-4 max-w-3xl text-base leading-8 text-[#5d6259]">

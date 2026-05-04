@@ -51,9 +51,15 @@ app.use(helmet({
 }));
 
 // Rate limiting - Prevent abuse
+const isProd = process.env.NODE_ENV === 'production';
+const parseLimit = (value, fallback) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  max: parseLimit(process.env.RATE_LIMIT_GENERAL, isProd ? 100 : 1000),
   message: { error: 'Too many requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -61,7 +67,7 @@ const generalLimiter = rateLimit({
 
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 30, // 30 requests per minute for API
+  max: parseLimit(process.env.RATE_LIMIT_API, isProd ? 30 : 300),
   message: { error: 'API rate limit exceeded.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -69,7 +75,7 @@ const apiLimiter = rateLimit({
 
 const orchestrationLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 5, // 5 orchestrations per minute (expensive operation)
+  max: parseLimit(process.env.RATE_LIMIT_ORCHESTRATION, isProd ? 5 : 60),
   message: { error: 'Orchestration rate limit exceeded. Please wait.' },
   standardHeaders: true,
   legacyHeaders: false,

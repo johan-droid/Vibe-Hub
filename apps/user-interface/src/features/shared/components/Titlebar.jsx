@@ -113,7 +113,6 @@ export default function Titlebar({ onOpenSettings }) {
           icon={theme === 'dark' ? Sun : Moon}
           onClick={toggleTheme}
           variant="standard"
-          size="md"
           className="text-[#5d6259] hover:text-[#1f6f5b]"
           aria-label="Toggle theme"
           title="Toggle theme"
@@ -124,7 +123,6 @@ export default function Titlebar({ onOpenSettings }) {
           active={!sidebarCollapsed}
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           variant="tonal"
-          size="md"
           aria-label="Toggle sidebar"
           title="Toggle sidebar"
         />
@@ -133,7 +131,6 @@ export default function Titlebar({ onOpenSettings }) {
           active={!chatCollapsed}
           onClick={() => setChatCollapsed(!chatCollapsed)}
           variant="tonal"
-          size="md"
           aria-label="Toggle chat"
           title="Toggle chat"
         />
@@ -141,7 +138,6 @@ export default function Titlebar({ onOpenSettings }) {
           icon={Settings}
           onClick={onOpenSettings}
           variant="standard"
-          size="md"
           className="border border-[#e3d8c5] bg-white hover:text-[#1f6f5b]"
           aria-label="Settings"
           title="Settings"

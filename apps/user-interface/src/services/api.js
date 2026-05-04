@@ -1,6 +1,16 @@
+import { useStore } from '../store/useStore';
+
 const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.PROD
   ? 'https://vibe-hub-bridge.onrender.com'
   : '');
+
+class ApiError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
 
 async function readError(res) {
   try {
@@ -47,8 +57,11 @@ class ApiClient {
 
   async get(path) {
     const res = await fetch(`${API_BASE}${path}`, { headers: this.headers });
-    if (res.status === 401) this.clearToken();
-    if (!res.ok) throw new Error(await readError(res));
+    if (res.status === 401) {
+      this.clearToken();
+      useStore.getState().logout();
+    }
+    if (!res.ok) throw new ApiError(await readError(res), res.status);
     return res.json();
   }
 
@@ -58,8 +71,11 @@ class ApiClient {
       headers: this.headers,
       body: JSON.stringify(body),
     });
-    if (res.status === 401) this.clearToken();
-    if (!res.ok) throw new Error(await readError(res));
+    if (res.status === 401) {
+      this.clearToken();
+      useStore.getState().logout();
+    }
+    if (!res.ok) throw new ApiError(await readError(res), res.status);
     return res.json();
   }
 
