@@ -209,9 +209,9 @@ export default function Workspace() {
                   <div className="flex h-9 items-center justify-between border-b border-outline-variant bg-surface-container-low px-4">
                     <div className="flex items-center gap-2">
                       <TerminalIcon size={13} className="text-primary" />
-                      <span className="text-xs font-bold uppercase tracking-[0.12em] text-on-surface-variant">Terminal</span>
+                      <span className="text-xs font-bold uppercase tracking-normal text-on-surface-variant">Terminal</span>
                     </div>
-                    <div className="hidden items-center gap-3 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant/70 sm:flex">
+                    <div className="hidden items-center gap-3 font-mono text-[10px] font-semibold uppercase tracking-normal text-on-surface-variant/70 sm:flex">
                       <span className="flex items-center gap-1.5"><Cpu size={10} /> BUS: 0x24</span>
                       <span>Link: active</span>
                     </div>

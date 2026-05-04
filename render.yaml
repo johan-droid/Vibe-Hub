@@ -22,9 +22,9 @@ services:
       - key: JWT_SECRET
         sync: false
       - key: CSRF_SECRET
-        sync: false
+        generateValue: true
       - key: SESSION_SECRET
-        sync: false
+        generateValue: true
       - key: LOG_LEVEL
         value: info
       - key: DATABASE_URL

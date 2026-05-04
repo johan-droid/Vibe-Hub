@@ -30,8 +30,8 @@ function LoadingScreen() {
         </div>
         
         <div className="space-y-3 text-center">
-          <h2 className="text-3xl font-black tracking-tight text-on-surface">Selina</h2>
-          <div className="flex items-center justify-center gap-3 text-[10px] font-bold uppercase tracking-[0.14em] text-on-surface-variant">
+          <h2 className="text-3xl font-black tracking-normal text-on-surface">Selina</h2>
+          <div className="flex items-center justify-center gap-3 text-[10px] font-bold uppercase tracking-normal text-on-surface-variant">
             <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
             <span>Preparing workspace</span>
           </div>
@@ -81,7 +81,7 @@ export default function App() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
-          className="h-screen w-screen overflow-hidden bg-surface-container-lowest text-on-surface"
+          className="min-h-screen w-screen overflow-x-hidden bg-surface-container-lowest text-on-surface"
         >
           <Suspense fallback={<LoadingScreen />}>
             <Routes location={location} key={location.pathname}>

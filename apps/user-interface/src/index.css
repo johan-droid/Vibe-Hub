@@ -116,21 +116,21 @@
     @apply bg-surface-container-lowest/85 backdrop-blur-[var(--glass-blur)] neural-border shadow-sm; 
   }
 
-  .display-large { @apply font-sans text-5xl md:text-7xl font-black tracking-tight leading-[0.95] text-on-surface; }
-  .display-medium { @apply font-sans text-4xl md:text-6xl font-black tracking-tight leading-none text-on-surface; }
-  .display-small { @apply font-sans text-3xl md:text-4xl font-black tracking-tight leading-tight text-on-surface; }
+  .display-large { @apply font-sans text-5xl md:text-7xl font-black tracking-normal leading-[0.95] text-on-surface; }
+  .display-medium { @apply font-sans text-4xl md:text-6xl font-black tracking-normal leading-none text-on-surface; }
+  .display-small { @apply font-sans text-3xl md:text-4xl font-black tracking-normal leading-tight text-on-surface; }
   
-  .headline-large { @apply font-sans text-3xl md:text-4xl font-black tracking-tight leading-tight; }
-  .headline-medium { @apply font-sans text-2xl md:text-3xl font-black tracking-tight leading-tight; }
-  .headline-small { @apply font-sans text-xl font-black tracking-tight leading-snug; }
+  .headline-large { @apply font-sans text-3xl md:text-4xl font-black tracking-normal leading-tight; }
+  .headline-medium { @apply font-sans text-2xl md:text-3xl font-black tracking-normal leading-tight; }
+  .headline-small { @apply font-sans text-xl font-black tracking-normal leading-snug; }
   
-  .title-large { @apply font-sans text-2xl font-bold tracking-tight; }
-  .title-medium { @apply font-sans text-xl font-bold tracking-tight; }
-  .title-small { @apply font-sans text-lg font-bold tracking-tight; }
+  .title-large { @apply font-sans text-2xl font-bold tracking-normal; }
+  .title-medium { @apply font-sans text-xl font-bold tracking-normal; }
+  .title-small { @apply font-sans text-lg font-bold tracking-normal; }
   
-  .label-large { @apply font-sans text-[11px] tracking-[0.14em] font-bold uppercase text-on-surface-variant; }
-  .label-medium { @apply font-sans text-[10px] tracking-[0.12em] font-bold uppercase text-on-surface-variant; }
-  .label-small { @apply font-sans text-[9px] tracking-[0.12em] font-bold uppercase text-on-surface-variant; }
+  .label-large { @apply font-sans text-[11px] tracking-normal font-bold uppercase text-on-surface-variant; }
+  .label-medium { @apply font-sans text-[10px] tracking-normal font-bold uppercase text-on-surface-variant; }
+  .label-small { @apply font-sans text-[9px] tracking-normal font-bold uppercase text-on-surface-variant; }
 
   .body-large { @apply font-sans text-lg leading-relaxed font-medium; }
   .body-medium { @apply font-sans text-base leading-relaxed font-medium; }
@@ -145,7 +145,7 @@
   }
 
   .panel {
-    @apply rounded-xl border border-outline-variant/80 bg-surface-container-lowest shadow-sm;
+    @apply rounded-lg border border-outline-variant/80 bg-surface-container-lowest shadow-sm;
   }
 
   .scrollbar-none::-webkit-scrollbar { display: none; }

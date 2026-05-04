@@ -34,6 +34,33 @@ const features = [
   { title: 'Deploy-ready flow', desc: 'Move from local changes to cloud release with fewer handoffs.', icon: Globe },
 ];
 
+const previewFiles = [
+  ['apps/user-interface', 'root'],
+  ['src/pages', 'folder'],
+  ['Workspace.jsx', 'file'],
+  ['CommandCenterDashboard.jsx', 'active'],
+  ['index.css', 'file'],
+];
+
+const previewStats = [
+  ['Trust', '100%', ShieldCheck],
+  ['Latency', '186ms', Activity],
+  ['Runs', '4.1k', Zap],
+  ['Runtime', 'Ready', Terminal],
+];
+
+const codeLines = [
+  ['const', ' readiness = await agent.verify(scope);'],
+  ['if', ' (readiness.safe) commit.review();'],
+  ['return', ' workspace.ship({ guarded: true });'],
+];
+
+const runTimeline = [
+  ['Plan scoped', '0.2s'],
+  ['Patch staged', '1.4s'],
+  ['Sandbox passed', '2.1s'],
+];
+
 function BrandMark() {
   return (
     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-on-primary shadow-sm">
@@ -44,36 +71,36 @@ function BrandMark() {
 
 function ProductPreview() {
   return (
-    <div className="panel w-full max-w-full overflow-hidden bg-surface-container-lowest shadow-3xl">
+    <div className="panel relative w-full max-w-full overflow-hidden bg-surface-container-lowest shadow-3xl">
       <div className="flex h-11 items-center justify-between border-b border-outline-variant bg-surface-container-low px-4">
         <div className="flex items-center gap-2">
           <div className="h-2.5 w-2.5 rounded-full bg-google-red/70" />
           <div className="h-2.5 w-2.5 rounded-full bg-google-yellow/80" />
           <div className="h-2.5 w-2.5 rounded-full bg-google-green/80" />
         </div>
-        <div className="hidden items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant sm:flex">
+        <div className="hidden items-center gap-2 text-[10px] font-bold uppercase tracking-normal text-on-surface-variant sm:flex">
           <Lock size={12} />
-          Secure session
+          Protected branch
         </div>
       </div>
 
-      <div className="grid min-h-[440px] grid-cols-[3.5rem_15rem_minmax(0,1fr)] bg-surface-container-lowest max-lg:grid-cols-[3.5rem_minmax(0,1fr)] max-md:min-h-[360px]">
+      <div className="grid min-h-[468px] grid-cols-[3.5rem_13rem_minmax(17rem,1fr)_18rem] bg-surface-container-lowest max-xl:grid-cols-[3.5rem_minmax(18rem,1fr)_17rem] max-md:min-h-[360px]">
         <div className="flex flex-col items-center gap-3 border-r border-outline-variant bg-surface-container-low px-2 py-4">
           {[Brain, FileCode2, Activity, Terminal].map((Icon, index) => (
-            <div key={index} className={`flex h-9 w-9 items-center justify-center rounded-lg ${index === 0 ? 'bg-primary text-on-primary' : 'text-on-surface-variant'}`}>
+            <div key={index} className={`flex h-9 w-9 items-center justify-center rounded-lg ${index === 0 ? 'bg-primary text-on-primary shadow-sm' : 'text-on-surface-variant hover:bg-surface-container'}`}>
               <Icon size={17} />
             </div>
           ))}
         </div>
 
-        <aside className="border-r border-outline-variant bg-surface-container-low p-4 max-lg:hidden">
+        <aside className="border-r border-outline-variant bg-surface-container-low p-4 max-xl:hidden">
           <div className="mb-4 flex items-center justify-between">
             <span className="label-medium">Explorer</span>
             <Code2 size={15} className="text-primary" />
           </div>
           <div className="space-y-2">
-            {['apps/user-interface', 'src/pages', 'Workspace.jsx', 'CommandCenterDashboard.jsx', 'index.css'].map((item, index) => (
-              <div key={item} className={`flex h-8 items-center gap-2 rounded-md px-2 text-sm font-medium ${index === 3 ? 'bg-primary/10 text-primary' : 'text-on-surface-variant'}`}>
+            {previewFiles.map(([item, type]) => (
+              <div key={item} className={`flex h-8 items-center gap-2 rounded-md px-2 text-sm font-medium ${type === 'active' ? 'bg-primary/10 text-primary' : 'text-on-surface-variant'}`}>
                 <FileCode2 size={14} />
                 <span className="truncate">{item}</span>
               </div>
@@ -81,56 +108,88 @@ function ProductPreview() {
           </div>
         </aside>
 
-        <main className="flex min-w-0 flex-col">
+        <main className="flex min-w-0 flex-col border-r border-outline-variant">
           <div className="flex h-12 items-center justify-between border-b border-outline-variant px-4">
-            <div>
-              <p className="text-sm font-black text-on-surface">System Intelligence</p>
-              <p className="text-xs font-medium text-on-surface-variant">Workspace health and agent readiness</p>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-black text-on-surface">CommandCenterDashboard.jsx</p>
+              <p className="text-xs font-medium text-on-surface-variant">Safe patch prepared for review</p>
             </div>
-            <Button size="sm" variant="tonal">Re-index</Button>
+            <span className="rounded-full bg-google-green/10 px-2 py-1 text-[10px] font-bold text-google-green">Verified</span>
           </div>
 
-          <div className="grid flex-1 gap-4 p-4">
-            <section className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2">
-                {[
-                  ['Active agents', '12', Brain],
-                  ['Trust score', '100%', ShieldCheck],
-                  ['Throughput', '4.1k', Zap],
-                  ['Runtime', 'Ready', Terminal],
-                ].map(([label, value, Icon]) => (
-                  <div key={label} className="rounded-lg border border-outline-variant bg-surface-container-low p-4">
-                    <Icon size={17} className="mb-3 text-primary" />
-                    <p className="text-xs font-bold text-on-surface-variant">{label}</p>
-                    <p className="mt-1 text-xl font-black tracking-tight text-on-surface">{value}</p>
+          <div className="grid flex-1 grid-rows-[1fr_auto] gap-4 p-4">
+            <section className="min-h-0 rounded-lg border border-outline-variant bg-surface-container-low">
+              <div className="flex h-10 items-center justify-between border-b border-outline-variant px-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-on-surface">
+                  <Code2 size={14} className="text-primary" />
+                  Patch preview
+                </div>
+                <span className="text-[10px] font-bold text-on-surface-variant">3 files</span>
+              </div>
+              <div className="space-y-3 p-4 font-mono text-[12px] leading-6 text-on-surface-variant">
+                {codeLines.map(([keyword, line], index) => (
+                  <div key={line} className="grid grid-cols-[1.75rem_minmax(0,1fr)] gap-3">
+                    <span className="text-right text-on-surface-variant/50">{index + 8}</span>
+                    <p className="truncate">
+                      <span className="font-bold text-google-yellow">{keyword}</span>
+                      <span>{line}</span>
+                    </p>
                   </div>
                 ))}
-              </div>
-              <div className="rounded-lg border border-outline-variant bg-surface-container-low p-4">
-                <div className="mb-4 flex items-center justify-between">
-                  <p className="text-sm font-black text-on-surface">Recent work</p>
-                  <span className="rounded-full bg-google-green/10 px-2 py-1 text-[10px] font-bold text-google-green">Live</span>
-                </div>
-                <div className="space-y-3">
-                  {['Reviewed UI polish pass', 'Validated runtime bridge', 'Prepared deployment checks'].map((item) => (
-                    <div key={item} className="flex items-center gap-3 text-sm font-medium text-on-surface-variant">
-                      <CheckCircle2 size={15} className="text-google-green" />
-                      {item}
-                    </div>
-                  ))}
+                <div className="mt-3 rounded-md border border-google-green/25 bg-google-green/10 px-3 py-2 text-google-green">
+                  + Redis VFS ownership check added before commit
                 </div>
               </div>
             </section>
 
-            <aside className="hidden rounded-lg border border-outline-variant bg-primary p-4 text-on-primary">
-              <Sparkles size={20} className="mb-5" />
-              <h3 className="text-lg font-black leading-tight tracking-tight">Ask once. Watch the workspace move.</h3>
-              <p className="mt-3 text-sm font-medium leading-6 text-on-primary/75">
-                Selina turns requests into scoped tasks, code checks, and deployment handoffs.
-              </p>
-            </aside>
+            <section className="grid gap-3 sm:grid-cols-3">
+              {runTimeline.map(([label, time]) => (
+                <div key={label} className="rounded-lg border border-outline-variant bg-surface-container-low p-3">
+                  <CheckCircle2 size={15} className="mb-2 text-google-green" />
+                  <p className="truncate text-xs font-bold text-on-surface">{label}</p>
+                  <p className="mt-1 text-[11px] font-semibold text-on-surface-variant">{time}</p>
+                </div>
+              ))}
+            </section>
           </div>
         </main>
+
+        <aside className="flex min-w-0 flex-col bg-surface-container-lowest max-lg:hidden">
+          <div className="flex h-12 items-center justify-between border-b border-outline-variant px-4">
+            <div>
+              <p className="text-sm font-black text-on-surface">Release Readiness</p>
+              <p className="text-xs font-medium text-on-surface-variant">Live control plane</p>
+            </div>
+            <Button size="sm" variant="tonal">Re-index</Button>
+          </div>
+
+          <div className="grid gap-3 p-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+              {previewStats.map(([label, value, Icon]) => (
+                <div key={label} className="rounded-lg border border-outline-variant bg-surface-container-low p-3">
+                  <Icon size={16} className="mb-3 text-primary" />
+                  <p className="text-[11px] font-bold text-on-surface-variant">{label}</p>
+                  <p className="mt-1 text-lg font-black text-on-surface">{value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-lg border border-outline-variant bg-surface-container-low p-4">
+              <div className="mb-4 flex items-center justify-between">
+                <p className="text-sm font-black text-on-surface">Guardrail queue</p>
+                <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-bold text-primary">Live</span>
+              </div>
+              <div className="space-y-3">
+                {['CSRF verified', 'Audit row queued', 'Docker healthy'].map((item) => (
+                  <div key={item} className="flex items-center gap-3 text-sm font-medium text-on-surface-variant">
+                    <CheckCircle2 size={15} className="text-google-green" />
+                    <span className="truncate">{item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
   );
@@ -146,8 +205,8 @@ function Navbar() {
         <button onClick={() => navigate('/')} className="flex items-center gap-3">
           <BrandMark />
           <div className="text-left">
-            <p className="text-lg font-black leading-none tracking-tight text-on-surface">Selina</p>
-            <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant">Intelligence Labs</p>
+            <p className="text-lg font-black leading-none tracking-normal text-on-surface">Selina</p>
+            <p className="mt-1 text-[10px] font-bold uppercase tracking-normal text-on-surface-variant">Intelligence Labs</p>
           </div>
         </button>
 
@@ -194,16 +253,16 @@ export default function LandingPage() {
       <Navbar />
 
       <main>
-        <section className="relative px-5 pb-14 pt-28 md:px-8 md:pb-20 md:pt-32">
-          <div className="mx-auto grid max-w-7xl items-center gap-10 lg:grid-cols-[0.92fr_1.08fr]">
+        <section className="relative px-5 pb-12 pt-24 md:px-8 md:pb-16 md:pt-28">
+          <div className="mx-auto grid max-w-7xl items-center gap-10 lg:grid-cols-[0.82fr_1.18fr]">
             <motion.div initial="hidden" animate="show" variants={fadeUp}>
               <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-outline-variant bg-surface-container-lowest px-3 py-1.5">
                 <Sparkles size={14} className="text-primary" />
-                <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-on-surface-variant">Autonomous engineering workspace</span>
+                <span className="text-[11px] font-bold uppercase tracking-normal text-on-surface-variant">Autonomous engineering workspace</span>
               </div>
               <h1 className="display-large">Selina</h1>
-              <p className="mt-5 max-w-[21rem] text-xl font-medium leading-8 text-on-surface-variant md:max-w-2xl">
-                Plan, edit, verify, and deploy software with a focused AI workspace built for real engineering flow.
+              <p className="mt-5 max-w-[24rem] text-xl font-medium leading-8 text-on-surface-variant md:max-w-2xl">
+                A coding agent command center for planning, patching, sandboxing, and shipping with visible control.
               </p>
               <div className="mt-8 flex max-w-[21rem] flex-col gap-3 sm:max-w-none sm:flex-row">
                 <Button size="lg" variant="filled" trailingIcon={ArrowRight} onClick={() => window.location.href = api.getGoogleAuthUrl()}>
@@ -213,10 +272,10 @@ export default function LandingPage() {
                   Watch Preview
                 </Button>
               </div>
-              <div className="mt-8 flex flex-wrap gap-3 text-sm font-semibold text-on-surface-variant">
-                <span className="inline-flex items-center gap-2 rounded-full bg-surface-container-lowest px-3 py-2"><ShieldCheck size={15} className="text-google-green" /> Guarded sessions</span>
-                <span className="inline-flex items-center gap-2 rounded-full bg-surface-container-lowest px-3 py-2"><Github size={15} /> Git-aware workflow</span>
-                <span className="inline-flex items-center gap-2 rounded-full bg-surface-container-lowest px-3 py-2"><Activity size={15} className="text-primary" /> Live telemetry</span>
+              <div className="mt-8 grid max-w-xl gap-2 text-sm font-semibold text-on-surface-variant sm:grid-cols-3">
+                <span className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3"><ShieldCheck size={15} className="text-google-green" /> Guarded sessions</span>
+                <span className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3"><Github size={15} /> Git-aware workflow</span>
+                <span className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3"><Activity size={15} className="text-primary" /> Live telemetry</span>
               </div>
             </motion.div>
 
@@ -265,7 +324,7 @@ export default function LandingPage() {
                   <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
                     <feature.icon size={18} />
                   </div>
-                  <h3 className="text-lg font-black tracking-tight text-on-surface">{feature.title}</h3>
+                  <h3 className="text-lg font-black tracking-normal text-on-surface">{feature.title}</h3>
                   <p className="mt-3 text-sm font-medium leading-6 text-on-surface-variant">{feature.desc}</p>
                 </div>
               ))}

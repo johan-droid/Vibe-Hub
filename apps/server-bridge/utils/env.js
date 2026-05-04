@@ -17,16 +17,26 @@ const envSchema = z.object({
 });
 
 export function validateEnvironment(env = process.env) {
-  const parsed = envSchema.safeParse(env);
+  const effectiveEnv = {
+    ...env,
+    CSRF_SECRET: env.CSRF_SECRET || env.JWT_SECRET,
+  };
+
+  const parsed = envSchema.safeParse(effectiveEnv);
   if (!parsed.success) {
     throw new Error(`Invalid environment configuration: ${parsed.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ')}`);
   }
 
   if (env.NODE_ENV === 'production') {
-    const missing = ['DATABASE_URL', 'JWT_SECRET', 'CSRF_SECRET', 'UI_ORIGIN']
+    const missing = ['DATABASE_URL', 'JWT_SECRET', 'UI_ORIGIN']
       .filter(key => !env[key]);
     if (missing.length > 0) {
       throw new Error(`Missing required production environment variables: ${missing.join(', ')}`);
+    }
+
+    if (!env.CSRF_SECRET && env.JWT_SECRET) {
+      env.CSRF_SECRET = env.JWT_SECRET;
+      console.warn('CSRF_SECRET is not set; falling back to JWT_SECRET. Configure a dedicated CSRF_SECRET for stronger secret isolation.');
     }
   }
 
