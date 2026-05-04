@@ -1,50 +1,53 @@
 import React from 'react';
-import { GitBranch, Globe, Shield, Cpu, Wifi, Gauge } from 'lucide-react';
+import { GitBranch, Globe, Shield, Cpu, Wifi, Gauge, Terminal, Activity, Zap } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
 import AgentNeuralStatus from '../../swarm/components/NeuralStatus';
-import { Surface } from './Surface';
-import { Chip } from './Chip';
 
 /**
  * StatusBar provides compact runtime, model, and security posture.
  */
 export default function StatusBar() {
   const { vfsStatus, effortLevel } = useStore();
-  const modelLabel = import.meta.env.VITE_AGENT_MODEL_LABEL || 'Model gateway';
+  const modelLabel = import.meta.env.VITE_AGENT_MODEL_LABEL || 'NEURAL_GTWY_v4';
 
   return (
-    <Surface
-      elevation={1}
-      shape="none"
-      className="flex h-10 items-center justify-between border-t border-[#e3d8c5] bg-[#fffaf2] px-6 text-xs text-[#62675f]"
+    <div
+      className="flex h-8 items-center justify-between border-t border-outline-variant/10 bg-on-surface/[0.005] px-6 text-[9px] font-black uppercase tracking-[0.3em] text-on-surface-variant/30"
     >
-      <div className="flex h-full items-center gap-5">
-        <StatusItem icon={GitBranch} label="main" sublabel="branch" color="text-primary" />
-        <StatusItem icon={Globe} label="local app" sublabel="origin" />
-        <div className="hidden items-center gap-2 lg:flex">
-          <Chip icon={Cpu} label={modelLabel} variant="elevated" />
-          <Chip icon={Gauge} label={`${effortLevel || 'standard'} effort`} variant="elevated" />
-          <Chip icon={Shield} label="protected session" variant="elevated" />
+      <div className="flex h-full items-center gap-6">
+        <StatusItem icon={GitBranch} label="MASTER" color="text-google-blue/40" />
+        <div className="h-2 w-px bg-outline-variant/10" />
+        <StatusItem icon={Globe} label="EDGE_DIST_NODE" color="text-google-green/40" />
+        <div className="hidden items-center gap-6 lg:flex">
+          <div className="h-2 w-px bg-outline-variant/10" />
+          <StatusItem icon={Cpu} label={modelLabel.replace(/ /g, '_').toUpperCase()} color="text-google-red/40" />
+          <div className="h-2 w-px bg-outline-variant/10" />
+          <StatusItem icon={Zap} label={`${effortLevel || 'STD'}_EFFORT`} color="text-google-yellow/40" />
+          <div className="h-2 w-px bg-outline-variant/10" />
+          <StatusItem icon={Shield} label="ENC_ENCLAVE_ACTIVE" color="text-google-blue/40" />
         </div>
       </div>
 
-      <div className="flex h-full items-center gap-6">
-        <AgentNeuralStatus compact />
-        <div className="flex items-center gap-2">
-          <Wifi size={14} className="text-[#1f6f5b]" />
-          <span>{vfsStatus || 'idle'}</span>
+      <div className="flex h-full items-center gap-8">
+        <div className="flex items-center gap-3">
+           <Activity size={10} className="text-google-green opacity-40" />
+           <AgentNeuralStatus compact />
+        </div>
+        <div className="h-2 w-px bg-outline-variant/10 hidden sm:block" />
+        <div className="flex items-center gap-2.5 font-mono">
+          <Terminal size={10} className="opacity-40" />
+          <span className="opacity-60">{vfsStatus?.toUpperCase() || 'VFS_READY'}</span>
         </div>
       </div>
-    </Surface>
+    </div>
   );
 }
 
-function StatusItem({ icon: Icon, label, sublabel, color = 'text-on-surface-variant' }) {
+function StatusItem({ icon: Icon, label, color = 'text-on-surface-variant/30' }) {
   return (
-    <div className="flex h-full items-center gap-2">
-      <Icon size={14} className={`${color} opacity-70`} />
-      <span className="font-semibold text-[#62675f]">{label}</span>
-      {sublabel && <span className="text-[#8a867c]">{sublabel}</span>}
+    <div className="flex h-full items-center gap-2.5">
+      <Icon size={11} className={`${color}`} />
+      <span className="tracking-[0.35em]">{label}</span>
     </div>
   );
 }

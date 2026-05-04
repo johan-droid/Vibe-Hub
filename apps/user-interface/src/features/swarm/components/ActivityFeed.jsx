@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Activity, AlertCircle, CheckCircle2, GitBranch, PenTool, Search, Terminal } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
-import { Surface } from '../../shared/components/Surface';
 
 function thoughtText(thought) {
   if (typeof thought === 'string') return thought;
@@ -11,8 +10,8 @@ function thoughtText(thought) {
 
 function thoughtTime(thought) {
   const ts = typeof thought === 'object' ? thought?.timestamp : null;
-  if (!ts) return 'just now';
-  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  if (!ts) return '00:00:00';
+  return new Date(ts).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
 function iconFor(text) {
@@ -25,9 +24,6 @@ function iconFor(text) {
   return { icon: Terminal, color: 'text-secondary' };
 }
 
-/**
- * ActivityFeed renders the real agent stream without decorative filler.
- */
 export default function ActivityFeed() {
   const { agentThoughts } = useStore();
   const scrollRef = useRef(null);
@@ -40,61 +36,58 @@ export default function ActivityFeed() {
   }, [entries.length]);
 
   return (
-    <Surface elevation={0} className="flex h-full flex-col overflow-hidden bg-surface-container-lowest">
-      <div className="flex items-center justify-between border-b border-outline-variant/20 bg-surface-container-low/70 px-5 py-4">
+    <div className="flex h-full flex-col overflow-hidden bg-surface-container-lowest">
+      <div className="flex items-center justify-between neural-glass border-x-0 border-t-0 px-5 py-4">
         <div className="flex items-center gap-3">
-          <Activity size={16} className="text-primary" />
-          <div>
-            <h4 className="title-small">Activity</h4>
-            <p className="text-xs text-on-surface-variant">Live thoughts, tool calls, plans, and errors from Selina.</p>
-          </div>
+          <Activity size={14} className="text-primary" />
+          <h4 className="label-large uppercase tracking-[0.2em] opacity-80">Logstream</h4>
         </div>
-        <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-          {entries.length ? `${entries.length} events` : 'Waiting'}
+        <span className="label-small text-on-surface-variant/40 font-mono">
+          {entries.length.toString().padStart(3, '0')} PKTS
         </span>
       </div>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-5 scrollbar-none">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-4 scrollbar-none">
         <AnimatePresence initial={false}>
           {entries.length ? (
-            <div className="space-y-3">
+            <div className="space-y-1">
               {entries.map(({ thought, text }, index) => {
                 const { icon: Icon, color } = iconFor(text);
                 return (
                   <motion.div
                     key={thought?.id || `${text}-${index}`}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex gap-4 rounded-2xl border border-outline-variant/25 bg-surface-container-low/65 p-4"
+                    initial={{ opacity: 0, x: -4 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="group flex gap-4 rounded-lg p-2.5 transition-colors hover:bg-on-surface/[0.03]"
                   >
-                    <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-container text-on-surface-variant">
-                      <Icon size={16} className={color} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="mb-1 flex items-center justify-between gap-3">
-                        <span className="text-xs font-semibold text-on-surface-variant">{thoughtTime(thought)}</span>
-                      </div>
-                      <p className="break-words text-sm leading-6 text-on-surface">{text}</p>
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <span className="label-small font-mono opacity-20 shrink-0">{thoughtTime(thought)}</span>
+                      <div className="h-4 w-px bg-outline-variant/10 shrink-0" />
+                      <Icon size={12} className={`${color} shrink-0 opacity-70`} />
+                      <p className="truncate body-small text-on-surface-variant/80 group-hover:text-on-surface transition-colors">{text}</p>
                     </div>
                   </motion.div>
                 );
               })}
             </div>
           ) : (
-            <div className="flex h-full items-center justify-center">
-              <div className="max-w-sm text-center">
-                <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-outline-variant/30 bg-surface-container text-primary">
-                  <Terminal size={22} />
-                </div>
-                <h3 className="title-medium">No activity yet</h3>
-                <p className="mt-2 text-sm leading-6 text-on-surface-variant">
-                  Send a prompt from the chat or open a file in the workbench. This feed will show the actual agent stream, not placeholder telemetry.
-                </p>
+            <div className="flex h-full flex-col items-center justify-center p-8 text-center">
+              <div className="relative mb-6">
+                <Terminal size={24} className="text-primary/20" />
+                <motion.div 
+                  animate={{ scale: [1, 1.2, 1], opacity: [0.1, 0.3, 0.1] }} 
+                  transition={{ repeat: Infinity, duration: 3 }}
+                  className="absolute inset-0 bg-primary blur-[20px] rounded-full"
+                />
               </div>
+              <h3 className="label-large uppercase tracking-[0.2em] opacity-30">Waiting for Link</h3>
+              <p className="mt-2 label-small text-on-surface-variant/30 leading-relaxed max-w-[200px]">
+                Initialize workspace communication to begin data ingestion.
+              </p>
             </div>
           )}
         </AnimatePresence>
       </div>
-    </Surface>
+    </div>
   );
 }

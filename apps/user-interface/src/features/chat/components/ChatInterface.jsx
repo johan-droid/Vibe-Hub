@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Brain, Terminal, Sparkles, Code, Fingerprint, ChevronRight } from 'lucide-react';
+import { Send, Brain, Terminal, Sparkles, Code, Fingerprint, ChevronRight, Activity, Zap, ShieldCheck, User } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../../../store/useStore';
-import { Surface } from '../../shared/components/Surface';
 import { Button } from '../../shared/components/Button';
 
 function ThoughtSection({ thoughts }) {
@@ -13,15 +12,18 @@ function ThoughtSection({ thoughts }) {
   if (!thoughts || thoughts.length === 0) return null;
 
   return (
-    <div className="mb-3 w-full">
+    <div className="mb-6 w-full">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-primary transition hover:bg-primary/15"
+        className="inline-flex items-center gap-4 rounded-2xl border border-outline-variant/30 bg-white/50 px-5 py-3 text-on-surface-variant transition hover:bg-white hover:text-on-surface group shadow-sm"
       >
-        <Brain size={11} />
-        <span className="label-small">Reasoning trace</span>
-        <motion.span animate={{ rotate: isExpanded ? 90 : 0 }}>
-          <ChevronRight size={12} />
+        <div className="relative">
+          <Brain size={14} className="text-google-blue" />
+          <motion.div animate={{ opacity: [0.2, 0.5, 0.2] }} transition={{ repeat: Infinity, duration: 2 }} className="absolute inset-0 bg-google-blue blur-[8px] rounded-full" />
+        </div>
+        <span className="text-[10px] font-black tracking-[0.3em] opacity-40 uppercase">View Reasoning Trace</span>
+        <motion.span animate={{ rotate: isExpanded ? 90 : 0 }} className="opacity-20 group-hover:opacity-60 transition-opacity">
+          <ChevronRight size={14} />
         </motion.span>
       </button>
 
@@ -31,12 +33,12 @@ function ThoughtSection({ thoughts }) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="mt-3 overflow-hidden rounded-2xl border border-outline-variant/25 bg-surface-container-low p-3"
+            className="mt-4 overflow-hidden rounded-[2.5rem] border-l-2 border-google-blue/10 bg-on-surface/[0.01] pl-8 py-4"
           >
-            <div className="space-y-2">
+            <div className="space-y-5">
               {thoughts.map((t, i) => (
-                <div key={i} className="flex gap-2 text-[11px] leading-5 text-on-surface-variant">
-                  <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-primary/60" />
+                <div key={i} className="flex gap-5 text-sm text-on-surface-variant/60 leading-relaxed font-medium">
+                  <div className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-google-blue/10" />
                   <span>{typeof t === 'string' ? t : t.content}</span>
                 </div>
               ))}
@@ -52,46 +54,46 @@ function MessageBubble({ content, role, thoughts = [] }) {
   const isUser = role === 'user';
 
   return (
-    <div className={`flex max-w-[94%] flex-col gap-2 ${isUser ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
-      <div className="flex items-center gap-2 px-1 text-[10px] font-mono uppercase tracking-[0.18em] text-on-surface-variant/60">
-        {isUser ? <Fingerprint size={12} className="text-secondary" /> : <Brain size={12} className="text-primary" />}
-        <span>{isUser ? 'You' : 'Selina'}</span>
+    <div className={`flex max-w-[85%] flex-col gap-3 ${isUser ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
+      <div className={`flex items-center gap-3 px-2 text-[9px] font-black tracking-[0.4em] ${isUser ? 'text-google-blue' : 'text-google-red'} opacity-30 uppercase`}>
+        {isUser ? <User size={12} /> : <ShieldCheck size={12} />}
+        <span>{isUser ? 'Operator' : 'System Agent'}</span>
       </div>
 
       {!isUser && <ThoughtSection thoughts={thoughts} />}
 
-      <Surface
-        elevation={0}
-        shape="xl"
-        className={`border p-4 text-sm leading-7 md:p-5 ${
+      <div
+        className={`relative p-8 text-base leading-relaxed shadow-sm transition-all duration-500 ${
           isUser
-            ? 'border-secondary/20 bg-secondary/10 text-on-surface rounded-tr-md'
-            : 'border-outline-variant/30 bg-surface-container text-on-surface rounded-tl-md shadow-xl shadow-black/10'
+            ? 'bg-google-blue text-white rounded-[2.5rem] rounded-tr-sm shadow-xl shadow-google-blue/10 font-medium'
+            : 'bg-white border border-outline-variant/30 text-on-surface rounded-[2.5rem] rounded-tl-sm font-medium'
         }`}
       >
         <ReactMarkdown
           components={{
-            p: ({ children }) => <p className="mb-4 last:mb-0">{children}</p>,
+            p: ({ children }) => <p className="mb-6 last:mb-0 leading-relaxed">{children}</p>,
             code({ inline, className, children, ...props }) {
               const match = /language-(\w+)/.exec(className || '');
               return !inline && match ? (
-                <Surface elevation={0} shape="lg" className="my-5 overflow-hidden border border-outline-variant/30 bg-black/35">
-                  <div className="flex items-center gap-2 border-b border-outline-variant/25 bg-surface-container-high/70 px-4 py-2">
-                    <Code size={12} className="text-primary" />
-                    <span className="label-small text-on-surface-variant">{match[1]}</span>
+                <div className="my-8 overflow-hidden rounded-[2rem] border border-outline-variant/30 bg-[#1e1e1e] shadow-2xl">
+                  <div className="flex items-center justify-between border-b border-white/5 bg-white/5 px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <Code size={14} className="text-google-blue" />
+                      <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">{match[1]}</span>
+                    </div>
                   </div>
                   <SyntaxHighlighter
                     style={vscDarkPlus}
                     language={match[1]}
                     PreTag="div"
-                    className="!m-0 !bg-transparent !p-4 !font-mono !text-[11px]"
+                    className="!m-0 !bg-transparent !p-8 !font-mono !text-[13px] !leading-relaxed"
                     {...props}
                   >
                     {String(children).replace(/\n$/, '')}
                   </SyntaxHighlighter>
-                </Surface>
+                </div>
               ) : (
-                <code className="rounded-md bg-primary/10 px-1.5 py-0.5 font-mono text-[0.9em] font-semibold text-primary" {...props}>
+                <code className={`rounded-lg px-2 py-1 font-mono text-[0.9em] font-bold ${isUser ? 'bg-white/20 text-white' : 'bg-google-blue/10 text-google-blue'}`} {...props}>
                   {children}
                 </code>
               );
@@ -100,21 +102,26 @@ function MessageBubble({ content, role, thoughts = [] }) {
         >
           {content}
         </ReactMarkdown>
-      </Surface>
+      </div>
     </div>
   );
 }
 
 export default function ChatInterface({ onSend }) {
   const [input, setInput] = useState('');
-  const { messages, streamingMessage, isThinking, neuralStatus, agentThoughts } = useStore();
+  const { messages, streamingMessage, isThinking, agentThoughts } = useStore();
   const scrollRef = useRef(null);
 
   useEffect(() => {
     if (scrollRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-      const isAtBottom = scrollHeight - scrollTop <= clientHeight + 150;
-      if (isAtBottom) scrollRef.current.scrollTop = scrollHeight;
+      const isAtBottom = scrollHeight - scrollTop <= clientHeight + 300;
+      if (isAtBottom) {
+        scrollRef.current.scrollTo({
+          top: scrollHeight,
+          behavior: 'smooth'
+        });
+      }
     }
   }, [messages, streamingMessage]);
 
@@ -125,46 +132,37 @@ export default function ChatInterface({ onSend }) {
   };
 
   return (
-    <Surface elevation={0} className="flex h-full flex-col border-r border-outline-variant/20 bg-surface-container-lowest">
-      <div className="flex h-16 items-center justify-between border-b border-outline-variant/30 bg-surface-container-low/60 px-5 backdrop-blur-xl">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 text-primary">
-            <Brain size={19} />
-            {isThinking && <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-surface-container-low bg-tertiary animate-soft-pulse" />}
-          </div>
-          <div className="min-w-0">
-            <h3 className="title-small truncate">Selina</h3>
-            <p className="label-small mt-1 truncate text-primary">{neuralStatus.expert} / {neuralStatus.phase}</p>
-          </div>
+    <div className="flex h-full flex-col bg-[#faf8f5] overflow-hidden">
+      {/* Header */}
+      <div className="h-16 flex items-center justify-between border-b border-black/[0.03] px-10 bg-white/50 backdrop-blur-md">
+        <div className="flex items-center gap-4">
+          <div className="h-2 w-2 rounded-full bg-google-green animate-pulse" />
+          <span className="text-[10px] font-black tracking-[0.4em] text-on-surface/40 uppercase">Link Active</span>
         </div>
-        <div className="hidden items-center gap-1.5 sm:flex">
-          {[1, 2, 3, 2, 4, 2].map((h, i) => (
-            <motion.div
-              key={i}
-              animate={{ height: isThinking ? [`${h * 3}px`, `${h * 5}px`, `${h * 3}px`] : '5px' }}
-              transition={{ repeat: Infinity, duration: 0.9, delay: i * 0.08 }}
-              className={`w-1 rounded-full ${isThinking ? 'bg-primary' : 'bg-outline-variant/50'}`}
-            />
-          ))}
+        <div className="flex items-center gap-6 text-[9px] font-black opacity-20 tracking-[0.3em] uppercase">
+          <span className="flex items-center gap-2"><Activity size={10} /> {agentThoughts.length} Packets</span>
+          <span className="flex items-center gap-2"><Fingerprint size={10} /> Secure</span>
         </div>
       </div>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 space-y-8 overflow-y-auto p-5 md:p-7 scrollbar-none">
+      {/* Messages */}
+      <div ref={scrollRef} className="flex-1 space-y-12 overflow-y-auto p-10 md:p-14 scrollbar-none">
         <AnimatePresence initial={false}>
           {messages.length === 0 && !streamingMessage && !isThinking && (
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex h-full items-center justify-center text-center">
-              <div className="max-w-xs">
-                <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl border border-outline-variant/35 bg-surface-container text-primary">
-                  <Sparkles size={24} />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex h-full items-center justify-center text-center">
+              <div className="max-w-md">
+                <div className="mx-auto mb-10 flex h-24 w-24 items-center justify-center rounded-[3rem] bg-white shadow-2xl shadow-black/[0.05] ring-1 ring-black/[0.03] relative overflow-hidden group">
+                  <motion.div className="absolute inset-0 bg-google-blue opacity-5 blur-[25px] animate-pulse" />
+                  <Sparkles size={32} className="text-google-blue relative z-10 transition-transform group-hover:scale-110" />
                 </div>
-                <h3 className="title-medium">Ready when you are</h3>
-                <p className="mt-2 text-sm leading-6 text-on-surface-variant">Ask Selina to inspect, edit, explain, or plan work inside this workspace.</p>
+                <h3 className="text-2xl font-black text-on-surface tracking-tight mb-4">How can I help today?</h3>
+                <p className="text-base text-on-surface-variant/40 font-semibold uppercase tracking-widest leading-relaxed">Type a command or question to start your workspace session.</p>
               </div>
             </motion.div>
           )}
 
           {messages.map((m, i) => (
-            <motion.div key={m.id || `msg-${i}`} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+            <motion.div key={m.id || `msg-${i}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}>
               <MessageBubble content={m.content} role={m.role} thoughts={m.thoughts || []} />
             </motion.div>
           ))}
@@ -176,20 +174,21 @@ export default function ChatInterface({ onSend }) {
           )}
 
           {isThinking && !streamingMessage && (
-            <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-4 rounded-2xl border border-outline-variant/25 bg-surface-container-low p-4">
-              <div className="flex gap-1.5">
-                {[0, 1, 2].map((i) => (
-                  <motion.div key={i} animate={{ y: [0, -6, 0], opacity: [0.35, 1, 0.35] }} transition={{ repeat: Infinity, duration: 1, delay: i * 0.15 }} className="h-2 w-2 rounded-full bg-primary" />
-                ))}
-              </div>
-              <span className="text-sm font-semibold text-primary">Working through the workspace</span>
-            </motion.div>
+            <div className="flex items-center gap-6 py-6 pl-4">
+               <div className="flex gap-2">
+                 {[0, 1, 2].map((i) => (
+                   <motion.div key={i} animate={{ opacity: [0.2, 1, 0.2], scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.2 }} className="h-2 w-2 rounded-full bg-google-blue" />
+                 ))}
+               </div>
+               <span className="text-[10px] font-black text-google-blue uppercase tracking-[0.4em]">Processing Request</span>
+            </div>
           )}
         </AnimatePresence>
       </div>
 
-      <div className="border-t border-outline-variant/30 bg-surface-container-low/70 p-4 md:p-5 backdrop-blur-xl">
-        <Surface elevation={0} shape="2xl" className="relative border border-outline-variant/35 bg-surface-container shadow-xl shadow-black/15 focus-within:border-primary/45 focus-within:ring-4 focus-within:ring-primary/10">
+      {/* Input Area */}
+      <div className="p-10 md:p-14 bg-white border-t border-black/[0.03]">
+        <div className="relative group mx-auto max-w-4xl">
           <textarea
             rows="1"
             value={input}
@@ -201,20 +200,26 @@ export default function ChatInterface({ onSend }) {
                 handleSend();
               }
             }}
-            placeholder="Ask Selina to work on this repo..."
-            className="min-h-[62px] w-full resize-none bg-transparent py-5 pl-5 pr-16 text-sm font-medium text-on-surface placeholder:text-on-surface-variant/45 focus:outline-none"
+            placeholder="Type your message here..."
+            className="min-h-[72px] w-full resize-none rounded-[2.5rem] border border-outline-variant/30 bg-[#faf8f5] py-6 pl-10 pr-20 text-base text-on-surface placeholder:text-on-surface-variant/30 focus:border-google-blue/30 focus:bg-white focus:shadow-2xl focus:shadow-black/[0.03] focus:outline-none transition-all duration-500 font-medium"
           />
-          <div className="absolute bottom-3 right-3">
-            <Button variant="filled" size="md" disabled={isThinking || !input.trim()} onClick={handleSend} className="!h-10 !w-10 !rounded-xl !p-0" aria-label="Send message" title="Send message">
-              <Send size={17} />
+          <div className="absolute bottom-3.5 right-3.5">
+            <Button 
+              variant="filled" 
+              size="lg" 
+              disabled={isThinking || !input.trim()} 
+              onClick={handleSend} 
+              className="!h-12 !w-12 !rounded-[1.5rem] !p-0 shadow-2xl shadow-google-blue/20 bg-google-blue hover:brightness-110 active:scale-90 transition-all border-none"
+            >
+              <Send size={20} />
             </Button>
           </div>
-        </Surface>
-        <div className="mt-3 flex items-center justify-between px-1 text-[10px] text-on-surface-variant/55">
-          <span className="inline-flex items-center gap-2"><Terminal size={13} /> Shift+Enter for newline</span>
-          <span className="hidden sm:inline">Workspace-aware session</span>
+        </div>
+        <div className="mt-8 flex items-center justify-between px-6 text-[9px] font-black opacity-10 tracking-[0.4em] uppercase">
+          <span>Enterprise Encryption Active</span>
+          <span className="flex items-center gap-3"><Terminal size={12} /> System_Core_v4.1.2</span>
         </div>
       </div>
-    </Surface>
+    </div>
   );
 }

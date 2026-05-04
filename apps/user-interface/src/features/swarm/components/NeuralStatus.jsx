@@ -31,25 +31,23 @@ export default function AgentNeuralStatus({ compact = false }) {
   // Compact Mode: Integrated System Chip
   if (compact) {
     return (
-      <Surface
-        elevation={2}
-        shape="full"
-        className="flex items-center gap-2.5 px-4 py-1.5 bg-surface-container-highest border border-outline-variant/30 hover:bg-surface-container-highest/80 transition-all duration-500 group cursor-help"
+      <div
+        className="flex items-center gap-2 rounded-full neural-glass px-3 py-1 hover:bg-surface-container-high/40 transition-all duration-500 group cursor-help"
       >
         <div className="relative flex items-center justify-center">
-          <Icon size={12} className={`${config.color} transition-transform duration-500 group-hover:scale-125`} />
+          <Icon size={11} className={`${config.color} transition-transform duration-500 group-hover:scale-125`} />
           {isThinking && (
             <motion.div
-              animate={{ scale: [1, 2, 1], opacity: [0.4, 0, 0.4] }}
-              transition={{ repeat: Infinity, duration: 2 }}
-              className="absolute inset-0 rounded-full bg-primary blur-[2px] -z-10"
+              animate={{ scale: [1, 2.2, 1], opacity: [0.3, 0, 0.3] }}
+              transition={{ repeat: Infinity, duration: 2.2, ease: "easeInOut" }}
+              className="absolute inset-0 rounded-full bg-primary blur-[3px] -z-10"
             />
           )}
         </div>
-        <span className="text-xs font-semibold text-on-surface opacity-70 group-hover:opacity-100 transition-opacity">
+        <span className="label-small text-on-surface/60 group-hover:text-on-surface transition-colors">
           {config.label}
         </span>
-      </Surface>
+      </div>
     );
   }
 
@@ -57,90 +55,92 @@ export default function AgentNeuralStatus({ compact = false }) {
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ y: 40, opacity: 0, scale: 0.9, filter: 'blur(8px)' }}
-        animate={{ y: 0, opacity: 1, scale: 1, filter: 'blur(0px)' }}
-        exit={{ y: 40, opacity: 0, scale: 0.9, filter: 'blur(8px)' }}
-        transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-        className="fixed bottom-12 right-12 z-[100]"
+        initial={{ y: 20, opacity: 0, scale: 0.98 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        exit={{ y: 20, opacity: 0, scale: 0.98 }}
+        transition={{ type: 'spring', damping: 28, stiffness: 350 }}
+        className="fixed bottom-10 right-10 z-[100]"
       >
-        <Surface
-          elevation={4}
-          shape="2xl"
-          className="flex items-center gap-6 px-8 py-5 bg-primary-container text-on-primary-container border border-primary/20 shadow-[0_32px_64px_-16px_rgba(var(--primary-rgb),0.4)] min-w-[320px] overflow-hidden"
-        >
-          {/* Animated Background Pulse */}
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent pointer-events-none" />
+        <div className="neural-glass rounded-3xl flex items-center gap-5 px-6 py-4 shadow-[0_32px_64px_-24px_rgba(0,0,0,0.5)] min-w-[300px] overflow-hidden">
+          {/* Neural Mesh Background Trace */}
+          <div className="absolute inset-0 opacity-[0.03] pointer-events-none">
+            <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <pattern id="neural-mesh" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+                <circle cx="2" cy="2" r="0.5" fill="currentColor" />
+                <path d="M2 2 L20 2 M2 2 L2 20" stroke="currentColor" strokeWidth="0.1" />
+              </pattern>
+              <rect width="100%" height="100%" fill="url(#neural-mesh)" />
+            </svg>
+          </div>
           
           <div className="relative">
-            <Surface 
-              elevation={2} 
-              shape="full" 
-              className="w-14 h-14 flex items-center justify-center bg-on-primary-container/10 border border-on-primary-container/5"
-            >
+            <div className="w-12 h-12 flex items-center justify-center rounded-2xl bg-primary/10 border border-primary/20">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={agentState}
-                  initial={{ scale: 0.5, opacity: 0, rotate: -45 }}
-                  animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                  exit={{ scale: 0.5, opacity: 0, rotate: 45 }}
-                  transition={{ type: 'spring', damping: 15 }}
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.8, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
                 >
-                  <Icon size={28} className={agentState === 'verifying' ? 'animate-pulse' : ''} />
+                  <Icon size={22} className={`${config.color} ${agentState === 'verifying' ? 'animate-soft-pulse' : ''}`} />
                 </motion.div>
               </AnimatePresence>
-            </Surface>
+            </div>
             
             {isThinking && (
               <motion.div
-                animate={{ scale: [1, 2.5, 1], opacity: [0.2, 0, 0.2] }}
-                transition={{ repeat: Infinity, duration: 2.5 }}
-                className="absolute inset-0 rounded-full bg-current blur-2xl -z-10"
+                animate={{ 
+                  scale: [1, 1.8, 1], 
+                  opacity: [0.15, 0, 0.15],
+                  borderRadius: ["30% 70% 70% 30% / 30% 30% 70% 70%", "60% 40% 30% 70% / 60% 30% 70% 40%", "30% 70% 70% 30% / 30% 30% 70% 70%"] 
+                }}
+                transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
+                className="absolute inset-0 bg-primary blur-xl -z-10"
               />
             )}
           </div>
 
-          <div className="flex flex-col flex-1 gap-1 min-w-0 relative z-10">
-            <div className="flex items-center gap-3">
-              <span className="headline-small font-semibold leading-none">
+          <div className="flex flex-col flex-1 gap-0.5 min-w-0 relative z-10">
+            <div className="flex items-center gap-2.5">
+              <span className="title-small font-bold tracking-tight text-on-surface">
                 {config.label}
               </span>
-              <AnimatePresence>
-                {isThinking && (
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="flex gap-1.5"
-                  >
-                    {[0, 1, 2].map((i) => (
-                      <motion.div
-                        key={i}
-                        animate={{ y: [0, -4, 0], opacity: [0.2, 1, 0.2] }}
-                        transition={{ repeat: Infinity, duration: 1, delay: i * 0.15 }}
-                        className="w-1.5 h-1.5 rounded-full bg-on-primary-container"
-                      />
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {isThinking && (
+                <div className="flex gap-1">
+                  {[0, 1, 2].map((i) => (
+                    <motion.div
+                      key={i}
+                      animate={{ opacity: [0.2, 1, 0.2] }}
+                      transition={{ repeat: Infinity, duration: 1.5, delay: i * 0.2 }}
+                      className="w-1 h-1 rounded-full bg-primary"
+                    />
+                  ))}
+                </div>
+              )}
             </div>
             
             <AnimatePresence mode="wait">
               <motion.div
                 key={statusMessage}
-                initial={{ x: 15, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                exit={{ x: -15, opacity: 0 }}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
                 className="flex items-center gap-2"
               >
-                <Sparkles size={12} className="opacity-40 shrink-0" />
-                <span className="text-xs font-semibold opacity-70 truncate">
-                  {statusMessage || 'Awaiting instruction...'}
+                <span className="body-small text-on-surface-variant/60 truncate max-w-[200px]">
+                  {statusMessage || 'System standby...'}
                 </span>
               </motion.div>
             </AnimatePresence>
           </div>
-        </Surface>
+
+          <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-surface-container-high/30 neural-border">
+             <Activity size={14} className="text-on-surface-variant/40" />
+          </div>
+        </div>
       </motion.div>
     </AnimatePresence>
   );
 }
+

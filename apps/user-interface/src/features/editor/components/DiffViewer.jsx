@@ -1,43 +1,34 @@
 import React, { useMemo, useEffect } from 'react';
-import { Eye, Code, FileCode, GitPullRequest, ChevronRight, X, Check, Github, Terminal } from 'lucide-react';
+import { Eye, Code, FileCode, GitPullRequest, ChevronRight, X, Check, Github, Terminal, Zap, Sparkles } from 'lucide-react';
 import ReactDiffViewer from 'react-diff-viewer-continued';
 import { useStore } from '../../../store/useStore';
 import { useVfsStore } from '../../../store/useVfsStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Surface } from '../../shared/components/Surface';
-import { Button } from '../../shared/components/Button';
 
 /**
- * DiffViewer — Material 3 Surgical Projection
- * Optimized for professional code orchestration and visual clarity.
+ * DiffViewer — Neural OS Surgical Projection
+ * Optimized for professional code orchestration and industrial clarity.
  */
 export default function DiffViewer({ onApply, onDiscard }) {
-  const { diffData, isThinking, neuralStatus } = useStore();
-  
-  // VFS Integration: Check for staged files awaiting approval
+  const { diffData, isThinking } = useStore();
   const { 
     activeDiff, 
     isReviewing, 
     discardChanges, 
     commitToPhysicalDisk,
-    pendingFiles,
     fetchPendingFiles 
   } = useVfsStore();
 
-  // Fetch pending VFS files on mount
   useEffect(() => {
     fetchPendingFiles();
   }, [fetchPendingFiles]);
 
-  // Check if we have VFS staged changes
   const hasVfsDiff = isReviewing && activeDiff;
 
   const diffChunk = useMemo(() => {
-    // Priority 1: VFS staged changes (agent-generated code awaiting approval)
     if (hasVfsDiff) {
       const oldContent = activeDiff.originalContent || '';
       const newContent = activeDiff.proposedContent || '';
-      
       return {
         old: oldContent,
         new: newContent,
@@ -49,7 +40,6 @@ export default function DiffViewer({ onApply, onDiscard }) {
       };
     }
     
-    // Priority 2: Legacy diffData from store
     if (!diffData) return null;
     const diffToRender = Array.isArray(diffData) ? diffData[0] : diffData;
     if (!diffToRender.oldValue || !diffToRender.newValue) return null;
@@ -74,27 +64,24 @@ export default function DiffViewer({ onApply, onDiscard }) {
     };
   }, [diffData, hasVfsDiff, activeDiff]);
 
-  let renderDiff = diffChunk;
-  let title = "Review";
+  let title = "SURGICAL_PATCH";
   let isVfsMode = false;
 
   if (hasVfsDiff) {
-    title = `VFS Review: ${activeDiff.filePath}`;
+    title = `VFS_INSPECT: ${activeDiff.filePath.split('/').pop()?.toUpperCase()}`;
     isVfsMode = true;
   } else if (diffData && diffData.type === 'github_pr') {
-    title = `PR #${diffData.prNumber} (${diffData.repo})`;
+    title = `PR_#${diffData.prNumber}_VECT`;
   }
 
   return (
-    <Surface elevation={0} className="h-full bg-surface-container-lowest flex flex-col relative overflow-hidden">
+    <div className="h-full bg-surface-container-lowest flex flex-col relative overflow-hidden">
       {/* Header */}
-      <div className="h-14 px-6 border-b border-outline-variant/20 flex items-center justify-between bg-surface-container-low/50 backdrop-blur-xl select-none">
+      <div className="h-10 px-6 neural-glass border-x-0 border-t-0 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
-            <Surface elevation={2} shape="md" className="w-8 h-8 flex items-center justify-center bg-primary/10">
-              <GitPullRequest size={16} className="text-primary" />
-            </Surface>
-            <h2 className="title-small text-on-surface">{title}</h2>
+            <GitPullRequest size={12} className="text-primary opacity-60" />
+            <h2 className="label-small uppercase tracking-[0.2em] opacity-80 font-bold">{title}</h2>
           </div>
           
           <AnimatePresence mode="wait">
@@ -105,11 +92,11 @@ export default function DiffViewer({ onApply, onDiscard }) {
                 exit={{ opacity: 0, x: 10 }}
                 className="flex items-center"
               >
-                <div className="w-px h-4 bg-outline-variant/30 mx-2" />
-                <Surface elevation={1} shape="full" className="flex items-center gap-2 px-3 py-1 border border-outline-variant/30 bg-surface-container-high/40">
-                  <FileCode size={12} className="text-primary opacity-60" />
-                  <span className="label-small text-on-surface-variant font-mono">{Array.isArray(diffData) ? `${diffData.length} files (PR View)` : diffData.path}</span>
-                </Surface>
+                <div className="w-px h-3 bg-outline-variant/10 mx-2" />
+                <div className="flex items-center gap-2 label-small opacity-30 uppercase tracking-widest font-mono">
+                  <FileCode size={10} />
+                  <span>{isVfsMode ? activeDiff.filePath : (Array.isArray(diffData) ? `${diffData.length} FILES` : diffData.path)}</span>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -117,68 +104,27 @@ export default function DiffViewer({ onApply, onDiscard }) {
 
         <div className="flex items-center gap-3">
           <AnimatePresence>
-            {diffData && (
+            {(diffData || hasVfsDiff) && (
               <motion.div 
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
                 className="flex items-center gap-3"
               >
-                <Button 
-                  variant="text" 
-                  size="sm" 
-                  onClick={onDiscard}
+                <button 
+                  onClick={isVfsMode ? discardChanges : onDiscard}
                   disabled={isThinking}
-                  leadingIcon={X}
+                  className="label-small uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity flex items-center gap-2 px-3 py-1.5"
                 >
-                  Discard
-                </Button>
-                {isVfsMode ? (
-                  // VFS Approval Gate: Reject / Approve & Write
-                  <>
-                    <Button 
-                      variant="text" 
-                      size="sm" 
-                      onClick={discardChanges}
-                      disabled={isThinking}
-                      leadingIcon={X}
-                    >
-                      Reject
-                    </Button>
-                    <Button
-                      variant="filled"
-                      size="sm"
-                      onClick={commitToPhysicalDisk}
-                      disabled={isThinking}
-                      leadingIcon={Check}
-                      className="shadow-lg shadow-primary/20"
-                    >
-                      Approve & Write
-                    </Button>
-                  </>
-                ) : diffData?.type === 'github_pr' ? (
-                  <Button
-                    variant="filled"
-                    size="sm"
-                    onClick={() => onApply(diffData)}
-                    disabled={isThinking}
-                    leadingIcon={Github}
-                    className="shadow-lg shadow-primary/20"
-                  >
-                    Merge to Main
-                  </Button>
-                ) : (
-                  <Button
-                    variant="filled"
-                    size="sm"
-                    onClick={() => onApply(diffData)}
-                    disabled={isThinking}
-                    leadingIcon={Check}
-                    className="shadow-lg shadow-primary/20"
-                  >
-                    Apply change
-                  </Button>
-                )}
+                  <X size={10} /> REJECT
+                </button>
+                <button
+                  onClick={isVfsMode ? commitToPhysicalDisk : () => onApply(diffData)}
+                  disabled={isThinking}
+                  className="bg-primary text-on-primary label-small uppercase tracking-widest font-bold px-4 py-1.5 rounded-md flex items-center gap-2 hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-primary/10"
+                >
+                  <Check size={10} /> {isVfsMode ? 'APPROVE_WRITE' : 'APPLY_PATCH'}
+                </button>
               </motion.div>
             )}
           </AnimatePresence>
@@ -186,132 +132,99 @@ export default function DiffViewer({ onApply, onDiscard }) {
       </div>
 
       {/* Workspace */}
-      <div className="flex-1 overflow-auto p-6 scrollbar-none">
+      <div className="flex-1 overflow-auto p-4 md:p-8 scrollbar-none">
         <AnimatePresence mode="wait">
-          {renderDiff ? (
+          {diffChunk ? (
             <motion.div 
               key="diff-content"
-              initial={{ opacity: 0, y: 30 }}
+              initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -30 }}
-              transition={{ duration: 0.4, ease: [0.2, 0, 0, 1] }}
-              className="max-w-7xl mx-auto"
+              exit={{ opacity: 0, y: -20 }}
+              className="max-w-6xl mx-auto space-y-4"
             >
-              <Surface elevation={2} shape="xl" className="border border-outline-variant/30 overflow-hidden bg-surface shadow-2xl">
-                <div className="bg-surface-container-high/50 px-6 py-4 border-b border-outline-variant/20 flex items-center justify-between">
-                  <div className="flex items-center gap-3 label-medium text-on-surface-variant uppercase tracking-widest opacity-60">
-                    <Code size={14} className="text-primary" /> 
-                    <span>Lines {renderDiff.startLine} — {renderDiff.startLine + 40}</span>
+              <div className="rounded-xl border border-outline-variant/10 overflow-hidden bg-on-surface/[0.01]">
+                <div className="bg-on-surface/[0.02] px-5 py-3 border-b border-outline-variant/10 flex items-center justify-between">
+                  <div className="flex items-center gap-3 label-small text-on-surface-variant/40 uppercase tracking-widest font-bold">
+                    <Code size={12} className="text-primary" /> 
+                    <span>SEGMENT: L{diffChunk.startLine} — L{diffChunk.startLine + 40}</span>
                   </div>
-                  <div className="label-small text-on-surface-variant font-bold opacity-40">
-                    {renderDiff.totalLines} lines total
+                  <div className="label-small text-on-surface-variant/20 uppercase tracking-widest font-mono">
+                    {diffChunk.totalLines} LN_TOTAL
                   </div>
                 </div>
                 
-                <div className="p-4 bg-surface">
+                <div className="p-2 md:p-4">
                   <ReactDiffViewer
-                    oldValue={renderDiff.old}
-                    newValue={renderDiff.new}
+                    oldValue={diffChunk.old}
+                    newValue={diffChunk.new}
                     splitView={true}
                     useDarkTheme={true}
-                    codeFoldGutter={true}
                     styles={{
                       variables: {
                         dark: {
                           diffViewerBackground: 'transparent',
-                          diffViewerTitleBackground: 'transparent',
-                          diffViewerTitleColor: 'var(--on-surface-variant)',
-                          addedBackground: 'rgba(var(--primary-rgb), 0.08)',
+                          addedBackground: 'rgba(var(--primary-rgb), 0.05)',
                           addedColor: 'var(--primary)',
-                          removedBackground: 'rgba(var(--error-rgb), 0.08)',
+                          removedBackground: 'rgba(var(--error-rgb), 0.05)',
                           removedColor: 'var(--error)',
-                          wordAddedBackground: 'rgba(var(--primary-rgb), 0.2)',
-                          wordRemovedBackground: 'rgba(var(--error-rgb), 0.2)',
+                          wordAddedBackground: 'rgba(var(--primary-rgb), 0.15)',
+                          wordRemovedBackground: 'rgba(var(--error-rgb), 0.15)',
                           gutterBackground: 'transparent',
                           gutterColor: 'var(--outline-variant)',
-                          codeFoldGutterBackground: 'transparent',
-                          codeFoldBackground: 'var(--surface-container-low)',
-                          codeFoldContentColor: 'var(--on-surface-variant)'
                         }
                       },
                       contentText: {
                         fontSize: '12px',
                         fontFamily: 'JetBrains Mono, monospace',
-                        lineHeight: '1.8',
-                        letterSpacing: '-0.01em'
+                        lineHeight: '1.7',
                       },
                       line: {
-                        padding: '2px 0',
-                        '&:hover': {
-                          background: 'rgba(var(--on-surface-rgb), 0.03)'
-                        }
+                        padding: '1px 0',
+                        '&:hover': { background: 'rgba(var(--on-surface-rgb), 0.02)' }
                       },
                       gutter: {
-                        padding: '0 20px',
-                        minWidth: '70px',
-                        borderRight: '1px solid rgba(var(--outline-variant-rgb), 0.1)'
+                        padding: '0 15px',
+                        minWidth: '60px',
+                        opacity: 0.3,
+                        borderRight: '1px solid rgba(var(--outline-variant-rgb), 0.05)'
                       }
                     }}
                   />
                 </div>
-              </Surface>
+              </div>
             </motion.div>
           ) : (
             <motion.div
               key="empty-state"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="flex min-h-full items-center justify-center px-4 py-8"
+              className="flex h-full items-center justify-center p-8 text-center"
             >
-              <Surface elevation={1} shape="2xl" className="w-full max-w-4xl border border-outline-variant/30 bg-surface-container-low/75 p-6 shadow-xl shadow-black/10 md:p-8">
-                <div className="flex flex-col gap-6 md:flex-row md:items-start">
-                  <Surface elevation={2} shape="md" className="flex h-12 w-12 shrink-0 items-center justify-center bg-primary/10">
-                    <GitPullRequest size={18} className="text-primary" />
-                  </Surface>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-primary">Review surface</p>
-                    <h3 className="headline-small mt-2 text-on-surface">No active change is loaded</h3>
-                    <p className="mt-3 max-w-2xl text-sm leading-7 text-on-surface-variant">
-                      This page stays quiet until Selina creates a patch or a PR diff is attached. When that happens, the exact before-and-after code appears here for review before anything is applied.
-                    </p>
-
-                    <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                      {[
-                        { icon: Eye, label: 'Review', value: 'Waiting', tone: 'text-primary/70' },
-                        { icon: Code, label: 'Changes', value: 'None', tone: 'text-secondary/70' },
-                        { icon: Check, label: 'Write gate', value: 'Manual', tone: 'text-tertiary/70' },
-                      ].map(({ icon: Icon, label, value, tone }) => (
-                        <div key={label} className="rounded-2xl border border-outline-variant/20 bg-surface-container-high/40 p-4">
-                          <Icon size={18} className={`mb-3 ${tone}`} />
-                          <p className="text-xs text-on-surface-variant">{label}</p>
-                          <p className="text-sm font-medium text-on-surface">{value}</p>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="mt-6 grid gap-3 md:grid-cols-2">
-                      <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest/55 p-4">
-                        <div className="flex items-center gap-2 text-xs font-semibold text-on-surface-variant">
-                          <Terminal size={13} className="text-primary" />
-                          Runtime evidence
-                        </div>
-                        <p className="mt-3 text-sm leading-6 text-on-surface-variant">
-                          Terminal output and agent activity stay available while a change is being prepared.
-                        </p>
-                      </div>
-                      <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest/55 p-4">
-                        <div className="flex items-center gap-2 text-xs font-semibold text-on-surface-variant">
-                          <ChevronRight size={13} className="text-secondary" />
-                          Next action
-                        </div>
-                        <p className="mt-3 text-sm leading-6 text-on-surface-variant">
-                          Open a file from the explorer or ask Selina to make a small, reviewable change.
-                        </p>
-                      </div>
-                    </div>
+              <div className="max-w-md">
+                <div className="relative mx-auto mb-8 flex h-16 w-16 items-center justify-center rounded-2xl border border-outline-variant/10 bg-on-surface/[0.01]">
+                  <GitPullRequest size={28} className="text-primary/20" />
+                  <motion.div 
+                    animate={{ scale: [1, 1.2, 1], opacity: [0.1, 0.2, 0.1] }} 
+                    transition={{ repeat: Infinity, duration: 3 }}
+                    className="absolute inset-0 bg-primary/20 blur-[25px] rounded-full"
+                  />
+                </div>
+                <h3 className="label-large uppercase tracking-[0.2em] opacity-80">Injection Buffer Empty</h3>
+                <p className="mt-4 body-small text-on-surface-variant/40 leading-relaxed">
+                  The surgical projection surface is in standby. 
+                  Generated code patches will be queued here for ingestion review.
+                </p>
+                <div className="mt-10 grid grid-cols-2 gap-4">
+                  <div className="p-4 rounded-lg border border-outline-variant/5 bg-on-surface/[0.01]">
+                    <Sparkles size={14} className="mx-auto mb-3 text-primary opacity-40" />
+                    <p className="label-small uppercase tracking-widest opacity-20">Auto Review</p>
+                  </div>
+                  <div className="p-4 rounded-lg border border-outline-variant/5 bg-on-surface/[0.01]">
+                    <Zap size={14} className="mx-auto mb-3 text-secondary opacity-40" />
+                    <p className="label-small uppercase tracking-widest opacity-20">Turbo Apply</p>
                   </div>
                 </div>
-              </Surface>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -324,26 +237,26 @@ export default function DiffViewer({ onApply, onDiscard }) {
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            className="absolute bottom-12 left-1/2 -translate-x-1/2"
+            className="absolute bottom-10 left-1/2 -translate-x-1/2 z-50"
           >
-            <Surface elevation={5} shape="full" className="px-8 py-4 bg-surface-container-highest border border-outline-variant shadow-2xl flex items-center gap-6">
-              <div className="flex gap-1.5">
+            <div className="px-6 py-3 bg-surface-container-highest border border-outline-variant/20 rounded-full shadow-2xl flex items-center gap-4">
+              <div className="flex gap-1">
                 {[0, 0.2, 0.4].map((delay, i) => (
                   <motion.div 
                     key={i}
-                    animate={{ scale: [1, 1.5, 1], opacity: [0.3, 1, 0.3] }} 
+                    animate={{ scale: [1, 1.4, 1], opacity: [0.3, 1, 0.3] }} 
                     transition={{ repeat: Infinity, duration: 1.2, delay }} 
                     className="w-1.5 h-1.5 bg-primary rounded-full" 
                   />
                 ))}
               </div>
-              <span className="text-sm font-semibold text-primary">
-                Selina is preparing the change
+              <span className="label-small uppercase tracking-widest font-bold text-primary">
+                Ingesting Patch...
               </span>
-            </Surface>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </Surface>
+    </div>
   );
 }

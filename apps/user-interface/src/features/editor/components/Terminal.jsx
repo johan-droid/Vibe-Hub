@@ -1,10 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, memo } from 'react';
-import { Terminal as TermIcon, Trash2, ChevronDown, Circle, Play } from 'lucide-react';
+import { Terminal as TermIcon, Trash2, ChevronDown, Circle, Play, Zap, Cpu } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Surface } from '../../shared/components/Surface';
-import { IconButton } from '../../shared/components/IconButton';
-import { Button } from '../../shared/components/Button';
 
 // ─── M3-Aligned ANSI Color Map ───────────────────────────────────────────────
 const ANSI_CLASSES = {
@@ -23,7 +20,7 @@ const ANSI_CLASSES = {
 function parseAnsi(raw) {
   const segments = [];
   const parts = raw.split(/(\x1b\[[0-9;]*m)/g);
-  let currentClass = 'text-on-surface-variant/70';
+  let currentClass = 'text-on-surface-variant/50';
 
   for (const part of parts) {
     if (part in ANSI_CLASSES) {
@@ -43,22 +40,22 @@ function getLineClass(line) {
   if (/\b(warn|warning)\b/.test(l)) return 'text-secondary';
   if (/\b(success|done|passed|ok|ready|started)\b/.test(l)) return 'text-primary font-medium';
   if (/\b(info|log|note)\b/.test(l)) return 'text-primary/60';
-  if (l.startsWith('  ') || l.startsWith('\t')) return 'text-outline opacity-60';
-  return 'text-on-surface-variant/80';
+  if (l.startsWith('  ') || l.startsWith('\t')) return 'text-outline opacity-40';
+  return 'text-on-surface-variant/60';
 }
 
 // ─── LogLine (Memoized) ─────────────────────────────────────────────────────
 const LogLine = memo(function LogLine({ line, index }) {
   const segments = parseAnsi(line);
-  const hasAnsi = segments.some((s) => s.className !== 'text-on-surface-variant/70');
+  const hasAnsi = segments.some((s) => s.className !== 'text-on-surface-variant/50');
   const lineClass = hasAnsi ? '' : getLineClass(line);
 
   return (
-    <div className={`flex gap-4 py-0.5 leading-6 group hover:bg-on-surface/5 transition-colors rounded-sm ${lineClass}`}>
-      <span className="shrink-0 w-10 text-right label-small font-mono text-outline/40 select-none opacity-40 group-hover:opacity-100 transition-opacity">
+    <div className={`flex gap-3 py-0 group hover:bg-on-surface/[0.03] transition-colors rounded-sm ${lineClass}`}>
+      <span className="shrink-0 w-8 text-right label-small font-mono text-outline/20 select-none opacity-30 group-hover:opacity-100 transition-opacity">
         {index + 1}
       </span>
-      <span className="font-mono text-[12px] break-all whitespace-pre-wrap flex-1 tracking-tight">
+      <span className="font-mono text-[11px] break-all whitespace-pre-wrap flex-1 tracking-tight py-0.5">
         {hasAnsi
           ? segments.map((seg, i) => (
               <span key={i} className={seg.className}>{seg.text}</span>
@@ -72,7 +69,7 @@ const LogLine = memo(function LogLine({ line, index }) {
 
 // ─── Main Terminal ────────────────────────────────────────────────────────────
 export default function Terminal() {
-  const { terminalOutput, neuralStatus } = useStore();
+  const { terminalOutput, neuralStatus, workflowState } = useStore();
   const scrollRef = useRef(null);
   const [isUserScrolled, setIsUserScrolled] = useState(false);
   const isUserScrolledRef = useRef(false);
@@ -104,63 +101,47 @@ export default function Terminal() {
     useStore.getState().clearTerminal();
   }, []);
 
-  // React to remote GitHub Execution
-  const { workflowState } = useStore();
-
-  let headerStatus = "Standby";
+  let headerStatus = "SYSTEM_IDLE";
   if (workflowState && workflowState.status === 'triggered') {
-      headerStatus = "GitHub Action Queued";
+      headerStatus = "RUNNER_QUEUED";
   } else if (workflowState && workflowState.status === 'completed') {
-            headerStatus = `GitHub Action ${workflowState.conclusion === 'success' ? 'Completed' : 'Failed'}`;
+      headerStatus = workflowState.conclusion === 'success' ? "RUNNER_SUCCESS" : "RUNNER_FAILURE";
   } else if (lines.length > 0) {
-      headerStatus = "Output Stream";
+      headerStatus = "STDOUT_STREAM";
   }
 
   return (
-    <Surface elevation={0} className="h-full w-full flex flex-col bg-surface-container-lowest overflow-hidden">
+    <div className="h-full w-full flex flex-col bg-surface-container-lowest overflow-hidden">
       {/* Toolbar */}
-      <div className="h-12 px-4 flex items-center justify-between border-b border-outline-variant/20 shrink-0 bg-surface-container-low/30 backdrop-blur-md">
+      <div className="h-9 px-5 flex items-center justify-between border-b border-outline-variant/10 shrink-0 bg-on-surface/[0.01]">
         <div className="flex items-center gap-3">
-          <Surface elevation={2} shape="md" className="w-6 h-6 flex items-center justify-center bg-primary/10">
-            <TermIcon size={14} className="text-primary" />
-          </Surface>
-          <span className="label-large font-bold text-on-surface uppercase tracking-widest opacity-60">
+          <TermIcon size={12} className="text-primary opacity-60" />
+          <span className="label-small font-bold text-on-surface-variant uppercase tracking-[0.2em] opacity-60">
             {headerStatus}
           </span>
-          <motion.div
-            animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
-            transition={{ repeat: Infinity, duration: 2 }}
-            className={`w-1.5 h-1.5 rounded-full ${lines.length > 0 ? 'bg-primary' : 'bg-outline/20'}`}
-          />
+          <div className="h-1 w-1 rounded-full bg-primary animate-pulse" />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <AnimatePresence>
             {isUserScrolled && (
-              <motion.div
-                initial={{ opacity: 0, x: 20, scale: 0.9 }}
-                animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={{ opacity: 0, x: 10, scale: 0.9 }}
+              <motion.button
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 5 }}
+                onClick={scrollToBottom}
+                className="label-small uppercase tracking-widest text-primary flex items-center gap-2 hover:brightness-110 transition-all"
               >
-                <Button
-                  variant="tonal"
-                  size="sm"
-                  onClick={scrollToBottom}
-                  leadingIcon={ChevronDown}
-                  className="h-8 !px-3 !rounded-lg text-[10px] animate-pulse"
-                >
-                  Resume
-                </Button>
-              </motion.div>
+                <ChevronDown size={10} /> RESUME_STREAM
+              </motion.button>
             )}
           </AnimatePresence>
-          <IconButton
-            icon={Trash2}
-            variant="ghost"
-            size="sm"
+          <button
             onClick={clearOutput}
-            className="text-on-surface-variant/40 hover:text-error"
-          />
+            className="label-small uppercase tracking-widest text-on-surface-variant/20 hover:text-error hover:opacity-100 transition-all"
+          >
+            PURGE
+          </button>
         </div>
       </div>
 
@@ -168,25 +149,20 @@ export default function Terminal() {
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto py-4 px-2 scrollbar-none"
+        className="flex-1 overflow-y-auto py-3 px-2 scrollbar-none"
       >
-                {lines.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-48 gap-4 opacity-20">
-            {neuralStatus?.waitingForGitHub ? (
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-              >
-                <Surface elevation={1} shape="full" className="w-12 h-12 flex items-center justify-center border-t-2 border-primary border-outline-variant/30">
-                </Surface>
-              </motion.div>
-            ) : (
-              <Surface elevation={1} shape="full" className="w-12 h-12 flex items-center justify-center border border-outline-variant/30">
-                 <Play size={20} className="text-on-surface ml-1" />
-              </Surface>
-            )}
-            <span className="label-small text-on-surface-variant/50">
-              {neuralStatus?.waitingForGitHub ? 'Awaiting GitHub Runner...' : 'Standby'}
+        {lines.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full gap-4 p-8 text-center">
+            <div className="relative mb-4">
+              <Play size={20} className="text-primary/10" />
+              <motion.div 
+                animate={{ scale: [1, 1.2, 1], opacity: [0.05, 0.15, 0.05] }} 
+                transition={{ repeat: Infinity, duration: 4 }}
+                className="absolute inset-0 bg-primary/20 blur-[20px] rounded-full"
+              />
+            </div>
+            <span className="label-small uppercase tracking-[0.25em] opacity-20">
+              {neuralStatus?.waitingForGitHub ? 'Awaiting Data Link...' : 'STDOUT_STANDBY'}
             </span>
           </div>
         ) : (
@@ -197,6 +173,17 @@ export default function Terminal() {
           </div>
         )}
       </div>
-    </Surface>
+
+      {/* Bottom Footer Telemetry */}
+      <div className="h-6 px-5 border-t border-outline-variant/10 flex items-center justify-between shrink-0 bg-on-surface/[0.01]">
+        <div className="flex items-center gap-4 label-small opacity-20 uppercase tracking-widest font-mono text-[9px]">
+          <span className="flex items-center gap-1.5"><Cpu size={10} /> CORE_0</span>
+          <span>TTY: /dev/pts/1</span>
+        </div>
+        <div className="label-small opacity-20 uppercase tracking-widest font-mono text-[9px]">
+          BUFF: {Math.round(JSON.stringify(lines).length / 1024)}KB
+        </div>
+      </div>
+    </div>
   );
 }

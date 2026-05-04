@@ -1,8 +1,8 @@
 import React, { useCallback, useRef } from 'react';
 
 /**
- * ResizeHandle — Material 3 Workspace Control
- * Provides high-fidelity, tactile feedback for layout adjustments.
+ * ResizeHandle — Neural OS Tactile Control
+ * Provides minimalist, high-density feedback for workspace orchestration.
  */
 export function ResizeHandle({ direction = 'vertical', onDrag, className = '' }) {
   const isDragging = useRef(false);
@@ -33,12 +33,18 @@ export function ResizeHandle({ direction = 'vertical', onDrag, className = '' })
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       className={
-        `group shrink-0 relative z-30 transition-all duration-300 select-none 
+        `group shrink-0 relative z-30 select-none 
         ${direction === 'vertical' ? 'h-1 w-full cursor-ns-resize' : 'w-1 h-full cursor-ew-resize'} ${className}`
       }
     >
-      <div className={`absolute inset-0 m-auto bg-outline-variant/10 group-hover:bg-primary/40 transition-colors ${direction === 'vertical' ? 'h-[1px] w-full' : 'w-[1px] h-full'}`} />
-      <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-primary/5 ${direction === 'vertical' ? 'h-4 -top-1.5' : 'w-4 -left-1.5'}`} />
+      {/* Target Area (Invisible, for easier grabbing) */}
+      <div className={`absolute inset-0 ${direction === 'vertical' ? '-inset-y-2' : '-inset-x-2'}`} />
+      
+      {/* Visual Indicator */}
+      <div 
+        className={`absolute inset-0 m-auto bg-on-surface/[0.05] group-hover:bg-primary/40 group-active:bg-primary transition-colors 
+        ${direction === 'vertical' ? 'h-[1px] w-full' : 'w-[1px] h-full'}`} 
+      />
     </div>
   );
 }
