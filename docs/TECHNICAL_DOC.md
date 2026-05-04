@@ -58,7 +58,7 @@ Used for modifying existing files. Requires a `search` block (context) and a `re
 ---
 
 ## 5. Security & Isolation
-- **WebContainer**: Runs code in a WebAssembly-based sandbox inside the browser.
+- **WebContainer**: Runs code in a GitHub Actions workflow.
 - **Vibe Bridge**: All Gemini API traffic is proxied through the server. No client-side `import.meta.env.VITE_GEMINI_KEY`.
 - **JWT Auth**: Ensures only authenticated users can trigger neural loops.
 
@@ -67,5 +67,5 @@ Used for modifying existing files. Requires a `search` block (context) and a `re
 ## 6. Development Workflow
 1. **Clone & Install**: `npm install` at root.
 2. **Environment**: Set up `apps/server-bridge/.env`.
-3. **Run**: `npm run dev` to start both bridge and UI.
+3. **Run**: `npm run dev (note: execution happens via GitHub Actions)` to start both bridge and UI.
 4. **Deploy**: Push to `main` to trigger the Render Blueprint rollout.

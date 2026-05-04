@@ -9,7 +9,7 @@
 
 ## Project Overview
 
-Vibe-Hub is a SaaS-grade agentic coding platform with strict architectural isolation. It features a deterministic XState-based orchestration engine with rollback capabilities, AST-first code analysis, offline Docker sandboxing, and a Virtual File System (VFS) with user approval gates.
+Vibe-Hub is a SaaS-grade agentic coding platform with strict architectural isolation. It features a deterministic XState-based orchestration engine with rollback capabilities, AST-first code analysis, offline GitHub Actions sandboxing, and a Virtual File System (VFS) with user approval gates.
 
 ### Architecture Stack
 
@@ -17,7 +17,7 @@ Vibe-Hub is a SaaS-grade agentic coding platform with strict architectural isola
 Frontend: React + Material 3 Design (apps/user-interface/)
 Backend:  Node.js + XState (apps/server-bridge/)
 Database: PostgreSQL + pgvector
-Sandbox:  Docker (offline, local-only)
+Sandbox:  GitHub Actions (offline, local-only)
 ```
 
 ---
@@ -56,7 +56,7 @@ Fixed critical frontend issues:
 **Commit:** 2e8d7e4, fdb0eaa
 
 **Implemented:**
-- ✅ Docker resource limits (256MB memory, 0.5 CPU, 50 PID limit)
+- ✅ GitHub Actions resource limits (256MB memory, 0.5 CPU, 50 PID limit)
 - ✅ API routes with Zod validation (`/api/code`, `/api/fs/commit`, etc.)
 - ✅ XSS protection middleware
 - ✅ Attack monitoring (suspicious pattern detection)
@@ -138,16 +138,15 @@ const graph = await semanticGraphBuilder.buildSemanticGraph(filePath);
 
 ---
 
-### ✅ Phase 4: Ephemeral Docker Sandbox
+### ✅ Phase 4: GitHub Actions Sandbox
 **Status:** COMPLETE  
-**Files:** `sandbox/docker_executor.js`
+**Files:** `sandbox/github_executor.js`
 
 Offline code execution with strict security:
 
 ```javascript
-const result = await SandboxExecutor.executeLocalDockerSandbox(codeToTest);
-// --rm: Auto-destroy container
-// --network none: No internet access
+const result = await SandboxExecutor.triggerGitHubActionSandbox(codeToTest);
+// Execution in isolated GitHub runner
 // 10s timeout: Kills infinite loops
 ```
 
@@ -300,7 +299,7 @@ LLM_MODEL=gemini-2.0-flash
 
 1. **XState over simple state** — Deterministic, testable, rollback-capable
 2. **AST over vectors** — Eliminates hallucinations in code dependencies
-3. **Docker sandbox** — Offline execution, prevents malicious code, antigravity loop
+3. **GitHub Actions sandbox** — Offline execution, prevents malicious code, antigravity loop
 4. **Strict isolation** — Prevents org constraints from bleeding into user prefs
 5. **VFS approval gate** — User always in control, no surprise disk writes
 6. **WebSocket streaming** — Real-time visibility into agent reasoning
@@ -314,14 +313,14 @@ LLM_MODEL=gemini-2.0-flash
 - [ ] ES module syntax (`import`/`export`)
 - [ ] `.js` extensions on imports
 - [ ] No org_core ↔ user_env cross-imports
-- [ ] Docker sandbox for all execution
+- [ ] GitHub Actions sandbox for all execution
 - [ ] Language restrictions (en/hi/or)
 
 **Deployment checklist:**
 - [ ] `npm install` in both `server-bridge/` and `user-interface/`
 - [ ] `socket.io` and `socket.io-client` installed
 - [ ] Environment variables configured
-- [ ] Docker Desktop running (for sandbox)
+- [ ] GitHub Actions running (for sandbox)
 
 ---
 
@@ -330,7 +329,7 @@ LLM_MODEL=gemini-2.0-flash
 **Backend:** 90% Production Ready ✅
 - State machine with rollback ✅
 - AST parser ✅
-- Docker sandbox with resource limits ✅
+- GitHub Actions sandbox with resource limits ✅
 - LLM client ✅
 - VFS with approval gate ✅
 - WebSocket streaming ✅
@@ -349,7 +348,7 @@ LLM_MODEL=gemini-2.0-flash
 - Rate limiting (100/15min general, 30/min API, 5/min LLM)
 - Zod input validation with path traversal prevention
 - XSS protection middleware
-- Docker isolation (--network none, --memory 256m, --cpus 0.5)
+- GitHub Actions isolation (--network none, --memory 256m, --cpus 0.5)
 - VFS approval gate (no auto-disk-write)
 
 **Testing:** Comprehensive ✅
@@ -364,7 +363,7 @@ LLM_MODEL=gemini-2.0-flash
 - Load/performance tests
 - State machine with rollback ✓
 - AST parser ✓
-- Docker sandbox ✓
+- GitHub Actions sandbox ✓
 - LLM client ✓
 - VFS with approval gate ✓
 - WebSocket streaming ✓
@@ -379,7 +378,7 @@ LLM_MODEL=gemini-2.0-flash
 - Monitor deployment logs for errors
 - Collect user feedback on approval gate UX
 - Consider adding file path sanitization hardening
-- Evaluate Docker sandbox performance under load
+- Evaluate GitHub Actions sandbox performance under load
 
 ---
 
