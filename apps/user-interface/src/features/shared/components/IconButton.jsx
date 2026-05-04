@@ -2,23 +2,30 @@ import React from 'react';
 import { twMerge } from 'tailwind-merge';
 
 /**
- * IconButton Component — Material 3 Specification
+ * IconButton Component — Refined for a professional "common people" perspective.
+ * Features ultra-soft interactions and a premium "enclave" feel.
  */
 export const IconButton = React.forwardRef(({ 
   icon: Icon, 
   variant = 'standard', 
   active = false, 
   className, 
-  size = 18,
+  size = 20,
   ...props 
 }, ref) => {
-  const baseClasses = 'relative p-2.5 rounded-full flex items-center justify-center transition-all duration-300 emphasized overflow-hidden group active:scale-[0.92]';
+  const baseClasses = 'relative p-3.5 rounded-[1.2rem] flex items-center justify-center transition-all duration-500 overflow-hidden group active:scale-[0.9]';
   
   const variantClasses = {
-    standard: active ? 'text-primary' : 'text-on-surface-variant hover:text-on-surface',
-    filled: active ? 'bg-primary text-on-primary' : 'bg-surface-container-highest text-primary hover:bg-surface-container-high',
-    tonal: active ? 'bg-secondary-container text-on-secondary-container' : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest',
-    outlined: 'border border-outline text-on-surface-variant hover:bg-surface-variant/5 hover:text-on-surface',
+    standard: active 
+      ? 'text-google-blue bg-google-blue/5 shadow-inner' 
+      : 'text-on-surface-variant/40 hover:text-google-blue hover:bg-google-blue/5',
+    filled: active 
+      ? 'bg-google-blue text-white shadow-2xl shadow-google-blue/20' 
+      : 'bg-white border border-black/[0.03] text-on-surface-variant/40 hover:text-google-blue hover:shadow-xl hover:shadow-google-blue/10',
+    tonal: active 
+      ? 'bg-google-blue/10 text-google-blue shadow-sm' 
+      : 'bg-black/[0.02] text-on-surface-variant/40 hover:bg-black/[0.05] hover:text-on-surface',
+    outlined: 'border border-black/[0.05] text-on-surface-variant/40 hover:border-google-blue/30 hover:text-google-blue hover:bg-google-blue/[0.02]',
   };
 
   return (
@@ -27,10 +34,15 @@ export const IconButton = React.forwardRef(({
       className={twMerge(baseClasses, variantClasses[variant], className)}
       {...props}
     >
-      {/* State Layer */}
-      <div className="absolute inset-0 bg-current opacity-0 transition-opacity duration-200 pointer-events-none group-hover:opacity-[0.08] group-active:opacity-[0.12]" />
+      {/* Glossy State Layer */}
+      <div className="absolute inset-0 bg-current opacity-0 transition-opacity duration-300 pointer-events-none group-hover:opacity-[0.03] group-active:opacity-[0.08]" />
       
-      {Icon && <Icon size={size} className="relative z-10" />}
+      {Icon && (
+        <Icon 
+          size={size} 
+          className="relative z-10 transition-transform duration-500 group-hover:scale-110" 
+        />
+      )}
     </button>
   );
 });

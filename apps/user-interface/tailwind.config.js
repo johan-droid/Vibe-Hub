@@ -52,6 +52,12 @@ export default {
           DEFAULT: 'hsl(var(--outline) / <alpha-value>)',
           variant: 'hsl(var(--outline-variant) / <alpha-value>)',
         },
+        
+        // Google Brand Colors
+        'google-blue': 'hsl(var(--google-blue) / <alpha-value>)',
+        'google-red': 'hsl(var(--google-red) / <alpha-value>)',
+        'google-yellow': 'hsl(var(--google-yellow) / <alpha-value>)',
+        'google-green': 'hsl(var(--google-green) / <alpha-value>)',
       },
       fontFamily: {
         sans: ['Outfit', 'ui-sans-serif', 'sans-serif'],

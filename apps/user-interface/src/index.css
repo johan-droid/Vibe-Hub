@@ -6,40 +6,40 @@
   :root {
     /* --- COFFEE MILKY PALETTE --- */
     /* Light Mode (Default) */
-    --primary: 28 45% 15%; /* Espresso Dark */
+    --primary: 217 89% 61%; /* Google Blue as Primary */
     --on-primary: 0 0% 100%;
-    --primary-container: 32 30% 95%; /* Creamy Latte */
-    --on-primary-container: 28 45% 15%;
+    --primary-container: 217 89% 96%;
+    --on-primary-container: 217 89% 20%;
 
-    --secondary: 32 15% 45%; /* Milky Mocha */
+    --secondary: 28 45% 15%; /* Espresso Dark */
     --on-secondary: 0 0% 100%;
-    --secondary-container: 32 20% 92%;
-    --on-secondary-container: 32 15% 25%;
+    --secondary-container: 32 30% 95%;
+    --on-secondary-container: 28 45% 15%;
 
-    --tertiary: 217 89% 61%; /* Google Blue Accent */
+    --tertiary: 138 53% 44%; /* Google Green */
     --on-tertiary: 0 0% 100%;
-    --tertiary-container: 217 89% 95%;
-    --on-tertiary-container: 217 89% 30%;
+    --tertiary-container: 138 53% 96%;
+    --on-tertiary-container: 138 53% 20%;
 
     --error: 5 81% 56%; /* Google Red */
     --on-error: 0 0% 100%;
-    --error-container: 5 81% 95%;
-    --on-error-container: 5 81% 25%;
+    --error-container: 5 81% 96%;
+    --on-error-container: 5 81% 20%;
 
-    /* Workspace Surfaces (Warm & Milky) */
-    --surface-dim: 32 20% 90%;
+    /* Workspace Surfaces (Premium Coffee Milky) */
     --surface: 32 30% 98%; /* Milk Foam White */
+    --surface-dim: 32 20% 94%;
     --surface-bright: 0 0% 100%;
     --surface-container-lowest: 0 0% 100%;
-    --surface-container-low: 32 30% 96%;
-    --surface-container: 32 25% 94%;
-    --surface-container-high: 32 20% 92%;
-    --surface-container-highest: 32 15% 88%;
+    --surface-container-low: 32 30% 97%;
+    --surface-container: 32 25% 96%;
+    --surface-container-high: 32 20% 94%;
+    --surface-container-highest: 32 15% 92%;
 
     --on-surface: 28 40% 12%;
-    --on-surface-variant: 28 15% 40%;
-    --outline: 32 15% 85%;
-    --outline-variant: 32 20% 90%;
+    --on-surface-variant: 28 15% 45%;
+    --outline: 32 15% 90%;
+    --outline-variant: 32 20% 94%;
 
     /* Google Brand Accents */
     --google-blue: 217 89% 61%;
@@ -48,32 +48,28 @@
     --google-green: 138 53% 44%;
 
     --radius-full: 9999px;
+    --radius-3xl: 2.5rem;
     --radius-2xl: 1.5rem;
     --radius-xl: 1rem;
     --radius-lg: 0.75rem;
     --radius-md: 0.5rem;
     --radius-sm: 0.25rem;
-    --glass-blur: 32px;
+    --glass-blur: 24px;
   }
 
   [data-theme='dark'] {
-    /* Dark Mode (Deep Espresso & Steamed Milk) */
-    --primary: 32 30% 90%; 
-    --on-primary: 28 45% 10%;
-    --primary-container: 28 40% 15%;
-    --on-primary-container: 32 30% 95%;
+    /* Dark Mode (Deep Roasted Espresso) */
+    --primary: 217 89% 70%; 
+    --on-primary: 217 89% 10%;
+    --primary-container: 217 89% 20%;
+    --on-primary-container: 217 89% 95%;
 
-    --secondary: 32 15% 70%;
+    --secondary: 32 30% 90%; 
     --on-secondary: 28 45% 10%;
-    --secondary-container: 28 35% 20%;
-    --on-secondary-container: 32 15% 85%;
+    --secondary-container: 28 40% 15%;
+    --on-secondary-container: 32 30% 95%;
 
-    --tertiary: 217 89% 70%; /* Muted Google Blue */
-    --on-tertiary: 217 89% 10%;
-    --tertiary-container: 217 89% 20%;
-    --on-tertiary-container: 217 89% 90%;
-
-    --surface: 28 45% 6%; /* Deep Roasted Bean */
+    --surface: 28 45% 6%; 
     --surface-dim: 28 45% 4%;
     --surface-bright: 28 40% 10%;
     --surface-container-lowest: 28 45% 3%;
@@ -82,7 +78,7 @@
     --surface-container-high: 28 30% 14%;
     --surface-container-highest: 28 25% 18%;
 
-    --on-surface: 32 30% 95%;
+    --on-surface: 32 30% 96%;
     --on-surface-variant: 32 15% 70%;
     --outline: 28 20% 20%;
     --outline-variant: 28 20% 15%;
@@ -100,8 +96,8 @@
     @apply bg-surface-container-lowest text-on-surface font-sans antialiased overflow-x-hidden;
     min-height: 100%;
     margin: 0;
-    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
-    text-rendering: geometricPrecision;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1, "cv01" 1, "cv11" 1;
+    text-rendering: optimizeLegibility;
   }
 
   #root {
@@ -109,71 +105,61 @@
     isolation: isolate;
   }
 
-  ::selection { @apply bg-primary/20 text-primary; }
-  ::-webkit-scrollbar { @apply w-1.5 h-1.5; }
+  ::selection { @apply bg-primary/10 text-primary; }
+
+  /* Premium Minimal Scrollbars */
+  ::-webkit-scrollbar { @apply w-1 h-1; }
   ::-webkit-scrollbar-track { @apply bg-transparent; }
-  ::-webkit-scrollbar-thumb { @apply rounded-full bg-on-surface/10 hover:bg-on-surface/20 transition-colors; }
+  ::-webkit-scrollbar-thumb { 
+    @apply rounded-full bg-black/[0.05] border-2 border-transparent bg-clip-content hover:bg-black/10 transition-colors; 
+  }
 }
 
 @layer components {
-  .neural-border { @apply border border-outline-variant/30; }
+  .neural-border { @apply border border-black/[0.03]; }
   .neural-glass { 
-    @apply bg-surface/85 backdrop-blur-[var(--glass-blur)] neural-border shadow-sm; 
+    @apply bg-white/60 backdrop-blur-[var(--glass-blur)] neural-border shadow-sm; 
   }
 
-  .display-large { @apply font-display text-6xl md:text-8xl font-black tracking-[-0.08em] leading-[0.9]; }
-  .display-medium { @apply font-display text-4xl md:text-6xl font-black tracking-[-0.07em] leading-[0.95]; }
-  .display-small { @apply font-display text-3xl font-black tracking-[-0.05em] leading-tight; }
-  .headline-large { @apply font-display text-3xl md:text-4xl font-bold tracking-[-0.05em] leading-tight; }
-  .headline-medium { @apply font-display text-2xl md:text-3xl font-bold tracking-[-0.04em] leading-tight; }
-  .headline-small { @apply font-display text-xl font-bold tracking-[-0.03em] leading-snug; }
-  .title-large { @apply font-display text-xl font-semibold tracking-[-0.025em]; }
-  .title-medium { @apply font-display text-lg font-semibold tracking-[-0.02em]; }
-  .title-small { @apply font-display text-base font-semibold tracking-[-0.015em]; }
+  .display-large { @apply font-sans text-6xl md:text-9xl font-black tracking-tight leading-[0.9] text-on-surface; }
+  .display-medium { @apply font-sans text-5xl md:text-7xl font-black tracking-tight leading-[0.95] text-on-surface; }
+  .display-small { @apply font-sans text-4xl font-black tracking-tight leading-tight text-on-surface; }
   
-  /* Industrial Typography */
-  .label-large { @apply font-mono text-[10px] tracking-[0.25em] font-bold uppercase opacity-60; }
-  .label-medium { @apply font-mono text-[9px] tracking-[0.2em] font-bold uppercase opacity-50; }
-  .label-small { @apply font-mono text-[8px] tracking-[0.15em] font-bold uppercase opacity-40; }
+  .headline-large { @apply font-sans text-3xl md:text-5xl font-black tracking-tight leading-tight; }
+  .headline-medium { @apply font-sans text-2xl md:text-4xl font-black tracking-tight leading-tight; }
+  .headline-small { @apply font-sans text-xl font-black tracking-tight leading-snug; }
+  
+  .title-large { @apply font-sans text-2xl font-bold tracking-tight; }
+  .title-medium { @apply font-sans text-xl font-bold tracking-tight; }
+  .title-small { @apply font-sans text-lg font-bold tracking-tight; }
+  
+  /* Human-Centric Typography */
+  .label-large { @apply font-sans text-[11px] tracking-[0.3em] font-black uppercase opacity-40; }
+  .label-medium { @apply font-sans text-[10px] tracking-[0.25em] font-black uppercase opacity-30; }
+  .label-small { @apply font-sans text-[9px] tracking-[0.2em] font-black uppercase opacity-20; }
 
-  .body-large { @apply font-sans text-[15px] leading-relaxed tracking-tight font-medium; }
-  .body-medium { @apply font-sans text-[13px] leading-relaxed tracking-tight font-medium; }
-  .body-small { @apply font-sans text-[11px] leading-relaxed tracking-tight font-medium opacity-80; }
+  .body-large { @apply font-sans text-lg leading-relaxed font-medium; }
+  .body-medium { @apply font-sans text-base leading-relaxed font-medium; }
+  .body-small { @apply font-sans text-sm leading-relaxed font-medium opacity-60; }
 
-  .elevation-1 { @apply bg-surface-container-low shadow-sm; }
-  .elevation-2 { @apply bg-surface-container shadow-md; }
-  .elevation-3 { @apply bg-surface-container-high shadow-lg; }
+  .shadow-3xl {
+    box-shadow: 0 32px 64px -12px rgba(0, 0, 0, 0.08);
+  }
 
   .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-br from-on-surface via-on-surface/80 to-secondary;
+    @apply bg-clip-text text-transparent bg-gradient-to-br from-on-surface via-on-surface/80 to-google-blue;
   }
 
   .scrollbar-none::-webkit-scrollbar { display: none; }
-
-  .google-blue { color: hsl(var(--google-blue)); }
-  .google-red { color: hsl(var(--google-red)); }
-  .google-yellow { color: hsl(var(--google-yellow)); }
-  .google-green { color: hsl(var(--google-green)); }
-  
-  .bg-google-blue { background-color: hsl(var(--google-blue)); }
-  .bg-google-red { background-color: hsl(var(--google-red)); }
-  .bg-google-yellow { background-color: hsl(var(--google-yellow)); }
-  .bg-google-green { background-color: hsl(var(--google-green)); }
 }
 
 @layer utilities {
-  .ease-emphasized { transition-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  .ease-emphasized { transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
   
   @keyframes thinking-pulse {
-    0%, 100% { opacity: 0.3; transform: scale(1); }
-    50% { opacity: 1; transform: scale(1.1); filter: blur(2px); }
+    0%, 100% { opacity: 0.2; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(1.1); filter: blur(2px); }
   }
 
-  @keyframes drift {
-    0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
-    50% { transform: translate3d(24px, -24px, 0) rotate(1deg); }
-  }
-
-  .animate-thinking-pulse { animation: thinking-pulse 2s ease-in-out infinite; }
-  .animate-drift { animation: drift 20s ease-in-out infinite; }
+  .animate-thinking-pulse { animation: thinking-pulse 3s ease-in-out infinite; }
 }
