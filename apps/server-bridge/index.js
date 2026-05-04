@@ -7,7 +7,6 @@ import express            from 'express';
 import cors               from 'cors';
 import helmet             from 'helmet';
 import rateLimit          from 'express-rate-limit';
-import cookieParser       from 'cookie-parser';
 import { createServer }   from 'http';
 import { WebSocketServer } from 'ws';
 import { Server as SocketIOServer } from 'socket.io';
@@ -85,8 +84,6 @@ app.use('/api/code', orchestrationLimiter); // Strictest for LLM calls
 const UI_ORIGIN = process.env.UI_ORIGIN || true;
 app.use(cors({ origin: UI_ORIGIN, credentials: true }));
 
-// Parse cookies for OAuth state validation
-app.use(cookieParser());
 
 // Request context logging (adds requestId and logs requests)
 app.use(requestContext);
