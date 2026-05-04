@@ -12,14 +12,14 @@ export const Button = React.forwardRef(({
   disabled,
   ...props
 }, ref) => {
-  const baseClasses = 'relative inline-flex items-center justify-center gap-2.5 whitespace-nowrap font-sans font-bold transition-all duration-200 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30';
+  const baseClasses = 'relative inline-flex items-center justify-center gap-2.5 whitespace-nowrap font-sans font-bold transition-all duration-200 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-google-blue/30';
 
   const variantClasses = {
-    filled: 'bg-primary text-on-primary shadow-sm hover:bg-primary/90',
-    tonal: 'bg-primary/8 text-primary border border-primary/10 hover:bg-primary/12',
-    outlined: 'bg-surface-container-lowest border border-outline-variant text-on-surface hover:border-primary/40 hover:bg-primary/5',
-    text: 'bg-transparent text-on-surface-variant hover:text-primary hover:bg-primary/5',
-    elevated: 'bg-surface-container-lowest text-on-surface border border-outline-variant shadow-sm hover:bg-surface-container-low',
+    filled: 'bg-google-blue text-white shadow-sm hover:bg-google-blue/90',
+    tonal: 'bg-google-blue/10 text-google-blue border border-google-blue/20 hover:bg-google-blue/20',
+    outlined: 'bg-surface-container-lowest border border-outline-variant text-on-surface hover:border-google-blue/40 hover:bg-google-blue/5',
+    text: 'bg-transparent text-on-surface-variant hover:text-google-blue hover:bg-google-blue/5',
+    elevated: 'bg-surface-container-lowest text-on-surface border border-outline-variant shadow-sm hover:bg-surface-container-low hover:text-google-blue',
   };
 
   const sizeClasses = {
