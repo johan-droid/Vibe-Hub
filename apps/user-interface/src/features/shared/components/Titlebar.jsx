@@ -25,6 +25,7 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { VibeLogoCompact } from '../../../components/VibeLogo';
 import { useStore } from '../../../store/useStore';
 import { IconButton } from './IconButton';
 
@@ -42,20 +43,14 @@ export default function Titlebar({ onOpenSettings }) {
     >
       <div className="flex min-w-0 items-center gap-5">
         <button onClick={() => navigate('/')} className="group flex min-w-0 items-center gap-3">
-          <div className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary text-on-primary shadow-sm transition-transform group-hover:scale-[1.03]">
-            <motion.div 
-              className="absolute inset-0 bg-white/10 opacity-0 transition-opacity group-hover:opacity-100"
-              animate={isThinking ? { opacity: [0.1, 0.4, 0.1] } : {}}
-              transition={{ repeat: Infinity, duration: 1.5 }}
-            />
-            <Brain size={19} className="relative z-10" />
+          <div className="relative flex h-10 w-10 shrink-0 items-center justify-center transition-transform group-hover:scale-[1.05]">
+            <VibeLogoCompact size={40} />
             {isThinking && (
               <span className="absolute -right-0.5 -top-0.5 h-3 w-3 animate-pulse rounded-full border-2 border-white bg-primary" />
             )}
           </div>
           <div className="hidden min-w-0 sm:block text-left">
             <span className="block text-base font-black leading-none tracking-tight text-on-surface">Selina</span>
-            <span className="mt-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant">Workspace</span>
           </div>
         </button>
 
@@ -119,7 +114,13 @@ export default function Titlebar({ onOpenSettings }) {
         
         {user?.avatarUrl && (
           <button className="ml-1 h-9 w-9 overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest p-0.5 shadow-sm transition-all hover:scale-[1.03]">
-             <img src={user.avatarUrl} alt={user.name} className="h-full w-full rounded-md object-cover" />
+             <img 
+               src={user.avatarUrl} 
+               alt={user.name} 
+               className="h-full w-full rounded-md object-cover" 
+               crossOrigin="anonymous"
+               onError={(e) => { e.target.style.display = 'none'; }} 
+             />
           </button>
         )}
       </div>

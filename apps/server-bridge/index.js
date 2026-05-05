@@ -13,8 +13,11 @@ import { WebSocketServer } from 'ws';
 import { Server as SocketIOServer } from 'socket.io';
 import { v4 as uuid }     from 'uuid';
 import { logger, requestContext, logError } from './utils/logger.js';
+import { logger as detailedLogger, requestLogger } from './utils/detailed-logger.js';
 import { codeRequestSchema, vfsCommitSchema, validateRequest } from './utils/validation.js';
-import { handleCodeJobStatus, handleCodeRequest, handleCommitRequest, handleGetPendingFiles, handleGetVfsStats, router } from './orchestrator/router.js';
+import { handleCodeJobStatus, handleCodeRequest, handleCommitRequest, handleGetPendingFiles, handleGetVfsStats, handleLinkRepo, handleListRepos, handleListTools, handleListServers, handleCallTool, handleRegisterServer, router } from './orchestrator/router.js';
+
+
 import { csrfProtection, csrfTokenHandler } from './utils/csrf.js';
 import { getReadiness, registerReadinessCheck, requireReadiness } from './utils/health.js';
 import { metricsMiddleware, renderMetrics, setActiveWebsocketConnections } from './utils/metrics.js';
@@ -31,6 +34,8 @@ import { initDB }                from './db.js';
 import { requireAuth, verifyToken } from './auth/middleware.js';
 import googleAuth                from './auth/google.js';
 import githubAuth                from './auth/github.js';
+import authRoutes                from './auth/routes.js';
+import cookieParser              from 'cookie-parser';
 import { AgentOrchestrator }     from './orchestrator/index.js';
 import { TaskManager }           from './orchestrator/task-manager.js';
 import { githubService }         from './github/index.js';
@@ -199,13 +204,17 @@ function releaseWsUser(userId) {
 
 // ── Standard Middleware ───────────────────────────────────────────────────────
 
-// Restrict CORS to the UI origin in production; allow all in dev.
-const UI_ORIGIN = process.env.UI_ORIGIN || true;
-app.use(cors({ origin: UI_ORIGIN, credentials: true }));
+// CORS: Allow all origins in dev for multiple ports, restrict in production
+const corsOrigin = process.env.NODE_ENV === 'production' 
+  ? (process.env.UI_ORIGIN || true) 
+  : true;
+app.use(cors({ origin: corsOrigin, credentials: true }));
 
 
 // Request context logging (adds requestId and logs requests)
 app.use(requestContext);
+app.use(detailedLogger.logRequest); // Detailed request logging
+app.use(requestLogger); // Attach logger to request object
 app.use(metricsMiddleware);
 
 // Raw body parser for webhook signature verification (must come before JSON).
@@ -213,6 +222,9 @@ app.use(['/api/github/webhook', '/api/v6/github/webhook'], express.raw({ type: '
 
 // 5 MB JSON cap — large enough for paste-in files, prevents body-flood DoS.
 app.use(express.json({ limit: '5mb' }));
+
+// Cookie parser for reading auth cookies
+app.use(cookieParser());
 
 // ── API documentation + metrics ───────────────────────────────────────────────
 app.get('/', (_req, res) => {
@@ -228,11 +240,58 @@ app.get('/swagger.json', (_req, res) => res.json(buildOpenApiSpec()));
 app.get('/api-docs', (_req, res) => res.type('html').send(apiDocsHtml()));
 app.get('/metrics', async (_req, res) => res.type('text/plain; version=0.0.4').send(await renderMetrics()));
 
+// ── Test Mode Logging Endpoints ───────────────────────────────────────────────
+// These endpoints provide detailed logging control and log access for testing
+
+// Get current logger configuration
+app.get('/api/debug/log-config', (_req, res) => {
+  res.json({
+    testMode: process.env.TEST_MODE === 'true' || process.env.NODE_ENV === 'development',
+    environment: process.env.NODE_ENV || 'development',
+    logLevel: detailedLogger.getConfig ? detailedLogger.getConfig() : 'unknown'
+  });
+});
+
+// Get recent request history (test mode only)
+app.get('/api/debug/request-history', (req, res) => {
+  const history = detailedLogger.getRequestHistory();
+  res.json({
+    count: history.length,
+    requests: history.slice(-100) // Last 100 requests
+  });
+});
+
+// Get specific request details
+app.get('/api/debug/request/:requestId', (req, res) => {
+  const details = detailedLogger.getRequestDetails(req.params.requestId);
+  if (!details) {
+    return res.status(404).json({ error: 'Request not found' });
+  }
+  res.json(details);
+});
+
+// Clear request history
+app.post('/api/debug/clear-history', (_req, res) => {
+  detailedLogger.clearRequestHistory();
+  res.json({ success: true, message: 'Request history cleared' });
+});
+
+// Trigger test log messages
+app.post('/api/debug/test-logs', (req, res) => {
+  const { level = 'info', message = 'Test log message' } = req.body || {};
+  
+  detailedLogger[level]('Test', message, { test: true, timestamp: Date.now() });
+  
+  res.json({ success: true, level, message });
+});
+
 // ── Auth routes ───────────────────────────────────────────────────────────────
 app.use('/api/auth', googleAuth);
 app.use('/api/auth', githubAuth);
+app.use('/api/auth', authRoutes);
 app.use('/api/v6/auth', googleAuth);
 app.use('/api/v6/auth', githubAuth);
+app.use('/api/v6/auth', authRoutes);
 
 // ── Health endpoint ───────────────────────────────────────────────────────────
 app.get('/health', async (_req, res) => {
@@ -382,6 +441,22 @@ app.get('/api/fs/pending', requireAuth, handleGetPendingFiles);
 app.get('/api/v6/fs/pending', requireAuth, handleGetPendingFiles);
 app.get('/api/fs/stats', requireAuth, handleGetVfsStats);
 app.get('/api/v6/fs/stats', requireAuth, handleGetVfsStats);
+
+// ── Repository Management (V6) ────────────────────────────────────────────────
+app.post('/api/v6/repos/link', requireAuth, handleLinkRepo);
+app.get('/api/v6/repos/list', requireAuth, handleListRepos);
+
+
+// ── MCP Orchestration (V6) ────────────────────────────────────────────────────
+app.get('/api/v6/mcp/tools', requireAuth, handleListTools);
+app.get('/api/v6/mcp/servers', requireAuth, handleListServers);
+
+app.post('/api/v6/mcp/call', requireAuth, handleCallTool);
+
+// ── Chat History (V6) ─────────────────────────────────────────────────────────
+import { chatRouter } from './orchestrator/chat_routes.js';
+app.use('/api/v6/chat', requireAuth, chatRouter);
+
 
 // ── GitHub Copilot Extension endpoint ─────────────────────────────────────────
 // Copilot Extensions use the OpenAI streaming chat completions protocol.

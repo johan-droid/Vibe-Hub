@@ -28,7 +28,7 @@ export class EmployeeBase {
     this._summarizing = false;
   }
 
-  async execute(prompt, systemPrompt, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream) {
+  async execute(prompt, systemPrompt, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, additionalTools = []) {
     if (this.history.length > this.historyLimit * 2 && !this._summarizing) {
       this._summarizing = true;
       if (emitState) emitState('thinking', 'Compressing neural context...');
@@ -50,16 +50,17 @@ export class EmployeeBase {
     if (emitState) emitState('thinking', `Routing through ${profile.provider}:${profile.model}...`);
 
     if (modelService.providerKind(profile) === 'gemini') {
-      return this.executeGemini(prompt, fullSystemPrompt, profile, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream);
+      return this.executeGemini(prompt, fullSystemPrompt, profile, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, additionalTools);
     }
 
-    return this.executeExternal(prompt, fullSystemPrompt, profile, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream);
+    return this.executeExternal(prompt, fullSystemPrompt, profile, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, additionalTools);
   }
 
-  async executeGemini(prompt, fullSystemPrompt, profile, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream) {
+  async executeGemini(prompt, fullSystemPrompt, profile, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, additionalTools = []) {
+    const combinedTools = [...AGENT_TOOLS, ...additionalTools];
     const model = modelService.getGeminiGenerativeModel({
       model: profile.model,
-      tools: [{ functionDeclarations: AGENT_TOOLS }],
+      tools: [{ functionDeclarations: combinedTools }],
       systemInstruction: fullSystemPrompt,
       maxOutputTokens: profile.maxOutputTokens,
     });
@@ -108,22 +109,23 @@ export class EmployeeBase {
     return { content: finalText, toolCalls: allToolCalls };
   }
 
-  async executeExternal(prompt, fullSystemPrompt, profile, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream) {
+  async executeExternal(prompt, fullSystemPrompt, profile, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, additionalTools = []) {
     const allToolCalls = [];
     const providerKind = modelService.providerKind(profile);
+    const combinedTools = [...AGENT_TOOLS, ...additionalTools];
     const recentHistory = this.history.slice(-this.historyLimit).map(turn => ({
       role: turn.role === 'model' ? 'assistant' : 'user',
       content: textFromHistoryPart(turn),
     }));
 
     if (providerKind === 'anthropic') {
-      return this.executeAnthropicLoop(prompt, fullSystemPrompt, profile, recentHistory, allToolCalls, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream);
+      return this.executeAnthropicLoop(prompt, fullSystemPrompt, profile, recentHistory, allToolCalls, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, combinedTools);
     }
 
-    return this.executeOpenAILoop(prompt, fullSystemPrompt, profile, recentHistory, allToolCalls, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream);
+    return this.executeOpenAILoop(prompt, fullSystemPrompt, profile, recentHistory, allToolCalls, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, combinedTools);
   }
 
-  async executeOpenAILoop(prompt, fullSystemPrompt, profile, recentHistory, allToolCalls, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream) {
+  async executeOpenAILoop(prompt, fullSystemPrompt, profile, recentHistory, allToolCalls, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, combinedTools = []) {
     const messages = [
       { role: 'system', content: fullSystemPrompt },
       ...recentHistory,
@@ -134,7 +136,7 @@ export class EmployeeBase {
     const maxIterations = 16;
 
     for (let iteration = 0; iteration < maxIterations; iteration++) {
-      const result = await modelService.openAICompatibleChat({ profile, messages, tools: AGENT_TOOLS });
+      const result = await modelService.openAICompatibleChat({ profile, messages, tools: combinedTools });
       finalText = result.content || '';
 
       if (!result.toolCalls.length) {
@@ -159,13 +161,13 @@ export class EmployeeBase {
     return { content: finalText || '[Provider stopped after maximum tool iterations.]', toolCalls: allToolCalls };
   }
 
-  async executeAnthropicLoop(prompt, fullSystemPrompt, profile, recentHistory, allToolCalls, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream) {
+  async executeAnthropicLoop(prompt, fullSystemPrompt, profile, recentHistory, allToolCalls, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, combinedTools = []) {
     const messages = [...recentHistory, { role: 'user', content: prompt }];
     let finalText = '';
     const maxIterations = 16;
 
     for (let iteration = 0; iteration < maxIterations; iteration++) {
-      const result = await modelService.anthropicChat({ profile, system: fullSystemPrompt, messages, tools: AGENT_TOOLS });
+      const result = await modelService.anthropicChat({ profile, system: fullSystemPrompt, messages, tools: combinedTools });
       finalText = result.content || '';
 
       if (!result.toolCalls.length) {

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { idbStorage } from './idbStorage';
 import { v4 as uuid } from 'uuid';
+import { performLogoutCleanup, savePanelStates, loadPanelStates } from '../utils/localStorage';
 
 /**
  * Selina Global State Store — Principal Architect Implementation
@@ -20,21 +21,24 @@ export const useStore = create(
       sidebarCollapsed: false,
       chatCollapsed: false,
       terminalHeight: 256,
-      activeTab: 'dashboard',
+      activeTab: 'workbench', // Default to workbench instead of dashboard
       theme: 'dark', // Always dark
 
       // --- AGENT CORE STATE (Volatile) ---
       messages: [],
-      streamingMessage: null, // Atomic storage for byte-by-byte updates
+      streamingMessage: null, 
       agentThoughts: [],
       isThinking: false,
-      workflowState: null, // Track remote github actions
+      chatHistory: [], // Array<{ id, title, timestamp }>
+      linkedProjects: [], // Array<{ id, name, type: 'repo'|'local', path }>
+      uploadedFiles: [], // Array<{ id, name, size }>
+      workflowState: null,
       setWorkflowState: (state) => set({ workflowState: state }),
       
       // Neural Status (Current Expert Context)
       neuralStatus: {
-        expert: 'core', // 'core', 'react', 'debugging', 'planning', etc.
-        phase: 'idle',  // 'idle', 'classifying', 'executing', 'streaming'
+        expert: 'core', 
+        phase: 'idle',  
         lastAction: '',
         waitingForGitHub: false,
       },
@@ -48,26 +52,49 @@ export const useStore = create(
       // VFS & Code State
       vfsStatus: 'idle',
       vfsTree: [],
-      openFiles: [], // Array<{ path, content, dirty }>
+      openFiles: [], 
       activeFilePath: null,
       activeFileContent: null,
-      diffData: null, // { path, oldValue, newValue }
+      diffData: null, 
       
       // --- SETTERS & ACTIONS ---
 
       // Auth
       setUser: (user) => set({ user }),
       logout: () => {
-        localStorage.removeItem('selina_token');
+        // Tier 3 cleanup: Clear auth tokens but preserve Tier 1 & 2
+        // (user preferences, lastJobId, panel states survive logout)
+        performLogoutCleanup();
         set({ user: null, messages: [], agentThoughts: [], streamingMessage: null });
       },
 
-      // Layout
-      setSidebarCollapsed: (v) => set({ sidebarCollapsed: v }),
-      setChatCollapsed: (v) => set({ chatCollapsed: v }),
+      // Layout - Persisted to localStorage (Tier 2)
+      setSidebarCollapsed: (v) => {
+        set({ sidebarCollapsed: v });
+        savePanelStates({ sidebarCollapsed: v, chatCollapsed: useStore.getState().chatCollapsed, terminalHeight: useStore.getState().terminalHeight });
+      },
+      setChatCollapsed: (v) => {
+        set({ chatCollapsed: v });
+        savePanelStates({ sidebarCollapsed: useStore.getState().sidebarCollapsed, chatCollapsed: v, terminalHeight: useStore.getState().terminalHeight });
+      },
+      setTerminalHeight: (v) => {
+        set({ terminalHeight: v });
+        savePanelStates({ sidebarCollapsed: useStore.getState().sidebarCollapsed, chatCollapsed: useStore.getState().chatCollapsed, terminalHeight: v });
+      },
       setActiveTab: (tab) => set({ activeTab: tab }),
       setHydrated: (v) => set({ hydrated: v }),
       toggleTheme: () => set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
+      // Restore panel states from localStorage
+      restorePanelStates: () => {
+        const states = loadPanelStates();
+        if (states) {
+          set({
+            sidebarCollapsed: states.sidebarCollapsed ?? useStore.getState().sidebarCollapsed,
+            chatCollapsed: states.chatCollapsed ?? useStore.getState().chatCollapsed,
+            terminalHeight: states.terminalHeight ?? useStore.getState().terminalHeight,
+          });
+        }
+      },
 
       // Agent Streaming
       setStreamingMessage: (content) => set({ streamingMessage: content }),
@@ -86,6 +113,34 @@ export const useStore = create(
       })),
 
       setThinking: (v) => set({ isThinking: v }),
+
+      // Chat History
+      activeSessionId: null,
+      chatSessions: [],
+      
+      setChatSessions: (sessions) => set({ chatSessions: sessions }),
+      setActiveSession: (id) => set({ activeSessionId: id }),
+      
+      setChatHistory: (history) => set({ chatHistory: history }),
+      addChatToHistory: (chat) => set((state) => ({
+        chatHistory: [chat, ...state.chatHistory]
+      })),
+
+      // Project Management
+      setLinkedProjects: (projects) => set({ linkedProjects: projects }),
+      addProject: (project) => set((state) => ({
+        linkedProjects: [...state.linkedProjects, project]
+      })),
+      setProjects: (projects) => set({ linkedProjects: projects }),
+      removeProject: (id) => set((state) => ({
+        linkedProjects: state.linkedProjects.filter((p) => p.id !== id)
+      })),
+
+      // File Assets
+      setUploadedFiles: (files) => set({ uploadedFiles: files }),
+      addUploadedFile: (file) => set((state) => ({
+        uploadedFiles: [...state.uploadedFiles, file]
+      })),
 
       // Neural Status Updates
       updateNeuralStatus: (status) => set((state) => ({
@@ -125,7 +180,7 @@ export const useStore = create(
           openFiles: newOpenFiles,
           activeFilePath: nextPath,
           activeFileContent: nextContent,
-          activeTab: nextPath ? 'editor' : (state.diffData ? 'diff' : 'dashboard')
+          activeTab: nextPath ? 'editor' : (state.diffData ? 'diff' : 'workbench')
         };
       }),
 
@@ -146,7 +201,7 @@ export const useStore = create(
       }),
       clearTerminal: () => set({ terminalOutput: [] }),
 
-      // Agent status (used by useAgent.js and AgentNeuralStatus)
+      // Agent status
       setAgentStatus: (state, message) => set((prev) => {
         const nextState = { agentState: state, statusMessage: message || '' };
         if (state === 'waitingForGitHub') {
@@ -181,7 +236,7 @@ export const useStore = create(
       clearThoughts: () => set({ agentThoughts: [] }),
     }),
     {
-      name: 'selinahub-neural-storage',
+      name: 'selinahub-neural-storage-v2', // Increment version
       storage: createJSONStorage(() => idbStorage),
       partialize: (state) => ({
         user: state.user,
@@ -189,6 +244,8 @@ export const useStore = create(
         chatCollapsed: state.chatCollapsed,
         terminalHeight: state.terminalHeight,
         theme: state.theme,
+        chatHistory: state.chatHistory,
+        linkedProjects: state.linkedProjects,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) state.setHydrated(true);

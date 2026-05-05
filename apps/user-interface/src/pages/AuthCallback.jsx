@@ -11,6 +11,7 @@ const errorCopy = {
   missing_code: 'The provider did not return an authorization code. Please try again.',
   provider_failed: 'The provider rejected the sign-in request. Please verify the OAuth credentials.',
   profile_failed: 'We could not load your profile after sign-in. Please try again.',
+  max_sessions_exceeded: 'Too many active sessions. Please log out from another device and try again.',
 };
 
 /**
@@ -30,16 +31,20 @@ export default function AuthCallback() {
 
     async function completeAuth() {
       if (providerError) {
-        api.clearToken();
+        api.clearAllTokens();
         setUser(null);
         setStatus('error');
         setMessage(errorCopy[providerError] || 'Authentication failed. Please try again.');
         return;
       }
 
-      const token = searchParams.get('token');
-      if (!token) {
-        api.clearToken();
+      // Get all tokens from URL (SaaS-grade auth)
+      const accessToken = searchParams.get('token');
+      const refreshToken = searchParams.get('refreshToken');
+      const sessionToken = searchParams.get('sessionToken');
+
+      if (!accessToken) {
+        api.clearAllTokens();
         setUser(null);
         setStatus('error');
         setMessage('No session token was returned. Please start sign-in again.');
@@ -47,16 +52,22 @@ export default function AuthCallback() {
       }
 
       try {
-        api.setToken(token);
-        const user = await api.me();
+        // Store all tokens for SaaS-grade session management
+        api.setAuthTokens({ accessToken, refreshToken, sessionToken });
+
+        // Fetch user profile
+        const userData = await api.me();
         if (cancelled) return;
+
+        // Support both old and new response formats
+        const user = userData.user || userData;
         setUser(user);
         setStatus('success');
         setMessage('Session verified. Opening your dashboard...');
         window.setTimeout(() => navigate('/dashboard', { replace: true }), 350);
       } catch (err) {
         if (cancelled) return;
-        api.clearToken();
+        api.clearAllTokens();
         setUser(null);
         setStatus('error');
         setMessage(err.message || errorCopy.profile_failed);

@@ -10,6 +10,9 @@ import { logger, logStateTransition } from '../utils/logger.js';
 import { codeRequestSchema, vfsCommitSchema, validateRequest } from '../utils/validation.js';
 import { captureException } from '../utils/sentry.js';
 import { recordSandboxDuration } from '../utils/metrics.js';
+import { repoManager } from './repository_manager.js';
+import { mcpManager } from '../mcp/MCPManager.js';
+
 
 // Resolve directory for skill files
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -155,7 +158,6 @@ ${prompt}
      * Streams state transitions via Socket.io for real-time UI updates
      */
     async executeWithStateMachine(prompt, userId, targetFile, io, socketId, requestId = null) {
-        // Set up VFS listener to broadcast staged files via WebSocket
         const onFileStaged = (entry) => {
             if (io && socketId) {
                 io.to(socketId).emit('file_staged', {
@@ -171,12 +173,10 @@ ${prompt}
         };
         vfs.on('file_staged', onFileStaged);
 
-        // Load original file content for diff comparison
         let originalCode = '';
         try {
             originalCode = await fs.readFile(targetFile, 'utf-8');
         } catch (err) {
-            // File doesn't exist yet (new file creation)
             originalCode = '';
         }
 
@@ -201,16 +201,9 @@ ${prompt}
                     sandboxStartedAt = null;
                 }
                 
-                // Structured logging
-                logStateTransition(
-                    previousState,
-                    state.value,
-                    state.context,
-                    userId
-                );
+                logStateTransition(previousState, state.value, state.context, userId);
                 previousState = state.value;
                 
-                // Stream the internal agent status to the frontend via Socket.io
                 if (io && socketId) {
                     io.to(socketId).emit('agent_status', {
                         status: state.value,
@@ -223,10 +216,8 @@ ${prompt}
                 if (state.value === 'success') {
                     if (settled) return;
                     settled = true;
-                    // Clean up VFS listener
                     subscription.unsubscribe();
                     vfs.off('file_staged', onFileStaged);
-                    
                     resolve({
                         success: true,
                         code: state.context.generatedCode,
@@ -237,7 +228,6 @@ ${prompt}
                 } else if (state.value === 'fatal_failure') {
                     if (settled) return;
                     settled = true;
-                    // Clean up VFS listener
                     subscription.unsubscribe();
                     vfs.off('file_staged', onFileStaged);
                     captureException(new Error(`Fatal failure: ${state.context.sandboxError || 'Unknown error'}`), {
@@ -245,7 +235,6 @@ ${prompt}
                         targetFile,
                         context: state.context
                     });
-                    
                     reject(new Error(`Fatal failure: ${state.context.sandboxError || 'Unknown error'}`));
                 }
               },
@@ -270,9 +259,6 @@ ${prompt}
         });
     }
 
-    /**
-     * Translates raw XState nodes into user-facing UI text.
-     */
     mapStateToMessage(stateValue) {
         const messages = {
             idle: "Waiting to start...",
@@ -318,52 +304,23 @@ function recordRollback(userId) {
 }
 
 function authorizeVfsEntry(filePath, userId) {
-    const entry = typeof vfs.getStagedFile === 'function'
-        ? vfs.getStagedFile(filePath)
-        : null;
-
-    if (!entry) {
-        return {
-            ok: false,
-            status: 404,
-            error: 'Staged file not found.'
-        };
-    }
+    const entry = typeof vfs.getStagedFile === 'function' ? vfs.getStagedFile(filePath) : null;
+    if (!entry) return { ok: false, status: 404, error: 'Staged file not found.' };
 
     const ownerId = entry.metadata?.userId;
-    if (!ownerId) {
-        return {
-            ok: false,
-            status: 403,
-            error: 'Staged file is missing ownership metadata.'
-        };
-    }
-
-    if (String(ownerId) !== String(userId)) {
-        return {
-            ok: false,
-            status: 403,
-            error: 'You do not have access to this staged file.'
-        };
-    }
+    if (!ownerId) return { ok: false, status: 403, error: 'Staged file is missing ownership metadata.' };
+    if (String(ownerId) !== String(userId)) return { ok: false, status: 403, error: 'You do not have access to this staged file.' };
 
     return { ok: true, entry };
 }
 
-/**
- * API endpoint handler for code requests
- * Supports WebSocket streaming via socketId in request body
- */
 async function handleCodeRequest(req, res) {
     const parsed = req.validatedBody ? { success: true, data: req.validatedBody } : codeRequestSchema.safeParse(req.body);
     if (!parsed.success) {
         return res.status(400).json({
             success: false,
             error: 'Validation failed',
-            details: parsed.error.errors.map(e => ({
-                field: e.path.join('.'),
-                message: e.message
-            })),
+            details: parsed.error.errors.map(e => ({ field: e.path.join('.'), message: e.message })),
             requestId: req.id
         });
     }
@@ -377,246 +334,150 @@ async function handleCodeRequest(req, res) {
     if (retryState.count >= MAX_CONSECUTIVE_ROLLBACKS) {
         return res.status(429).json({
             success: false,
-            error: 'Retry limit exceeded after consecutive rollback failures. Please adjust the prompt or wait before retrying.',
+            error: 'Retry limit exceeded. Please adjust the prompt or wait.',
             retryAfterMs: RETRY_WINDOW_MS,
             requestId: req.id
         });
     }
 
-    logger.info('Code orchestration requested', {
-        requestId: req.id,
-        userId,
-        targetFile,
-        hasSocketId: !!socketId
-    });
-
     if (!socketId) {
-        logger.warn('Code request missing socketId', { requestId: req.id });
-        return res.status(400).json({ 
-            error: "socketId is required for real-time orchestration tracking.",
-            requestId: req.id
-        });
+        return res.status(400).json({ error: "socketId is required", requestId: req.id });
     }
 
     if (codeQueue) {
-        const queued = await codeQueue.enqueue({
-            prompt,
-            userId,
-            targetFile,
-            socketId,
-            requestId: req.id,
-        }, {
-            idempotencyKey: req.get('Idempotency-Key') || null,
-        });
-
+        const queued = await codeQueue.enqueue({ prompt, userId, targetFile, socketId, requestId: req.id });
         if (io && socketId) {
             io.to(socketId).emit('agent_status', {
                 status: 'queued',
-                message: `Orchestration job ${queued.jobId} queued.`,
+                message: `Job ${queued.jobId} queued.`,
                 jobId: queued.jobId,
                 requestId: req.id,
                 timestamp: new Date().toISOString()
             });
         }
-
-        return res.status(202).json({
-            success: true,
-            queued: true,
-            jobId: queued.jobId,
-            status: queued.status,
-            replayed: !!queued.replayed,
-            statusUrl: `/api/v6/code/jobs/${queued.jobId}`,
-            requestId: req.id
-        });
+        return res.status(202).json({ success: true, jobId: queued.jobId, requestId: req.id });
     }
 
     try {
-        // Option 1: Use XState machine with rollback and WebSocket streaming
         const result = await router.executeWithStateMachine(prompt, userId, targetFile, io, socketId, req.id);
         resetRetryState(userId);
-        res.status(200).json({ 
-            success: true,
-            message: "Agent completed successfully",
-            data: result
-        });
+        res.status(200).json({ success: true, data: result });
     } catch (error) {
         const rollbackState = recordRollback(userId);
-        captureException(error, {
-            requestId: req.id,
-            userId,
-            targetFile,
-            socketId,
-            rollbackCount: rollbackState.count
-        });
-        // Option 2: Fallback to legacy routing (no rollback)
         const config = await router.route(prompt);
-        res.status(202).json({ 
-            success: false,
-            message: "Agent entered rollback loop",
-            error: error.message,
-            rollbackCount: rollbackState.count,
-            fallback: config
-        });
+        res.status(202).json({ success: false, error: error.message, rollbackCount: rollbackState.count, fallback: config });
     }
 }
 
 async function handleCodeJobStatus(req, res) {
     const codeQueue = req.app.get('codeQueue');
-    if (!codeQueue) {
-        return res.status(404).json({
-            success: false,
-            error: 'Code queue is not enabled on this instance.',
-            requestId: req.id
-        });
-    }
+    if (!codeQueue) return res.status(404).json({ success: false, error: 'Queue not enabled' });
 
     const job = await codeQueue.getStatus(req.params.jobId, req.user?.id);
-    if (!job) {
-        return res.status(404).json({
-            success: false,
-            error: 'Job not found.',
-            requestId: req.id
-        });
-    }
-    if (job.forbidden) {
-        return res.status(403).json({
-            success: false,
-            error: 'You do not have access to this job.',
-            requestId: req.id
-        });
-    }
+    if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
+    if (job.forbidden) return res.status(403).json({ success: false, error: 'Forbidden' });
 
-    res.json({ success: true, job, requestId: req.id });
+    res.json({ success: true, job });
 }
 
-/**
- * API endpoint to commit approved VFS changes to physical disk
- * ONLY this endpoint performs actual fs.writeFile operations
- */
 async function handleCommitRequest(req, res) {
     const parsed = req.validatedBody ? { success: true, data: req.validatedBody } : vfsCommitSchema.safeParse(req.body);
-    if (!parsed.success) {
-        return res.status(400).json({
-            success: false,
-            error: 'Validation failed',
-            details: parsed.error.errors.map(e => ({
-                field: e.path.join('.'),
-                message: e.message
-            })),
-            requestId: req.id
-        });
-    }
+    if (!parsed.success) return res.status(400).json({ success: false, error: 'Validation failed' });
 
     const { filePath, approved } = parsed.data;
-
-    if (!filePath) {
-        return res.status(400).json({
-            success: false,
-            error: "filePath is required"
-        });
-    }
-
     const authorization = authorizeVfsEntry(filePath, req.user?.id);
-    if (!authorization.ok) {
-        return res.status(authorization.status).json({
-            success: false,
-            error: authorization.error,
-            filePath,
-            requestId: req.id
-        });
-    }
+    if (!authorization.ok) return res.status(authorization.status).json({ success: false, error: authorization.error });
 
     try {
         if (!approved) {
-            // User rejected the changes - drop from VFS
-            vfs.rejectFile(filePath, 'User rejected changes', {
-                requestId: req.id,
-                userId: req.user?.id
-            });
-            return res.status(200).json({
-                success: true,
-                message: "Changes rejected. File not modified.",
-                filePath
-            });
+            vfs.rejectFile(filePath, 'User rejected', { userId: req.user?.id });
+            return res.json({ success: true, message: "Rejected" });
         }
-
-        // User approved - commit to physical disk
-        await vfs.approveFile(filePath, {
-            requestId: req.id,
-            userId: req.user?.id
-        });
-        const entry = await vfs.commitToDisk(filePath, fs, {
-            requestId: req.id,
-            userId: req.user?.id
-        });
-
-        res.status(200).json({
-            success: true,
-            message: "Changes committed to disk successfully",
-            filePath: entry.filePath,
-            committedAt: entry.metadata.committedAt
-        });
-
+        await vfs.approveFile(filePath, { userId: req.user?.id });
+        const entry = await vfs.commitToDisk(filePath, fs, { userId: req.user?.id });
+        res.json({ success: true, filePath: entry.filePath });
     } catch (error) {
-        console.error(`[Commit] Failed to commit ${filePath}:`, error);
-        captureException(error, {
-            requestId: req.id,
-            userId: req.user?.id,
-            filePath
-        });
-        const isDevelopment = process.env.NODE_ENV !== 'production';
-        res.status(500).json({
-            success: false,
-            error: isDevelopment ? error.message : 'Internal server error',
-            filePath
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 }
 
-/**
- * API endpoint to get pending VFS files for review
- */
 async function handleGetPendingFiles(req, res) {
     try {
-        const pending = typeof vfs.getPendingFilesForUser === 'function'
-            ? vfs.getPendingFilesForUser(req.user?.id)
-            : vfs.getPendingFiles().filter(entry => String(entry.metadata?.userId) === String(req.user?.id));
-        res.status(200).json({
-            success: true,
-            files: pending
-        });
+        const pending = vfs.getPendingFiles().filter(e => String(e.metadata?.userId) === String(req.user?.id));
+        res.json({ success: true, files: pending });
     } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 }
 
-/**
- * API endpoint to get VFS statistics
- */
 async function handleGetVfsStats(req, res) {
     try {
         const stats = vfs.getStats({ userId: req.user?.id });
-        res.status(200).json({
-            success: true,
-            stats
-        });
+        res.json({ success: true, stats });
     } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
+    }
+}
+
+async function handleLinkRepo(req, res) {
+    try {
+        const { url } = req.body;
+        const result = await repoManager.linkRepository(url, req.user?.id || 'anonymous');
+        res.json({ success: true, project: result });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+}
+
+async function handleListRepos(req, res) {
+    try {
+        const repos = await repoManager.listRepositories(req.user?.id || 'anonymous');
+        res.json({ success: true, repos });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+}
+
+async function handleListTools(req, res) {
+    try {
+        const tools = await mcpManager.refreshTools();
+        res.json({ success: true, tools });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+}
+
+async function handleListServers(req, res) {
+    try {
+        const servers = mcpManager.listServers();
+        res.json({ success: true, servers });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+}
+
+async function handleCallTool(req, res) {
+    try {
+        const { toolId, arguments: args } = req.body;
+        const result = await mcpManager.callTool(toolId, args);
+        res.json({ success: true, result });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+}
+
+async function handleRegisterServer(req, res) {
+    try {
+        const { name, command, args } = req.body;
+        const success = await mcpManager.registerServer(name, command, args || []);
+        res.json({ success });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
     }
 }
 
 export { 
-    Router, 
-    router, 
-    handleCodeRequest, 
-    handleCodeJobStatus,
-    handleCommitRequest, 
-    handleGetPendingFiles,
-    handleGetVfsStats 
+    Router, router, handleCodeRequest, handleCodeJobStatus, handleCommitRequest, 
+    handleGetPendingFiles, handleGetVfsStats, handleLinkRepo, handleListRepos, 
+    handleListTools, handleListServers, handleCallTool, handleRegisterServer 
 };

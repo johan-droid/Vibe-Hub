@@ -1,5 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Brain, Terminal, Sparkles, Code, Fingerprint, ChevronRight, Activity, Zap, ShieldCheck, User } from 'lucide-react';
+import { 
+  Send, 
+  Brain, 
+  Terminal, 
+  Sparkles, 
+  Code, 
+  Fingerprint, 
+  ChevronRight, 
+  Activity, 
+  Zap, 
+  ShieldCheck, 
+  User,
+  Paperclip,
+  Github,
+  Globe,
+  Cpu,
+  Plus,
+  Plug
+} from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -38,7 +56,7 @@ function ThoughtSection({ thoughts }) {
               {thoughts.map((t, i) => (
                 <div key={i} className="flex gap-3 text-sm font-medium leading-6 text-on-surface-variant">
                   <div className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/40" />
-                  <span>{typeof t === 'string' ? t : t.content}</span>
+                  <span>{typeof t === 'string' ? t : (t.content || t.message)}</span>
                 </div>
               ))}
             </div>
@@ -108,13 +126,20 @@ function MessageBubble({ content, role, thoughts = [] }) {
 
 export default function ChatInterface({ onSend }) {
   const [input, setInput] = useState('');
-  const { messages, streamingMessage, isThinking, agentThoughts } = useStore();
+  const { 
+    messages, 
+    streamingMessage, 
+    isThinking, 
+    agentThoughts, 
+    linkedProjects, 
+    uploadedFiles 
+  } = useStore();
   const scrollRef = useRef(null);
 
   useEffect(() => {
     if (scrollRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-      const isAtBottom = scrollHeight - scrollTop <= clientHeight + 300;
+      const isAtBottom = scrollHeight - scrollTop <= clientHeight + 400;
       if (isAtBottom) {
         scrollRef.current.scrollTo({
           top: scrollHeight,
@@ -131,28 +156,59 @@ export default function ChatInterface({ onSend }) {
   };
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-surface">
-      <div className="flex h-12 items-center justify-between border-b border-outline-variant bg-surface-container-lowest px-4 md:px-5">
-        <div className="flex items-center gap-3">
-          <div className="h-2 w-2 animate-pulse rounded-full bg-google-green" />
-          <span className="text-xs font-bold uppercase tracking-[0.12em] text-on-surface-variant">Assistant</span>
+    <div className="flex h-full flex-col overflow-hidden bg-surface relative">
+      {/* Background Decor */}
+      <div className="absolute inset-0 bg-dot-pattern opacity-5 pointer-events-none" />
+
+      {/* Header Info */}
+      <div className="flex h-14 items-center justify-between border-b border-outline-variant/30 bg-surface-container-lowest/80 backdrop-blur-md px-6 z-10">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-outline-variant/40 bg-surface-container-low text-[10px] font-black uppercase tracking-[0.15em] text-on-surface-variant">
+            <Cpu size={12} className="text-primary" />
+            Selina v6
+          </div>
+          <div className="h-4 w-px bg-outline-variant/40" />
+          <div className="flex items-center gap-2">
+            <div className={`h-1.5 w-1.5 rounded-full ${isThinking ? 'bg-primary animate-pulse' : 'bg-google-green shadow-[0_0_8px_rgba(52,168,83,0.4)]'}`} />
+            <span className="text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">{isThinking ? 'Thinking' : 'Operational'}</span>
+          </div>
         </div>
-        <div className="hidden items-center gap-4 text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant sm:flex">
-          <span className="flex items-center gap-2"><Activity size={10} /> {agentThoughts.length} Packets</span>
-          <span className="flex items-center gap-2"><Fingerprint size={10} /> Secure</span>
+        
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.15em] text-on-surface-variant/40">
+             <Activity size={12} /> {agentThoughts.length} TRACE
+          </div>
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.15em] text-on-surface-variant/40">
+             <Fingerprint size={12} /> ENCRYPTED
+          </div>
         </div>
       </div>
 
-      <div ref={scrollRef} className="scrollbar-none flex-1 space-y-6 overflow-y-auto p-4 md:p-5">
+      {/* Messages */}
+      <div ref={scrollRef} className="scrollbar-none flex-1 space-y-8 overflow-y-auto p-6 md:p-10 relative z-0">
         <AnimatePresence initial={false}>
           {messages.length === 0 && !streamingMessage && !isThinking && (
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex h-full items-center justify-center text-center">
-              <div className="max-w-sm">
-                <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-lg border border-outline-variant bg-surface-container-lowest text-primary shadow-sm">
-                  <Sparkles size={22} />
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex h-full items-center justify-center text-center">
+              <div className="max-w-md">
+                <div className="mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-3xl border border-outline-variant/20 bg-surface-container-lowest text-primary shadow-2xl shadow-primary/10">
+                  <Sparkles size={36} />
                 </div>
-                <h3 className="mb-2 text-xl font-black tracking-tight text-on-surface">How can I help?</h3>
-                <p className="text-sm font-medium leading-6 text-on-surface-variant">Type a command or question to start your workspace session.</p>
+                <h3 className="mb-4 text-3xl font-black tracking-tight text-on-surface">Universal Agent</h3>
+                <p className="text-lg font-medium leading-relaxed text-on-surface-variant/60">
+                  Connect repositories, upload assets, and orchestrate MCP tools with the next-gen Vibe engine.
+                </p>
+                <div className="mt-10 grid grid-cols-2 gap-4">
+                  <div className="p-4 rounded-2xl border border-outline-variant/20 bg-surface-container-low/40 text-left hover:border-primary/20 transition-all cursor-pointer">
+                    <Github size={16} className="mb-2 text-primary" />
+                    <p className="text-xs font-bold mb-1">Index Repository</p>
+                    <p className="text-[10px] text-on-surface-variant/50 font-medium">Link GitHub for deep AST analysis.</p>
+                  </div>
+                  <div className="p-4 rounded-2xl border border-outline-variant/20 bg-surface-container-low/40 text-left hover:border-primary/20 transition-all cursor-pointer">
+                    <Plug size={16} className="mb-2 text-google-yellow" />
+                    <p className="text-xs font-bold mb-1">MCP Tools</p>
+                    <p className="text-[10px] text-on-surface-variant/50 font-medium">Connect external services & APIs.</p>
+                  </div>
+                </div>
               </div>
             </motion.div>
           )}
@@ -173,46 +229,75 @@ export default function ChatInterface({ onSend }) {
             <div className="flex items-center gap-6 py-6 pl-4">
                <div className="flex gap-2">
                  {[0, 1, 2].map((i) => (
-                   <motion.div key={i} animate={{ opacity: [0.2, 1, 0.2], scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.2 }} className="h-2 w-2 rounded-full bg-google-blue" />
+                   <motion.div key={i} animate={{ opacity: [0.2, 1, 0.2], scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.2 }} className="h-2 w-2 rounded-full bg-primary" />
                  ))}
                </div>
-               <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-primary">Processing request</span>
+               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Neural processing active</span>
             </div>
           )}
         </AnimatePresence>
       </div>
 
-      <div className="border-t border-outline-variant bg-surface-container-lowest p-4 md:p-5">
-        <div className="relative group mx-auto max-w-4xl">
-          <textarea
-            rows="1"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            disabled={isThinking}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            placeholder="Type your message here..."
-            className="min-h-[54px] w-full resize-none rounded-xl border border-outline-variant bg-surface-container-low py-4 pl-4 pr-16 text-sm font-medium text-on-surface transition-all placeholder:text-on-surface-variant/55 focus:border-primary/40 focus:bg-surface-container-lowest focus:outline-none"
-          />
-          <div className="absolute bottom-2.5 right-2.5">
-            <Button 
-              variant="filled" 
-              size="lg" 
-              disabled={isThinking || !input.trim()} 
-              onClick={handleSend} 
-              className="!h-9 !w-9 !rounded-lg !p-0 border-none"
-            >
-              <Send size={20} />
-            </Button>
+      {/* Input Area */}
+      <div className="p-6 bg-gradient-to-t from-surface via-surface/95 to-transparent z-10">
+        <div className="mx-auto max-w-5xl">
+          {/* Context Chips */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            {linkedProjects.map(p => (
+              <div key={p.id} className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-container-low border border-outline-variant/30 text-[10px] font-bold text-on-surface-variant">
+                <Github size={12} className="text-primary" />
+                {p.name}
+              </div>
+            ))}
+            {uploadedFiles.map(f => (
+              <div key={f.id} className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-container-low border border-outline-variant/30 text-[10px] font-bold text-on-surface-variant">
+                <Paperclip size={12} className="text-google-yellow" />
+                {f.name}
+              </div>
+            ))}
           </div>
-        </div>
-        <div className="mt-3 flex items-center justify-between px-1 text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant/60">
-          <span>Enterprise Encryption Active</span>
-          <span className="flex items-center gap-3"><Terminal size={12} /> System_Core_v4.1.2</span>
+
+          <div className="relative group shadow-2xl shadow-primary/5">
+            <textarea
+              rows="1"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              disabled={isThinking}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder="Ask anything or orchestrate tools..."
+              className="min-h-[64px] w-full resize-none rounded-2xl border border-outline-variant/40 bg-surface-container-low/80 backdrop-blur-xl py-5 pl-6 pr-24 text-base font-medium text-on-surface transition-all placeholder:text-on-surface-variant/40 focus:border-primary/40 focus:bg-surface-container-lowest focus:outline-none shadow-sm"
+            />
+            
+            <div className="absolute bottom-3 right-3 flex items-center gap-2">
+               <button className="p-2.5 text-on-surface-variant/40 hover:text-primary hover:bg-primary/10 rounded-xl transition-all" title="Add Connector or Context">
+                <Plus size={22} />
+              </button>
+              <Button 
+                variant="filled" 
+                size="lg" 
+                disabled={isThinking || !input.trim()} 
+                onClick={handleSend} 
+                className="!h-10 !w-10 !rounded-xl !p-0 border-none shadow-xl shadow-primary/20"
+              >
+                <Send size={22} />
+              </Button>
+            </div>
+          </div>
+          
+          <div className="mt-4 flex items-center justify-between px-2">
+            <div className="flex items-center gap-4 text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant/40">
+              <span className="flex items-center gap-1.5"><ShieldCheck size={12} className="text-google-green" /> End-to-End Secure</span>
+              <span className="flex items-center gap-1.5"><Globe size={12} /> Local-First Execution</span>
+            </div>
+            <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant/30">
+              <Zap size={10} /> BUS: 4.2 GT/s
+            </div>
+          </div>
         </div>
       </div>
     </div>

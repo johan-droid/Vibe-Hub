@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import { upsertUser } from '../db.js';
-import { generateToken } from './middleware.js';
+import { createSession } from './session.js';
+import { setAuthCookies } from './middleware.js';
 
 const router = Router();
 
@@ -38,7 +39,7 @@ router.get('/github', (req, res) => {
   const state = crypto.randomBytes(32).toString('hex');
   res.cookie('github_oauth_state', state, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV === 'production' && String(process.env.UI_ORIGIN).startsWith('https://'),
     sameSite: 'lax',
     maxAge: 15 * 60 * 1000,
   });
@@ -115,16 +116,32 @@ router.get('/github/callback', async (req, res) => {
       providerId: String(profile.id),
     });
 
-    const jwt = generateToken(user);
-    res.cookie('selina_token', jwt, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/',
+    // Create SaaS-grade session
+    const session = await createSession({
+      userId: user.id,
+      provider: 'github',
+      req
     });
-    res.redirect(`${getFrontendUrl()}/auth/callback?token=${encodeURIComponent(jwt)}`);
+
+    // Set secure cookies
+    setAuthCookies(res, {
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      sessionToken: session.sessionToken
+    });
+
+    // Redirect with tokens
+    const redirectUrl = new URL(`${getFrontendUrl()}/auth/callback`);
+    redirectUrl.searchParams.set('token', session.accessToken);
+    redirectUrl.searchParams.set('refreshToken', session.refreshToken);
+    redirectUrl.searchParams.set('sessionToken', session.sessionToken);
+
+    res.redirect(redirectUrl.toString());
   } catch (err) {
+    console.error('GitHub callback error:', err);
+    if (err.message === 'MAX_SESSIONS_EXCEEDED') {
+      return redirectWithError(res, 'max_sessions_exceeded');
+    }
     redirectWithError(res, 'provider_failed');
   }
 });

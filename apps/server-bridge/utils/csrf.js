@@ -60,9 +60,10 @@ export function verifyCsrfToken(token, userId) {
 export function csrfTokenHandler(req, res) {
   const token = generateCsrfToken(req.user.id);
   const sameSite = process.env.CSRF_SAME_SITE || (process.env.NODE_ENV === 'production' ? 'none' : 'lax');
+  const secure = (process.env.NODE_ENV === 'production' && String(process.env.UI_ORIGIN).startsWith('https://')) || sameSite === 'none';
   res.cookie(CSRF_COOKIE, token, {
     httpOnly: false,
-    secure: process.env.NODE_ENV === 'production' || sameSite === 'none',
+    secure,
     sameSite,
     maxAge: TOKEN_TTL_MS,
     path: '/',

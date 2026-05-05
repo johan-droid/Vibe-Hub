@@ -21,177 +21,109 @@ import { motion } from 'framer-motion';
 import { useStore } from '../store/useStore';
 import { api } from '../services/api';
 import { Button } from '../features/shared/components/Button';
+import { VibeLogoCompact } from '../components/VibeLogo';
 
+// Animation variants
 const fadeUp = {
-  hidden: { opacity: 0, y: 18 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] } },
+  hidden: { opacity: 0, y: 30 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.2, 0, 0, 1] } },
+};
+
+const staggerContainer = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.15,
+    },
+  },
+};
+
+const bentoItem = {
+  hidden: { opacity: 0, scale: 0.95 },
+  show: { opacity: 1, scale: 1, transition: { duration: 0.6, ease: [0.2, 0, 0, 1] } },
 };
 
 const features = [
-  { title: 'Model Context Protocol', desc: 'Native MCP integration connecting Claude, Cursor, and Continue.dev directly to your workspace tools.', icon: Layout },
-  { title: 'Persistent Neural Memory', desc: 'Dual-tier memory system with auto-learned brain journals backed by a PostgreSQL database.', icon: Brain },
-  { title: 'Hybrid Sandbox Architecture', desc: 'Secure execution split across Render hosting and strict GitHub Actions sandboxing.', icon: Globe },
-  { title: 'Hardened Security', desc: 'HMAC-SHA256 verified webhooks, WSS with JWT, and TLS database connections for production-grade safety.', icon: ShieldCheck },
-];
-
-const previewFiles = [
-  ['apps/user-interface', 'root'],
-  ['src/pages', 'folder'],
-  ['Workspace.jsx', 'file'],
-  ['CommandCenterDashboard.jsx', 'active'],
-  ['index.css', 'file'],
-];
-
-const previewStats = [
-  ['Trust', '100%', ShieldCheck],
-  ['Latency', '186ms', Activity],
-  ['Runs', '4.1k', Zap],
-  ['Runtime', 'Ready', Terminal],
-];
-
-const codeLines = [
-  ['const', ' readiness = await agent.verify(scope);'],
-  ['if', ' (readiness.safe) commit.review();'],
-  ['return', ' workspace.ship({ guarded: true });'],
-];
-
-const runTimeline = [
-  ['Plan scoped', '0.2s'],
-  ['Patch staged', '1.4s'],
-  ['Sandbox passed', '2.1s'],
+  {
+    title: 'Smart Memory',
+    desc: 'Selina remembers how you code and what you like. It gets smarter with every project, just like a real partner.',
+    icon: Brain,
+    image: '/images/smart_memory.png',
+    size: 'large',
+    color: 'google-blue'
+  },
+  {
+    title: 'The Universal Link',
+    desc: 'Connect to Claude, Cursor, and your favorite tools in seconds.',
+    icon: Layout,
+    image: '/images/connected_tools.png',
+    size: 'medium',
+    color: 'google-yellow'
+  },
+  {
+    title: 'Safe Playground',
+    desc: 'Run and test code in a secure, private space where nothing can go wrong.',
+    icon: ShieldCheck,
+    image: '/images/safe_sandbox.png',
+    size: 'medium',
+    color: 'google-green'
+  },
+  {
+    title: 'Always Protected',
+    desc: 'Industrial-grade security keeps your code and data safe 24/7.',
+    icon: Lock,
+    size: 'small',
+    color: 'google-red'
+  },
 ];
 
 function BrandMark() {
   return (
-    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-on-primary shadow-sm">
-      <Brain size={21} />
+    <div className="flex h-10 w-10 items-center justify-center">
+      <VibeLogoCompact size={40} />
     </div>
   );
 }
 
-function ProductPreview() {
+function BentoCard({ feature }) {
+  const isLarge = feature.size === 'large';
+  const Icon = feature.icon;
+
   return (
-    <div className="panel relative w-full max-w-full overflow-hidden bg-surface-container-lowest shadow-3xl">
-      <div className="flex h-11 items-center justify-between border-b border-outline-variant bg-surface-container-low px-4">
-        <div className="flex items-center gap-2">
-          <div className="h-2.5 w-2.5 rounded-full bg-google-red/70" />
-          <div className="h-2.5 w-2.5 rounded-full bg-google-yellow/80" />
-          <div className="h-2.5 w-2.5 rounded-full bg-google-green/80" />
+    <motion.div
+      variants={bentoItem}
+      whileHover={{ y: -5 }}
+      className={`panel overflow-hidden group relative flex flex-col ${
+        isLarge ? 'bento-card-large' : ''
+      }`}
+    >
+      <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-primary/50 to-primary opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+      <div className="relative z-10 flex h-full flex-col p-6 md:p-8">
+        <div className={`mb-6 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-${feature.color}/10 text-${feature.color}`}>
+          <Icon size={20} />
         </div>
-        <div className="hidden items-center gap-2 text-[10px] font-bold uppercase tracking-normal text-on-surface-variant sm:flex">
-          <Lock size={12} />
-          Protected branch
-        </div>
+        
+        <h3 className={`${isLarge ? 'text-2xl' : 'text-xl'} font-black tracking-tight text-on-surface mb-3`}>{feature.title}</h3>
+        <p className="text-sm font-medium leading-relaxed text-on-surface-variant/70">{feature.desc}</p>
+        
+        {isLarge && (
+          <div className="mt-auto pt-8">
+             <Button variant="tonal" size="md" trailingIcon={ArrowRight} className="group-hover:bg-primary group-hover:text-on-primary transition-colors duration-500">Explore</Button>
+          </div>
+        )}
       </div>
 
-      <div className="grid min-h-[468px] grid-cols-[3.5rem_13rem_minmax(17rem,1fr)_18rem] bg-surface-container-lowest max-xl:grid-cols-[3.5rem_minmax(18rem,1fr)_17rem] max-md:min-h-[360px]">
-        <div className="flex flex-col items-center gap-3 border-r border-outline-variant bg-surface-container-low px-2 py-4">
-          {[Brain, FileCode2, Activity, Terminal].map((Icon, index) => (
-            <div key={index} className={`flex h-9 w-9 items-center justify-center rounded-lg ${index === 0 ? 'bg-primary text-on-primary shadow-sm' : 'text-on-surface-variant hover:bg-surface-container'}`}>
-              <Icon size={17} />
-            </div>
-          ))}
+      {feature.image && (
+        <div className={`absolute ${isLarge ? 'right-0 bottom-0 w-2/3 h-2/3' : 'right-[-10%] bottom-[-10%] w-1/2 h-1/2'} opacity-40 group-hover:opacity-100 transition-all duration-700 pointer-events-none group-hover:scale-105`}>
+          <img 
+            src={feature.image} 
+            alt={feature.title}
+            className="w-full h-full object-contain object-right-bottom animate-float"
+          />
         </div>
-
-        <aside className="border-r border-outline-variant bg-surface-container-low p-4 max-xl:hidden">
-          <div className="mb-4 flex items-center justify-between">
-            <span className="label-medium">Explorer</span>
-            <Code2 size={15} className="text-primary" />
-          </div>
-          <div className="space-y-2">
-            {previewFiles.map(([item, type]) => (
-              <div key={item} className={`flex h-8 items-center gap-2 rounded-md px-2 text-sm font-medium ${type === 'active' ? 'bg-primary/10 text-primary' : 'text-on-surface-variant'}`}>
-                <FileCode2 size={14} />
-                <span className="truncate">{item}</span>
-              </div>
-            ))}
-          </div>
-        </aside>
-
-        <main className="flex min-w-0 flex-col border-r border-outline-variant">
-          <div className="flex h-12 items-center justify-between border-b border-outline-variant px-4">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-black text-on-surface">CommandCenterDashboard.jsx</p>
-              <p className="text-xs font-medium text-on-surface-variant">Safe patch prepared for review</p>
-            </div>
-            <span className="rounded-full bg-google-green/10 px-2 py-1 text-[10px] font-bold text-google-green">Verified</span>
-          </div>
-
-          <div className="grid flex-1 grid-rows-[1fr_auto] gap-4 p-4">
-            <section className="min-h-0 rounded-lg border border-outline-variant bg-surface-container-low">
-              <div className="flex h-10 items-center justify-between border-b border-outline-variant px-3">
-                <div className="flex items-center gap-2 text-xs font-bold text-on-surface">
-                  <Code2 size={14} className="text-primary" />
-                  Patch preview
-                </div>
-                <span className="text-[10px] font-bold text-on-surface-variant">3 files</span>
-              </div>
-              <div className="space-y-3 p-4 font-mono text-[12px] leading-6 text-on-surface-variant">
-                {codeLines.map(([keyword, line], index) => (
-                  <div key={line} className="grid grid-cols-[1.75rem_minmax(0,1fr)] gap-3">
-                    <span className="text-right text-on-surface-variant/50">{index + 8}</span>
-                    <p className="truncate">
-                      <span className="font-bold text-google-yellow">{keyword}</span>
-                      <span>{line}</span>
-                    </p>
-                  </div>
-                ))}
-                <div className="mt-3 rounded-md border border-google-green/25 bg-google-green/10 px-3 py-2 text-google-green">
-                  + Redis VFS ownership check added before commit
-                </div>
-              </div>
-            </section>
-
-            <section className="grid gap-3 sm:grid-cols-3">
-              {runTimeline.map(([label, time]) => (
-                <div key={label} className="rounded-lg border border-outline-variant bg-surface-container-low p-3">
-                  <CheckCircle2 size={15} className="mb-2 text-google-green" />
-                  <p className="truncate text-xs font-bold text-on-surface">{label}</p>
-                  <p className="mt-1 text-[11px] font-semibold text-on-surface-variant">{time}</p>
-                </div>
-              ))}
-            </section>
-          </div>
-        </main>
-
-        <aside className="flex min-w-0 flex-col bg-surface-container-lowest max-lg:hidden">
-          <div className="flex h-12 items-center justify-between border-b border-outline-variant px-4">
-            <div>
-              <p className="text-sm font-black text-on-surface">Release Readiness</p>
-              <p className="text-xs font-medium text-on-surface-variant">Live control plane</p>
-            </div>
-            <Button size="sm" variant="tonal">Re-index</Button>
-          </div>
-
-          <div className="grid gap-3 p-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-              {previewStats.map(([label, value, Icon]) => (
-                <div key={label} className="rounded-lg border border-outline-variant bg-surface-container-low p-3">
-                  <Icon size={16} className="mb-3 text-primary" />
-                  <p className="text-[11px] font-bold text-on-surface-variant">{label}</p>
-                  <p className="mt-1 text-lg font-black text-on-surface">{value}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="rounded-lg border border-outline-variant bg-surface-container-low p-4">
-              <div className="mb-4 flex items-center justify-between">
-                <p className="text-sm font-black text-on-surface">Guardrail queue</p>
-                <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-bold text-primary">Live</span>
-              </div>
-              <div className="space-y-3">
-                {['CSRF verified', 'Audit row queued', 'Docker healthy'].map((item) => (
-                  <div key={item} className="flex items-center gap-3 text-sm font-medium text-on-surface-variant">
-                    <CheckCircle2 size={15} className="text-google-green" />
-                    <span className="truncate">{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </aside>
-      </div>
-    </div>
+      )}
+    </motion.div>
   );
 }
 
@@ -200,39 +132,46 @@ function Navbar() {
   const user = useStore((s) => s.user);
 
   return (
-    <nav className="fixed inset-x-0 top-0 z-50 border-b border-outline-variant bg-surface-container-lowest/90 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 md:px-8">
-        <button onClick={() => navigate('/')} className="flex items-center gap-3">
+    <div className="fixed inset-x-0 top-0 z-50 flex justify-center pt-6 px-4 pointer-events-none">
+      <nav className="pointer-events-auto flex w-full max-w-4xl items-center justify-between rounded-full border border-outline-variant/30 bg-surface/60 px-4 py-2 shadow-xl shadow-surface-container-lowest/5 backdrop-blur-3xl">
+        <button onClick={() => navigate('/')} className="flex items-center gap-3 pl-2 group">
           <BrandMark />
-          <div className="text-left">
-            <p className="text-lg font-black leading-none tracking-normal text-on-surface">Selina</p>
-            <p className="mt-1 text-[10px] font-bold uppercase tracking-normal text-on-surface-variant">Intelligence Labs</p>
+          <div className="text-left hidden sm:block">
+            <p className="text-lg font-black leading-none tracking-tight text-on-surface group-hover:text-primary transition-colors duration-300">Selina</p>
           </div>
         </button>
 
-        <div className="hidden items-center gap-7 md:flex">
-          {['Platform', 'Security', 'Workflow'].map((item) => (
-            <a key={item} href={`#${item.toLowerCase()}`} className="text-sm font-semibold text-on-surface-variant transition-colors hover:text-primary">
+        <div className="hidden items-center gap-8 md:flex">
+          {['Capabilities', 'Security', 'Workspace'].map((item) => (
+            <a 
+              key={item} 
+              href={`#${item.toLowerCase()}`} 
+              className="relative text-sm font-black uppercase tracking-widest text-on-surface-variant/70 transition-all hover:text-primary group"
+            >
               {item}
+              <span className="absolute -bottom-1 left-0 h-0.5 w-0 bg-primary transition-all duration-300 group-hover:w-full" />
             </a>
           ))}
         </div>
 
-        {user ? (
-          <Button variant="filled" size="md" trailingIcon={ArrowRight} onClick={() => navigate('/dashboard')} className="max-sm:h-10 max-sm:w-10 max-sm:px-0">
-            <span className="hidden sm:inline">Workspace</span>
-          </Button>
-        ) : (
-          <Button variant="filled" size="md" trailingIcon={ArrowRight} onClick={() => window.location.href = api.getGoogleAuthUrl()} className="max-sm:h-10 max-sm:w-10 max-sm:px-0">
-            <span className="hidden sm:inline">Get Started</span>
-          </Button>
-        )}
-      </div>
-    </nav>
+        <div className="flex items-center gap-3 pr-1">
+          {user ? (
+            <Button variant="filled" size="md" trailingIcon={ArrowRight} onClick={() => navigate('/dashboard')} className="rounded-full px-6 shadow-md shadow-primary/20 hover:shadow-primary/40 transition-all">
+              Workspace
+            </Button>
+          ) : (
+            <Button variant="filled" size="md" trailingIcon={ArrowRight} onClick={() => navigate('/login')} className="rounded-full px-7 h-11 text-sm font-black shadow-lg shadow-primary/25 hover:shadow-primary/45 hover:scale-[1.03] transition-all duration-300 bg-gradient-to-r from-primary to-primary/90">
+              Get Started
+            </Button>
+          )}
+        </div>
+      </nav>
+    </div>
   );
 }
 
 export default function LandingPage() {
+  const navigate = useNavigate();
   const [backendHealth, setBackendHealth] = useState(null);
 
   useEffect(() => {
@@ -249,154 +188,179 @@ export default function LandingPage() {
   const isOnline = backendHealth?.status === 'active';
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-surface text-on-surface">
+    <div className="min-h-screen overflow-x-hidden bg-surface text-on-surface selection:bg-primary/20 selection:text-primary">
       <Navbar />
 
-      <main>
-        <section className="relative px-5 pb-12 pt-24 md:px-8 md:pb-16 md:pt-28">
-          <div className="mx-auto grid max-w-7xl items-center gap-10 lg:grid-cols-[0.82fr_1.18fr]">
-            <motion.div initial="hidden" animate="show" variants={fadeUp}>
-              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-outline-variant bg-surface-container-lowest px-3 py-1.5">
-                <Sparkles size={14} className="text-primary" />
-                <span className="text-[11px] font-bold uppercase tracking-normal text-on-surface-variant">Autonomous engineering workspace</span>
-              </div>
-              <h1 className="display-large">Selina</h1>
-              <p className="mt-5 max-w-[24rem] text-xl font-medium leading-8 text-on-surface-variant md:max-w-2xl">
-                A SaaS-grade coding agent command center. Powered by Gemini 2.0 Flash, featuring persistent neural memory, native MCP, and heavily hardened GitHub Actions sandboxing.
-              </p>
-              <div className="mt-8 flex max-w-[21rem] flex-col gap-3 sm:max-w-none sm:flex-row">
-                <Button size="lg" variant="filled" trailingIcon={ArrowRight} onClick={() => window.location.href = api.getGoogleAuthUrl()}>
-                  Launch Project
+      <main className="pt-24 md:pt-32 relative">
+        <div className="absolute inset-0 bg-dot-pattern opacity-50 pointer-events-none" />
+        
+        {/* Hero Section */}
+        <section className="px-6 pb-20 md:px-10 md:pb-32 relative z-10">
+          <div className="mx-auto max-w-7xl text-center">
+            <motion.div 
+              initial="hidden" 
+              animate="show" 
+              variants={staggerContainer}
+              className="flex flex-col items-center"
+            >
+              <motion.div 
+                variants={fadeUp}
+                className="mb-8 inline-flex items-center gap-2.5 rounded-full border border-outline-variant/60 bg-surface-container-low px-4 py-2 backdrop-blur-md"
+              >
+                <Sparkles size={16} className="text-primary animate-pulse" />
+                <span className="text-[12px] font-black uppercase tracking-widest text-on-surface-variant">Your AI Coding Partner</span>
+              </motion.div>
+              
+              <motion.h1 variants={fadeUp} className="text-5xl md:text-7xl font-black tracking-tight mb-6">
+                Build software <br /> 
+                <span className="text-gradient-google">with intelligence.</span>
+              </motion.h1>
+              
+              <motion.p variants={fadeUp} className="max-w-xl text-lg font-medium leading-relaxed text-on-surface-variant/80 mb-10">
+                Selina learns your style, connects your tools, and handles the hard parts of building software. It's not just an agent; it's an extension of your mind.
+              </motion.p>
+              
+              <motion.div variants={fadeUp} className="flex flex-col sm:flex-row gap-5">
+                <Button size="lg" variant="filled" trailingIcon={ArrowRight} onClick={() => navigate('/login')} className="rounded-full px-10 h-16 text-lg shadow-xl shadow-primary/30 hover:scale-105 transition-transform duration-300">
+                  Start Building Now
                 </Button>
-                <Button size="lg" variant="outlined" leadingIcon={Play}>
-                  Watch Preview
+                <Button size="lg" variant="outlined" leadingIcon={Play} className="rounded-full px-10 h-16 text-lg border-2 hover:bg-surface-container-low transition-colors duration-300">
+                  See it in Action
                 </Button>
-              </div>
-              <div className="mt-8 grid max-w-xl gap-2 text-sm font-semibold text-on-surface-variant sm:grid-cols-3">
-                <span className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3"><ShieldCheck size={15} className="text-google-green" /> Guarded sessions</span>
-                <span className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3"><Github size={15} /> Git-aware workflow</span>
-                <span className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3"><Activity size={15} className="text-primary" /> Live telemetry</span>
-              </div>
-            </motion.div>
+              </motion.div>
 
-            <motion.div className="hidden min-w-0 md:block" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.65, ease: [0.22, 1, 0.36, 1] }}>
-              <ProductPreview />
+              <motion.div variants={fadeUp} className="mt-20 w-full max-w-5xl opacity-90 hover:opacity-100 transition-opacity duration-700">
+                 <div className="panel p-2 rounded-[2.5rem] bg-gradient-to-b from-outline-variant/30 to-transparent">
+                   <div className="rounded-[2rem] overflow-hidden bg-surface-container-lowest shadow-3xl border border-outline-variant/20">
+                      <img 
+                        src="https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&q=80&w=2000" 
+                        alt="Workspace Preview" 
+                        className="w-full h-auto"
+                      />
+                   </div>
+                 </div>
+              </motion.div>
             </motion.div>
+          </div>
+        </section>
 
-            <div className="panel min-w-0 p-4 md:hidden">
-              <div className="mb-4 flex items-center justify-between border-b border-outline-variant pb-3">
-                <div>
-                  <p className="text-sm font-black text-on-surface">System Intelligence</p>
-                  <p className="text-xs font-medium text-on-surface-variant">Mobile workspace preview</p>
-                </div>
-                <Brain size={18} className="text-primary" />
+        {/* Bento Grid Features */}
+        <section id="capabilities" className="bg-surface-container-lowest py-24 md:py-40 px-6 md:px-10 border-y border-outline-variant/20">
+          <div className="mx-auto max-w-7xl">
+            <motion.div 
+              initial="hidden" 
+              whileInView="show" 
+              viewport={{ once: true }}
+              variants={staggerContainer}
+            >
+              <div className="mb-16 md:mb-24 max-w-2xl">
+                <p className="label-large text-primary mb-4">Capabilities</p>
+                <h2 className="headline-large mb-6">Designed to help you <br /> <span className="text-gradient">create, not just code.</span></h2>
+                <p className="text-lg font-medium text-on-surface-variant leading-relaxed">
+                  We've built Selina around the philosophy of simplicity and power. No technical jargon, just results.
+                </p>
               </div>
-              <div className="space-y-3">
-                {[
-                  ['Active agents', '12', Brain],
-                  ['Trust score', '100%', ShieldCheck],
-                  ['Runtime', 'Ready', Terminal],
-                ].map(([label, value, Icon]) => (
-                  <div key={label} className="flex items-center justify-between rounded-lg bg-surface-container-low p-3">
-                    <span className="flex items-center gap-2 text-sm font-semibold text-on-surface-variant"><Icon size={15} className="text-primary" /> {label}</span>
-                    <span className="text-sm font-black text-on-surface">{value}</span>
-                  </div>
+
+              <div className="bento-grid">
+                {features.map((feature, idx) => (
+                  <BentoCard key={idx} feature={feature} />
                 ))}
               </div>
-            </div>
+            </motion.div>
           </div>
         </section>
 
-        <section id="platform" className="border-y border-outline-variant bg-surface-container-lowest px-5 py-14 md:px-8">
-          <div className="mx-auto max-w-7xl">
-            <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div>
-                <p className="label-large">Platform</p>
-                <h2 className="mt-2 headline-large">Built around the workbench.</h2>
+        {/* Call to Action */}
+        <section className="py-24 md:py-40 px-6 md:px-10">
+          <div className="mx-auto max-w-6xl">
+            <motion.div 
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
+              className="panel relative overflow-hidden bg-gradient-to-br from-surface-container-low to-surface-container-lowest p-8 text-center md:p-16"
+            >
+              {/* Decorative Background Icons - Even Subtler */}
+              <div className="absolute inset-0 z-0 opacity-[0.015] pointer-events-none">
+                <Code2 size={100} className="absolute -left-10 top-10 -rotate-12" />
+                <Zap size={80} className="absolute right-10 top-20 rotate-12" />
               </div>
-              <p className="max-w-xl text-base font-medium leading-7 text-on-surface-variant">
-                The interface keeps project files, agent reasoning, terminal state, and deployment context close together.
-              </p>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {features.map((feature) => (
-                <div key={feature.title} className="panel p-5">
-                  <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <feature.icon size={18} />
-                  </div>
-                  <h3 className="text-lg font-black tracking-normal text-on-surface">{feature.title}</h3>
-                  <p className="mt-3 text-sm font-medium leading-6 text-on-surface-variant">{feature.desc}</p>
+
+              <div className="relative z-10 mx-auto max-w-3xl">
+                <h2 className="text-4xl md:text-5xl font-black mb-6 tracking-tight">
+                  Ready to join the <br /> 
+                  <span className="text-gradient-google">next wave of coding?</span>
+                </h2>
+                <p className="mb-10 text-lg font-medium leading-relaxed text-on-surface-variant/80">
+                  Join thousands of developers who are already building faster, <br className="hidden md:block" /> 
+                  smarter, and with more vibe using Selina.
+                </p>
+                <div className="flex flex-col items-center justify-center gap-6 sm:flex-row">
+                  <Button 
+                    size="lg" 
+                    variant="filled" 
+                    trailingIcon={ArrowRight} 
+                    onClick={() => navigate('/login')} 
+                    className="h-14 rounded-full px-10 text-lg shadow-xl shadow-primary/20 transition-all duration-500 hover:scale-105 hover:-translate-y-1"
+                  >
+                    Get Started for Free
+                  </Button>
+                  <a href="https://github.com/vibe-platform/vibe-hub" target="_blank" rel="noreferrer" className="flex items-center gap-2.5 text-sm font-black uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors duration-300">
+                    <Github size={20} />
+                    View on GitHub
+                  </a>
                 </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section id="security" className="px-5 py-14 md:px-8">
-          <div className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-[1fr_1fr]">
-            <div className="panel p-6 md:p-8">
-              <Lock size={24} className="mb-6 text-primary" />
-              <h2 className="headline-medium">Security that stays visible.</h2>
-              <p className="mt-4 text-base font-medium leading-7 text-on-surface-variant">
-                Session state, auth health, runtime connectivity, and workspace readiness are surfaced directly in the product.
-              </p>
-            </div>
-            <div className="panel p-6 md:p-8">
-              <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-google-green/10 px-3 py-1.5 text-sm font-bold text-google-green">
-                <span className={`h-2 w-2 rounded-full ${isOnline ? 'animate-pulse bg-google-green' : 'bg-google-red'}`} />
-                {isOnline ? 'Backend online' : 'Backend unavailable'}
               </div>
-              <h2 className="headline-medium">A cleaner path from idea to shipped.</h2>
-              <p className="mt-4 text-base font-medium leading-7 text-on-surface-variant">
-                Selina reduces context switching so teams can ask, inspect, validate, and release from a single controlled surface.
-              </p>
-            </div>
+            </motion.div>
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-outline-variant bg-surface-container-lowest px-5 py-12 md:px-8">
-        <div className="mx-auto max-w-7xl grid gap-8 md:grid-cols-4 lg:grid-cols-5">
+      <footer className="border-t border-outline-variant/30 bg-surface-container-lowest px-6 py-16 md:px-10 md:py-24">
+        <div className="mx-auto max-w-7xl grid gap-12 md:grid-cols-4 lg:grid-cols-5">
           <div className="lg:col-span-2">
-            <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center gap-4 mb-8">
               <BrandMark />
-              <span className="text-lg font-black tracking-normal text-on-surface">Selina Intelligence Labs</span>
+              <span className="text-2xl font-black tracking-tight text-on-surface">Selina</span>
             </div>
-            <p className="text-sm font-medium text-on-surface-variant max-w-sm">
-              Built for focused autonomous engineering. Integrating advanced agent orchestration with strict security sandboxing to ship faster and safer.
+            <p className="text-base font-medium text-on-surface-variant max-w-sm leading-relaxed mb-8">
+              The agentic workspace built for creators. Ship faster, safer, and with more joy.
             </p>
+            <div className="flex gap-5 text-on-surface-variant">
+              <a href="https://github.com/vibe-platform/vibe-hub" target="_blank" rel="noreferrer" className="hover:text-primary transition-colors"><Github size={24} /></a>
+              <a href="#" className="hover:text-primary transition-colors"><Globe size={24} /></a>
+            </div>
           </div>
           <div>
-            <h4 className="text-sm font-bold text-on-surface mb-4">Product</h4>
-            <ul className="space-y-3 text-sm font-medium text-on-surface-variant">
-              <li><a href="#platform" className="hover:text-google-blue transition-colors">Platform Overview</a></li>
-              <li><a href="#security" className="hover:text-google-blue transition-colors">Security Features</a></li>
-              <li><a href="#" className="hover:text-google-blue transition-colors">Pricing</a></li>
-              <li><a href="#" className="hover:text-google-blue transition-colors">Changelog</a></li>
+            <h4 className="text-sm font-black uppercase tracking-widest text-on-surface mb-6">Product</h4>
+            <ul className="space-y-4 text-base font-medium text-on-surface-variant">
+              <li><a href="#capabilities" className="hover:text-primary transition-colors">Features</a></li>
+              <li><a href="#" className="hover:text-primary transition-colors">Pricing</a></li>
+              <li><a href="#" className="hover:text-primary transition-colors">Changelog</a></li>
             </ul>
           </div>
           <div>
-            <h4 className="text-sm font-bold text-on-surface mb-4">Resources</h4>
-            <ul className="space-y-3 text-sm font-medium text-on-surface-variant">
-              <li><a href="https://github.com/vibe-platform/vibe-hub" target="_blank" rel="noreferrer" className="hover:text-google-blue transition-colors">Documentation</a></li>
-              <li><a href="https://github.com/vibe-platform/vibe-hub" target="_blank" rel="noreferrer" className="hover:text-google-blue transition-colors">GitHub Repository</a></li>
-              <li><a href="#" className="hover:text-google-blue transition-colors">API Reference</a></li>
-              <li><a href="#" className="hover:text-google-blue transition-colors">Community</a></li>
+            <h4 className="text-sm font-black uppercase tracking-widest text-on-surface mb-6">Resources</h4>
+            <ul className="space-y-4 text-base font-medium text-on-surface-variant">
+              <li><a href="#" className="hover:text-primary transition-colors">Documentation</a></li>
+              <li><a href="#" className="hover:text-primary transition-colors">Community</a></li>
+              <li><a href="#" className="hover:text-primary transition-colors">API</a></li>
             </ul>
           </div>
           <div>
-            <h4 className="text-sm font-bold text-on-surface mb-4">Legal</h4>
-            <ul className="space-y-3 text-sm font-medium text-on-surface-variant">
-              <li><a href="#" className="hover:text-google-blue transition-colors">Privacy Policy</a></li>
-              <li><a href="#" className="hover:text-google-blue transition-colors">Terms of Service</a></li>
-              <li><a href="#" className="hover:text-google-blue transition-colors">Security Disclosure</a></li>
+            <h4 className="text-sm font-black uppercase tracking-widest text-on-surface mb-6">Company</h4>
+            <ul className="space-y-4 text-base font-medium text-on-surface-variant">
+              <li><a href="#" className="hover:text-primary transition-colors">About</a></li>
+              <li><a href="#" className="hover:text-primary transition-colors">Privacy</a></li>
+              <li><a href="#" className="hover:text-primary transition-colors">Terms</a></li>
             </ul>
           </div>
         </div>
-        <div className="mx-auto max-w-7xl mt-12 pt-8 border-t border-outline-variant flex flex-col md:flex-row items-center justify-between gap-4">
-          <span className="text-xs font-medium text-on-surface-variant">© {new Date().getFullYear()} Vibe Hub Engineering. All rights reserved.</span>
-          <div className="flex gap-4 text-on-surface-variant">
-            <a href="https://github.com/vibe-platform/vibe-hub" target="_blank" rel="noreferrer" className="hover:text-google-blue transition-colors"><Github size={18} /></a>
+        <div className="mx-auto max-w-7xl mt-24 pt-12 border-t border-outline-variant/30 flex flex-col md:flex-row items-center justify-between gap-6">
+          <span className="text-sm font-medium text-on-surface-variant/60">© {new Date().getFullYear()} Selina Intelligence Labs. All rights reserved.</span>
+          <div className="flex items-center gap-2 text-sm font-bold text-google-green">
+            <span className={`h-2 w-2 rounded-full ${isOnline ? 'animate-pulse bg-google-green' : 'bg-google-red'}`} />
+            {isOnline ? 'All systems operational' : 'Partial outage'}
           </div>
         </div>
       </footer>

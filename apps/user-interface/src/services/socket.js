@@ -10,6 +10,7 @@
 
 import { io } from 'socket.io-client';
 import { api } from './api';
+import { setLastJobId, clearLastJobId } from '../utils/localStorage';
 export class SwarmSocket {
   constructor(token) {
     this.token = token;
@@ -216,6 +217,20 @@ export class OrchestratorSocket {
 
     this.socket.on('agent_status', (data) => {
       console.log('[OrchestratorSocket] Agent status:', data);
+      
+      // Track jobs for resumption support
+      if (data.jobId) {
+        if (data.status === 'queued' || data.status === 'queued_job_started') {
+          // Job started - store for potential resumption
+          setLastJobId(data.jobId, data.requestId);
+        } else if (data.status === 'job_completed' || data.status === 'fatal_failure') {
+          // Job finished - clear tracking after a delay (allow user to see completion)
+          setTimeout(() => {
+            clearLastJobId();
+          }, 30000);
+        }
+      }
+      
       this.emit('agent_status', data);
     });
 

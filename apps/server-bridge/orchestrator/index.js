@@ -8,6 +8,9 @@ import { buildSystemPromptV6 } from './context-builder.js';
 import { loadMemory, appendBrainJournal } from '../memory/loader.js';
 import { SharedContext } from './context.js';
 import { extractSymbols } from './parser.js';
+import { mcpManager } from '../mcp/MCPManager.js';
+import { repoManager } from './repository_manager.js';
+
 
 /**
  * AgentOrchestrator — Brain v5.0 (Task Queue Edition)
@@ -135,6 +138,22 @@ export class AgentOrchestrator {
       if (emitState) emitState('heartbeat', metrics);
     }, 15000);
 
+    // Enhanced Tool Wrapper (MCP Support)
+    const enhancedToolCall = async (name, args) => {
+      // Check if it's an MCP tool (e.g. server__tool_name)
+      if (name.includes('__')) {
+        const uniqueId = name.replace('__', ':');
+        try {
+          const result = await mcpManager.callTool(uniqueId, args);
+          return JSON.stringify(result);
+        } catch (error) {
+          return JSON.stringify({ success: false, error: error.message });
+        }
+      }
+      // Fallback to original local tool handler
+      return await onToolCall(name, args);
+    };
+
     try {
       if (emitState) emitState('thinking', 'Identifying target expertise...');
       const { domain, skillProfile } = await this.router.route(prompt);
@@ -167,7 +186,13 @@ export class AgentOrchestrator {
           packageJson: this.packageJson,
           userMemory,
           brainJournal,
+          brainJournal,
           skillProfile,
+          mcpTools: mcpManager.getToolsForLLM(),
+          linkedProjects: Array.from(repoManager.indexes.entries()).map(([key, graph]) => {
+            const [uid, name] = key.split(':');
+            return { name, type: 'repo', indexedSymbols: Object.keys(graph).length, path: `/data/repos/${uid}/${name}` };
+          })
         });
       } else {
         systemPrompt = buildSystemPrompt({
@@ -200,13 +225,14 @@ export class AgentOrchestrator {
         finalResult = await expert.execute(
           iterPrompt,
           systemPrompt,
-          onToolCall,
+          enhancedToolCall,
           onThought,
           onClarification,
           onPlan,
           onMemoryUpdateInternal,
           emitState,
-          onStream
+          onStream,
+          mcpManager.getToolsForLLM()
         );
 
         if (effortLevel === 'quick') break;

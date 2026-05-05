@@ -77,10 +77,20 @@ export function useAgent() {
         setStreamingMessage((prev) => (prev || '') + delta);
       };
 
-      const onResult      = (content) => {
+      const onResult      = async (content) => {
         // Clear streaming state and push final message to history
         setStreamingMessage(null);
         addMessage({ role: 'assistant', content });
+
+        const activeSessionId = useStore.getState().activeSessionId;
+        if (activeSessionId) {
+          try {
+            const { api } = await import('../services/api');
+            await api.addChatMessage(activeSessionId, 'assistant', content, []);
+          } catch (err) {
+            console.error('Failed to save assistant message:', err);
+          }
+        }
       };
 
       const onError       = (msg) =>
@@ -175,12 +185,22 @@ export function useAgent() {
   // Note: Zustand set-actions (addMessage etc.) are stable references —
   // they never change between renders, so omitting them from deps is safe.
 
-  const sendPrompt = useCallback((prompt) => {
+  const sendPrompt = useCallback(async (prompt) => {
     if (!socketRef.current) return;
     const effortLevel = useStore.getState().effortLevel;
     addMessage({ role: 'user', content: prompt });
     socketRef.current.sendPrompt(prompt, effortLevel);
-  }, []);
+
+    const activeSessionId = useStore.getState().activeSessionId;
+    if (activeSessionId) {
+      try {
+        const { api } = await import('../services/api');
+        await api.addChatMessage(activeSessionId, 'user', prompt, []);
+      } catch (err) {
+        console.error('Failed to save user message:', err);
+      }
+    }
+  }, [addMessage]);
 
   const sendClarificationAnswer = useCallback((clarificationId, answer) => {
     socketRef.current?.sendClarificationResponse(clarificationId, answer);

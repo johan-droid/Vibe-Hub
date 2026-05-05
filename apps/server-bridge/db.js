@@ -59,6 +59,7 @@ export async function initDB(retries = 5) {
         last_login TIMESTAMPTZ DEFAULT NOW()
       );
 
+      -- LEGACY: Old sessions table (renamed to avoid conflict)
       CREATE TABLE IF NOT EXISTS sessions (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -67,6 +68,65 @@ export async function initDB(retries = 5) {
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
+
+      -- SAAS-GRADE: User Sessions with device tracking
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        session_token VARCHAR(255) UNIQUE NOT NULL, -- Hashed session identifier
+        device_fingerprint VARCHAR(255), -- Browser/device fingerprint
+        device_info JSONB DEFAULT '{}'::jsonb, -- { browser, os, device, userAgent }
+        ip_address INET,
+        ip_geo JSONB DEFAULT '{}'::jsonb, -- { country, city, region }
+        is_active BOOLEAN DEFAULT true,
+        last_activity_at TIMESTAMPTZ DEFAULT NOW(),
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        revoked_at TIMESTAMPTZ,
+        revoked_reason VARCHAR(100)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id);
+      CREATE INDEX IF NOT EXISTS idx_user_sessions_token ON user_sessions(session_token);
+      CREATE INDEX IF NOT EXISTS idx_user_sessions_active ON user_sessions(user_id, is_active) WHERE is_active = true;
+      CREATE INDEX IF NOT EXISTS idx_user_sessions_expires ON user_sessions(expires_at);
+
+      -- SAAS-GRADE: Refresh Tokens with rotation
+      CREATE TABLE IF NOT EXISTS refresh_tokens (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        session_id UUID REFERENCES user_sessions(id) ON DELETE CASCADE,
+        token_hash VARCHAR(255) UNIQUE NOT NULL, -- Hashed refresh token
+        previous_token_hash VARCHAR(255), -- For detecting token reuse (rotation detection)
+        is_revoked BOOLEAN DEFAULT false,
+        revoked_at TIMESTAMPTZ,
+        revoked_reason VARCHAR(100),
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        used_at TIMESTAMPTZ -- When the token was consumed
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
+      CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash);
+      CREATE INDEX IF NOT EXISTS idx_refresh_tokens_session ON refresh_tokens(session_id);
+
+      -- SAAS-GRADE: Login Audit Log
+      CREATE TABLE IF NOT EXISTS login_audit_log (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        session_id UUID REFERENCES user_sessions(id) ON DELETE SET NULL,
+        event_type VARCHAR(50) NOT NULL CHECK (event_type IN ('login', 'logout', 'refresh', 'revoke', 'expired', 'failed')),
+        provider VARCHAR(50), -- google, github
+        device_info JSONB DEFAULT '{}'::jsonb,
+        ip_address INET,
+        ip_geo JSONB DEFAULT '{}'::jsonb,
+        details JSONB DEFAULT '{}'::jsonb, -- Additional event details
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_login_audit_user ON login_audit_log(user_id);
+      CREATE INDEX IF NOT EXISTS idx_login_audit_event ON login_audit_log(event_type);
+      CREATE INDEX IF NOT EXISTS idx_login_audit_created ON login_audit_log(created_at DESC);
 
       CREATE TABLE IF NOT EXISTS project_memory (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -86,6 +146,23 @@ export async function initDB(retries = 5) {
         content TEXT NOT NULL,
         embedding vector(768), -- Gemini text-embedding-004 is 768 dims
         metadata JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS chat_sessions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        title VARCHAR(255) DEFAULT 'New Chat',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        session_id UUID REFERENCES chat_sessions(id) ON DELETE CASCADE,
+        role VARCHAR(50) NOT NULL,
+        content TEXT NOT NULL,
+        thoughts JSONB DEFAULT '[]'::jsonb,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
 
@@ -202,6 +279,151 @@ export async function getUserById(id) {
 }
 
 /**
+ * SAAS-GRADE: User Session Management Helpers
+ */
+
+export async function createUserSession({ userId, sessionToken, deviceFingerprint, deviceInfo, ipAddress, ipGeo, expiresAt }) {
+  const result = await pool.query(
+    `INSERT INTO user_sessions (user_id, session_token, device_fingerprint, device_info, ip_address, ip_geo, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING *`,
+    [userId, sessionToken, deviceFingerprint, JSON.stringify(deviceInfo || {}), ipAddress, JSON.stringify(ipGeo || {}), expiresAt]
+  );
+  return result.rows[0];
+}
+
+export async function getUserSessionByToken(sessionToken) {
+  const result = await pool.query(
+    `SELECT s.*, u.email, u.name, u.avatar_url, u.provider, u.provider_id
+     FROM user_sessions s
+     JOIN users u ON s.user_id = u.id
+     WHERE s.session_token = $1 AND s.is_active = true AND s.expires_at > NOW()
+     LIMIT 1`,
+    [sessionToken]
+  );
+  return result.rows[0] || null;
+}
+
+export async function updateSessionActivity(sessionId) {
+  await pool.query(
+    'UPDATE user_sessions SET last_activity_at = NOW() WHERE id = $1',
+    [sessionId]
+  );
+}
+
+export async function revokeUserSession(sessionId, userId, reason) {
+  await pool.query(
+    `UPDATE user_sessions
+     SET is_active = false, revoked_at = NOW(), revoked_reason = $1
+     WHERE id = $2 AND user_id = $3`,
+    [reason, sessionId, userId]
+  );
+}
+
+export async function revokeAllUserSessions(userId, exceptSessionId = null, reason = 'logout_all') {
+  await pool.query(
+    `UPDATE user_sessions
+     SET is_active = false, revoked_at = NOW(), revoked_reason = $1
+     WHERE user_id = $2 AND is_active = true ${exceptSessionId ? 'AND id != $3' : ''}`,
+    exceptSessionId ? [reason, userId, exceptSessionId] : [reason, userId]
+  );
+}
+
+export async function listUserSessions(userId) {
+  const result = await pool.query(
+    `SELECT id, device_info, ip_geo, is_active, last_activity_at, expires_at, created_at, revoked_at, revoked_reason
+     FROM user_sessions
+     WHERE user_id = $1
+     ORDER BY created_at DESC`,
+    [userId]
+  );
+  return result.rows;
+}
+
+export async function countActiveUserSessions(userId) {
+  const result = await pool.query(
+    'SELECT COUNT(*) FROM user_sessions WHERE user_id = $1 AND is_active = true AND expires_at > NOW()',
+    [userId]
+  );
+  return parseInt(result.rows[0].count, 10);
+}
+
+/**
+ * SAAS-GRADE: Refresh Token Helpers
+ */
+
+export async function createRefreshToken({ userId, sessionId, tokenHash, previousTokenHash = null, expiresAt }) {
+  const result = await pool.query(
+    `INSERT INTO refresh_tokens (user_id, session_id, token_hash, previous_token_hash, expires_at)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [userId, sessionId, tokenHash, previousTokenHash, expiresAt]
+  );
+  return result.rows[0];
+}
+
+export async function getRefreshTokenByHash(tokenHash) {
+  const result = await pool.query(
+    `SELECT rt.*, u.email, u.name, u.avatar_url, u.provider
+     FROM refresh_tokens rt
+     JOIN users u ON rt.user_id = u.id
+     WHERE rt.token_hash = $1 AND rt.is_revoked = false AND rt.expires_at > NOW()
+     LIMIT 1`,
+    [tokenHash]
+  );
+  return result.rows[0] || null;
+}
+
+export async function revokeRefreshToken(tokenHash, reason = 'consumed') {
+  await pool.query(
+    `UPDATE refresh_tokens
+     SET is_revoked = true, revoked_at = NOW(), revoked_reason = $1
+     WHERE token_hash = $2`,
+    [reason, tokenHash]
+  );
+}
+
+export async function revokeRefreshTokenFamily(sessionId, reason = 'suspicious_activity') {
+  await pool.query(
+    `UPDATE refresh_tokens
+     SET is_revoked = true, revoked_at = NOW(), revoked_reason = $1
+     WHERE session_id = $2`,
+    [reason, sessionId]
+  );
+}
+
+export async function markRefreshTokenUsed(tokenHash) {
+  await pool.query(
+    'UPDATE refresh_tokens SET used_at = NOW() WHERE token_hash = $1',
+    [tokenHash]
+  );
+}
+
+/**
+ * SAAS-GRADE: Login Audit Log Helpers
+ */
+
+export async function logAuthEvent({ userId, sessionId, eventType, provider, deviceInfo, ipAddress, ipGeo, details = {} }) {
+  await pool.query(
+    `INSERT INTO login_audit_log (user_id, session_id, event_type, provider, device_info, ip_address, ip_geo, details)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [userId, sessionId, eventType, provider, JSON.stringify(deviceInfo || {}), ipAddress, JSON.stringify(ipGeo || {}), JSON.stringify(details)]
+  );
+}
+
+export async function getUserAuthHistory(userId, limit = 50) {
+  const result = await pool.query(
+    `SELECT event_type, provider, device_info, ip_geo, details, created_at
+     FROM login_audit_log
+     WHERE user_id = $1
+     ORDER BY created_at DESC
+     LIMIT $2`,
+    [userId, limit]
+  );
+  return result.rows;
+}
+
+/**
  * GitHub Installation Helpers
  */
 export async function upsertInstallation({ installation_id, account_name, account_id, account_type, repository_selection }) {
@@ -313,6 +535,56 @@ export async function upsertUserPreference({ user_id, preference_type, content }
     [user_id, preference_type, JSON.stringify(content), ALLOWED_LANGUAGES]
   );
   return result.rows[0];
+}
+
+/**
+ * Chat History Helpers
+ */
+export async function createChatSession(userId, title = 'New Chat') {
+  const result = await pool.query(
+    'INSERT INTO chat_sessions (user_id, title) VALUES ($1, $2) RETURNING *',
+    [userId, title]
+  );
+  return result.rows[0];
+}
+
+export async function getChatSessions(userId) {
+  const result = await pool.query(
+    'SELECT * FROM chat_sessions WHERE user_id = $1 ORDER BY updated_at DESC',
+    [userId]
+  );
+  return result.rows;
+}
+
+export async function getChatSession(sessionId, userId) {
+  const result = await pool.query(
+    'SELECT * FROM chat_sessions WHERE id = $1 AND user_id = $2',
+    [sessionId, userId]
+  );
+  return result.rows[0] || null;
+}
+
+export async function addChatMessage(sessionId, role, contentStr, thoughts = []) {
+  const result = await pool.query(
+    'INSERT INTO chat_messages (session_id, role, content, thoughts) VALUES ($1, $2, $3, $4) RETURNING *',
+    [sessionId, role, contentStr, JSON.stringify(thoughts)]
+  );
+  
+  // Update session updated_at
+  await pool.query(
+    'UPDATE chat_sessions SET updated_at = NOW() WHERE id = $1',
+    [sessionId]
+  );
+  
+  return result.rows[0];
+}
+
+export async function getChatMessages(sessionId) {
+  const result = await pool.query(
+    'SELECT * FROM chat_messages WHERE session_id = $1 ORDER BY created_at ASC',
+    [sessionId]
+  );
+  return result.rows;
 }
 
 export default pool;

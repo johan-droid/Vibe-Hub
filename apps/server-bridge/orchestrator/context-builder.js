@@ -190,7 +190,9 @@ export class ContextBuilder {
     packageJson,
     userMemory,
     brainJournal,
-    skillProfile
+    skillProfile,
+    mcpTools,
+    linkedProjects
   }) {
     // Load both systems independently
     const [orgConstraints, userPrefs] = await Promise.all([
@@ -217,7 +219,13 @@ export class ContextBuilder {
       // 5. Memory
       this._buildMemoryContext(userMemory, brainJournal),
       
-      // 6. Domain expertise
+      // 6. MCP Tools
+      this._buildMcpContext(mcpTools),
+
+      // 7. Linked Repositories
+      this._buildRepositoryContext(linkedProjects),
+      
+      // 8. Domain expertise
       this._buildDomainContext(domain, skillProfile)
     ];
 
@@ -267,6 +275,38 @@ ${packageJson ? JSON.stringify(packageJson, null, 2) : 'No package.json found'}
 You are acting as: ${expertise[domain] || expertise.code}
 
 ${skillProfile ? `Skills: ${skillProfile.selectedSkills?.map(s => s.label).join(', ') || 'General'}` : ''}
+`;
+  }
+
+  static _buildMcpContext(mcpTools) {
+    if (!mcpTools || mcpTools.length === 0) return '';
+
+    const toolsStr = mcpTools.map(t => {
+      return `- ${t.name}: ${t.description}\n  Schema: ${JSON.stringify(t.parameters)}`;
+    }).join('\n\n');
+
+    return `=== AVAILABLE MCP TOOLS ===
+You have access to the following external tools via the Model Context Protocol (MCP).
+To use them, call the tool by its name.
+
+${toolsStr}
+
+IMPORTANT: Only use these tools if they are directly relevant to the user request.
+`;
+  }
+
+  static _buildRepositoryContext(linkedProjects) {
+    if (!linkedProjects || linkedProjects.length === 0) return '';
+
+    const projectsStr = linkedProjects.map(p => {
+      return `- ${p.name} (${p.type}): Indexed ${p.indexedSymbols || 0} symbols. Path: ${p.path}`;
+    }).join('\n');
+
+    return `=== LINKED REPOSITORIES ===
+The following external repositories are linked and indexed for your reference.
+You can use information from these projects to inform your design and implementation.
+
+${projectsStr}
 `;
   }
 }
