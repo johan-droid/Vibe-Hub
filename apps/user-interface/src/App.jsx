@@ -5,6 +5,7 @@ import { useStore } from './store/useStore';
 import { useJobResumption } from './hooks/useJobResumption';
 import { clearExpiredTier2 } from './utils/localStorage';
 import { FullPageLoader } from './components/LogoLoader';
+import { api } from './services/api';
 
 // ── Lazy Pages (Performance) ──────────────────────────────────────────────────
 const LandingPage = lazy(() => import('./pages/LandingPage'));
@@ -19,8 +20,9 @@ function LoadingScreen() {
 
 // ── Application Root ─────────────────────────────────────────────────────────
 export default function App() {
-  const { theme, hydrated, user, restorePanelStates } = useStore();
+  const { theme, hydrated, user, restorePanelStates, setUser } = useStore();
   const [isInitializing, setIsInitializing] = useState(true);
+  const [authChecked, setAuthChecked] = useState(false);
   const location = useLocation();
 
   // Initialize job resumption hook
@@ -37,19 +39,39 @@ export default function App() {
     // Restore panel states from localStorage
     restorePanelStates();
     
-    // Core Initialization Sequence
-    const bootstrap = () => {
-      // Wait for hydration and add a small delay for the premium feel
-      if (hydrated) {
-        setTimeout(() => setIsInitializing(false), 800);
-      }
-    };
-    bootstrap();
   }, [theme, hydrated, restorePanelStates]);
+
+  useEffect(() => {
+    if (!hydrated) return undefined;
+
+    let cancelled = false;
+
+    async function verifySession() {
+      try {
+        const profile = await api.authStatus();
+        if (cancelled) return;
+        setUser(profile.authenticated ? profile.user : null);
+      } catch {
+        if (cancelled) return;
+        setUser(null);
+      } finally {
+        if (!cancelled) {
+          setAuthChecked(true);
+          window.setTimeout(() => setIsInitializing(false), 500);
+        }
+      }
+    }
+
+    verifySession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, setUser]);
 
   return (
     <AnimatePresence mode="wait">
-      {(isInitializing || !hydrated) ? (
+      {(isInitializing || !hydrated || !authChecked) ? (
         <LoadingScreen key="loader" />
       ) : (
         <motion.div
@@ -66,18 +88,7 @@ export default function App() {
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route 
                 path="/dashboard/*" 
-                element={(() => {
-                  // Check localStorage for token as fallback
-                  const hasToken = localStorage.getItem('selina_access_token') || localStorage.getItem('selina_token');
-                  
-                  // If we have user in state OR token in storage, show dashboard
-                  if (user || hasToken) {
-                    return <Workspace />;
-                  }
-                  
-                  // Not authenticated - redirect to login
-                  return <Navigate to="/login" replace />;
-                })()} 
+                element={user ? <Workspace /> : <Navigate to="/login" replace state={{ from: location }} />} 
               />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

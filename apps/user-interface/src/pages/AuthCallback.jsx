@@ -38,30 +38,21 @@ export default function AuthCallback() {
         return;
       }
 
-      // Get all tokens from URL (SaaS-grade auth)
+      // Legacy callbacks may still include a short-lived access token.
+      // New callbacks rely on HTTP-only cookies and verify through auth status.
       const accessToken = searchParams.get('token');
-      const refreshToken = searchParams.get('refreshToken');
-      const sessionToken = searchParams.get('sessionToken');
 
-      if (!accessToken) {
-        api.clearAllTokens();
-        setUser(null);
-        setStatus('error');
-        setMessage('No session token was returned. Please start sign-in again.');
-        return;
-      }
+      if (accessToken) api.setAuthTokens({ accessToken });
 
       try {
-        // Store all tokens for SaaS-grade session management
-        api.setAuthTokens({ accessToken, refreshToken, sessionToken });
-
-        // Fetch user profile
-        const userData = await api.me();
+        const userData = await api.authStatus();
         if (cancelled) return;
 
-        // Support both old and new response formats
-        const user = userData.user || userData;
-        setUser(user);
+        if (!userData.authenticated) {
+          throw new Error('Session cookie was not accepted. Please start sign-in again.');
+        }
+
+        setUser(userData.user);
         setStatus('success');
         setMessage('Session verified. Opening your dashboard...');
         window.setTimeout(() => navigate('/dashboard', { replace: true }), 350);

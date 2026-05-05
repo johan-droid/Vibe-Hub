@@ -4,6 +4,7 @@ import { useStore } from '../../../store/useStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from './Button';
 import { IconButton } from './IconButton';
+import { api } from '../../../services/api';
 
 export default function SettingsModal({ isOpen, onClose }) {
   const { repoUrl, githubPat, setSettings, logout } = useStore();
@@ -92,8 +93,12 @@ export default function SettingsModal({ isOpen, onClose }) {
                 fullWidth
                 onClick={() => {
                   if(confirm("Are you sure you want to purge all local session data? This cannot be undone.")) {
-                    logout();
-                    window.location.reload();
+                    api.logout()
+                      .catch(() => {})
+                      .finally(() => {
+                        logout();
+                        window.location.reload();
+                      });
                   }
                 }}
                 className="!justify-start !p-0 !text-google-red/60 hover:!text-google-red font-black uppercase tracking-widest text-[9px]"

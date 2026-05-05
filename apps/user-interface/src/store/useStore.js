@@ -239,7 +239,6 @@ export const useStore = create(
       name: 'selinahub-neural-storage-v2', // Increment version
       storage: createJSONStorage(() => idbStorage),
       partialize: (state) => ({
-        user: state.user,
         sidebarCollapsed: state.sidebarCollapsed,
         chatCollapsed: state.chatCollapsed,
         terminalHeight: state.terminalHeight,
@@ -247,8 +246,19 @@ export const useStore = create(
         chatHistory: state.chatHistory,
         linkedProjects: state.linkedProjects,
       }),
+      version: 3,
+      migrate: (persistedState) => {
+        if (!persistedState) return persistedState;
+        return {
+          ...persistedState,
+          user: null,
+        };
+      },
       onRehydrateStorage: () => (state) => {
-        if (state) state.setHydrated(true);
+        if (state) {
+          state.setUser(null);
+          state.setHydrated(true);
+        }
       },
     }
   )

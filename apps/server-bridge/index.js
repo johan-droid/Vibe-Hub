@@ -31,7 +31,7 @@ import { createCodeQueue } from './orchestrator/job-queue.js';
 import { validateEnvironment } from './utils/env.js';
 
 import { initDB }                from './db.js';
-import { requireAuth, verifyToken } from './auth/middleware.js';
+import { authenticateFromHeaders, requireAuth } from './auth/middleware.js';
 import googleAuth                from './auth/google.js';
 import githubAuth                from './auth/github.js';
 import authRoutes                from './auth/routes.js';
@@ -76,6 +76,10 @@ process.on('uncaughtException', (error) => {
 
 // ── Security Middleware ─────────────────────────────────────────────────────
 
+const cspConnectSrc = isProd
+  ? ["'self'", process.env.UI_ORIGIN].filter(Boolean)
+  : ["'self'", 'http://localhost:*', 'ws://localhost:*', 'http://127.0.0.1:*', 'ws://127.0.0.1:*'];
+
 // Helmet.js - Security headers (CSP, HSTS, X-Frame-Options, etc.)
 app.use(helmet({
   contentSecurityPolicy: {
@@ -84,7 +88,7 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"], // Required for Swagger UI and some UI libraries
       scriptSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", process.env.UI_ORIGIN || "*"],
+      connectSrc: cspConnectSrc,
     },
   },
   crossOriginEmbedderPolicy: false, // Allow embedding if needed
@@ -516,7 +520,7 @@ const io = new SocketIOServer(server, {
   pingInterval: Number.parseInt(process.env.SOCKET_PING_INTERVAL_MS || '25000', 10),
   pingTimeout: Number.parseInt(process.env.SOCKET_PING_TIMEOUT_MS || '20000', 10),
   cors: {
-    origin: process.env.UI_ORIGIN || "*",
+    origin: isProd ? (process.env.UI_ORIGIN || false) : true,
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -563,30 +567,34 @@ vfs.configureRedis({
 // Inject the io instance into the Express app for the router to use
 app.set('io', io);
 
-io.use((socket, next) => {
+io.use(async (socket, next) => {
   const ip = getSocketIp(socket);
   if (!registerWsConnection(ip)) {
     return next(new Error('WebSocket rate limit exceeded.'));
   }
 
-  const token =
-    socket.handshake.auth?.token ||
-    socket.handshake.query?.token ||
-    String(socket.handshake.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  const decoded = verifyToken(token);
+  const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+  let auth = null;
+  try {
+    auth = await authenticateFromHeaders(socket.handshake.headers, token);
+  } catch (error) {
+    releaseWsConnection(ip);
+    return next(new Error('Authentication check failed.'));
+  }
 
-  if (!decoded) {
+  if (!auth) {
     releaseWsConnection(ip);
     return next(new Error('Unauthenticated.'));
   }
 
-  if (!registerWsUser(decoded.id)) {
+  if (!registerWsUser(auth.user.id)) {
     releaseWsConnection(ip);
     return next(new Error('WebSocket user connection limit exceeded.'));
   }
 
   socket.data.ip = ip;
-  socket.data.user = decoded;
+  socket.data.user = auth.user;
+  socket.data.sessionId = auth.sessionId;
   next();
 });
 
@@ -668,32 +676,39 @@ server.on('close', () => {
 });
 
 // ── Connection handler ────────────────────────────────────────────────────────
-wss.on('connection', (ws, req) => {
+wss.on('connection', async (ws, req) => {
   const ip = getRequestIp(req);
   if (!registerWsConnection(ip)) {
     ws.close(1013, 'WebSocket rate limit exceeded.');
     return;
   }
 
+  let auth = null;
   let released = false;
   const releaseConnection = () => {
     if (released) return;
     released = true;
     releaseWsConnection(ip);
-    releaseWsUser(decoded?.id);
+    releaseWsUser(auth?.user?.id);
   };
 
   // ── Authentication ─────────────────────────────────────────────────────
   const url     = new URL(req.url, `http://${req.headers.host}`);
   const token   = url.searchParams.get('token');
-  const decoded = verifyToken(token);
+  try {
+    auth = await authenticateFromHeaders(req.headers, token);
+  } catch (error) {
+    releaseConnection();
+    ws.close(1011, 'Authentication check failed.');
+    return;
+  }
 
-  if (!decoded) {
+  if (!auth) {
     releaseConnection();
     ws.close(4001, 'Unauthenticated.');
     return;
   }
-  if (!registerWsUser(decoded.id)) {
+  if (!registerWsUser(auth.user.id)) {
     releaseConnection();
     ws.close(1013, 'WebSocket user connection limit exceeded.');
     return;
@@ -702,12 +717,12 @@ wss.on('connection', (ws, req) => {
   // ── Session bootstrap ──────────────────────────────────────────────────
   const sessionId    = uuid();
   const orchestrator = new AgentOrchestrator();
-  orchestrator.setUser(decoded.id);
+  orchestrator.setUser(auth.user.id);
 
   const session = {
     ws,
     orchestrator,
-    user:                decoded,
+    user:                auth.user,
     pendingToolCalls:    new Map(),
     pendingClarifications: new Map(),
     pendingPlans:        new Map(),

@@ -41,7 +41,7 @@ export function useBackendSignals({ intervalMs = 60_000, enabled = true } = {}) 
       settle('health', api.health()),
       settle('diagnostics', api.runtimeDiagnostics()),
       settle('skills', api.runtimeSkills()),
-      settle('profile', api.me()),
+      settle('profile', api.authStatus()),
     ]);
 
     const next = results.reduce((acc, result) => {

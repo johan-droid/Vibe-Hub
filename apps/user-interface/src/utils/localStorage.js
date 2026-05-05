@@ -82,7 +82,12 @@ export function removeItem(key) {
  * Clear all Tier 3 keys (ephemeral/auth data)
  */
 export function clearTier3() {
-  TIER_3_KEYS.forEach(key => removeItem(key));
+  TIER_3_KEYS.forEach(key => {
+    removeItem(key);
+    try {
+      localStorage.removeItem(key);
+    } catch {}
+  });
 }
 
 /**

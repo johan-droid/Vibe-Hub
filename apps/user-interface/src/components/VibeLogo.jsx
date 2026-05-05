@@ -2,51 +2,12 @@ import React from 'react';
 import { motion } from 'framer-motion';
 
 /**
- * Selina Logo - Faithful 8-segment structure (4 pills, 4 circles)
- * Trace the exact boundary with string animation on a pure black background.
+ * Selina Logo
+ * Uses the extracted transparent mark so loaders and headers inherit the
+ * surrounding app background instead of carrying a baked-in image backdrop.
  */
 
-// Coordinates based on a 100x100 viewBox
-const LOGO_SEGMENTS = [
-  // Top Part
-  { id: 'top-circle', d: 'M 23 32 a 9 9 0 1 0 18 0 a 9 9 0 1 0 -18 0' },
-  { id: 'top-pill',   d: 'M 50 23 h 22 a 9 9 0 0 1 0 18 h -22 a 9 9 0 0 1 0 -18 Z' },
-  
-  // Right Part
-  { id: 'right-circle', d: 'M 59 32 a 9 9 0 1 0 18 0 a 9 9 0 1 0 -18 0' },
-  { id: 'right-pill',   d: 'M 59 50 v 22 a 9 9 0 0 0 18 0 v -22 a 9 9 0 0 0 -18 0 Z' },
-  
-  // Bottom Part
-  { id: 'bottom-circle', d: 'M 59 68 a 9 9 0 1 0 18 0 a 9 9 0 1 0 -18 0' },
-  { id: 'bottom-pill',   d: 'M 28 59 h 22 a 9 9 0 0 0 0 18 h -22 a 9 9 0 0 0 0 -18 Z' },
-  
-  // Left Part
-  { id: 'left-circle', d: 'M 23 68 a 9 9 0 1 0 18 0 a 9 9 0 1 0 -18 0' },
-  { id: 'left-pill',   d: 'M 23 28 v 22 a 9 9 0 0 1 18 0 v -22 a 9 9 0 0 1 -18 0 Z' },
-];
-
-const stringVariants = {
-  hidden: { pathLength: 0, opacity: 0 },
-  visible: (delay) => ({
-    pathLength: 1,
-    opacity: 1,
-    transition: {
-      pathLength: { delay, duration: 1.5, ease: [0.22, 1, 0.36, 1] },
-      opacity: { delay, duration: 0.3 },
-    },
-  }),
-  loop: {
-    pathLength: [0, 1, 1, 0],
-    opacity: [0, 1, 1, 0],
-    transition: {
-      duration: 3,
-      repeat: Infinity,
-      repeatDelay: 0.5,
-      ease: 'easeInOut',
-      times: [0, 0.45, 0.85, 1],
-    },
-  },
-};
+export const SELINA_LOGO_SRC = '/images/selina-logo-transparent.png';
 
 const fillVariants = {
   hidden: { opacity: 0, scale: 0.9 },
@@ -59,68 +20,52 @@ const fillVariants = {
 
 export function VibeLogoStringAnim({
   size = 120,
-  strokeColor = '#E9D5FF',
   glowColor = 'rgba(233, 213, 255, 0.6)',
-  strokeWidth = 3,
   mode = 'draw',
   onComplete,
+  className = '',
 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-      <defs>
-        <filter id="string-glow" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="3" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-      </defs>
+  const dropShadow = `drop-shadow(0 0 ${Math.max(12, size * 0.12)}px ${glowColor})`;
 
-      {LOGO_SEGMENTS.map((segment, i) => (
-        <React.Fragment key={segment.id}>
-          {/* Glow layer */}
-          <motion.path
-            d={segment.d}
-            stroke={glowColor}
-            strokeWidth={strokeWidth * 2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            fill="none"
-            filter="url(#string-glow)"
-            custom={i * 0.15}
-            variants={stringVariants}
-            initial="hidden"
-            animate={mode === 'loop' ? 'loop' : 'visible'}
-          />
-          {/* Main stroke */}
-          <motion.path
-            d={segment.d}
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            fill="none"
-            custom={i * 0.15}
-            variants={stringVariants}
-            initial="hidden"
-            animate={mode === 'loop' ? 'loop' : 'visible'}
-            onAnimationComplete={i === LOGO_SEGMENTS.length - 1 ? onComplete : undefined}
-          />
-        </React.Fragment>
-      ))}
-    </svg>
+  return (
+    <motion.img
+      src={SELINA_LOGO_SRC}
+      alt=""
+      aria-hidden="true"
+      width={size}
+      height={size}
+      draggable={false}
+      className={`select-none object-contain ${className}`}
+      initial={
+        mode === 'loop'
+          ? { opacity: 0.42, scale: 0.96, filter: dropShadow }
+          : { opacity: 0, scale: 0.94, clipPath: 'inset(0 100% 0 0)', filter: dropShadow }
+      }
+      animate={
+        mode === 'loop'
+          ? { opacity: [0.38, 1, 0.38], scale: [0.96, 1.05, 0.96], filter: dropShadow }
+          : { opacity: 1, scale: 1, clipPath: 'inset(0 0% 0 0)', filter: dropShadow }
+      }
+      transition={
+        mode === 'loop'
+          ? { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }
+          : { duration: 1.15, ease: [0.22, 1, 0.36, 1] }
+      }
+      onAnimationComplete={mode === 'loop' ? undefined : onComplete}
+    />
   );
 }
 
 export function VibeLogo({ size = 64, className = '' }) {
   return (
     <img
-      src="/images/selina-logo.png"
+      src={SELINA_LOGO_SRC}
       alt="Selina"
       width={size}
       height={size}
-      className={`object-contain ${className}`}
+      decoding="async"
+      draggable={false}
+      className={`select-none object-contain ${className}`}
     />
   );
 }
@@ -154,11 +99,15 @@ export function AnimatedVibeLogo({
         animate={isDone || !showStringAnim ? 'visible' : 'hidden'}
       >
         <img
-          src="/images/selina-logo.png"
+          src={SELINA_LOGO_SRC}
           alt="Selina"
           width={size * 0.8}
           height={size * 0.8}
-          className="object-contain"
+          draggable={false}
+          className="select-none object-contain"
+          style={{
+            filter: 'drop-shadow(0 0 28px rgba(233, 213, 255, 0.18))',
+          }}
         />
       </motion.div>
     </div>
@@ -167,6 +116,10 @@ export function AnimatedVibeLogo({
 
 export function VibeLogoCompact({ size = 40, className = '' }) {
   return <VibeLogo size={size} className={className} />;
+}
+
+export function VibeLargeLogo({ size = 160, className = '' }) {
+  return <AnimatedVibeLogo size={size} className={className} />;
 }
 
 export default VibeLogo;

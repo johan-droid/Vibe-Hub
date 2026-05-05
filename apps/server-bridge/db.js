@@ -304,6 +304,18 @@ export async function getUserSessionByToken(sessionToken) {
   return result.rows[0] || null;
 }
 
+export async function getUserSessionById(sessionId) {
+  const result = await pool.query(
+    `SELECT s.*, u.email, u.name, u.avatar_url, u.provider, u.provider_id
+     FROM user_sessions s
+     JOIN users u ON s.user_id = u.id
+     WHERE s.id = $1 AND s.is_active = true AND s.expires_at > NOW()
+     LIMIT 1`,
+    [sessionId]
+  );
+  return result.rows[0] || null;
+}
+
 export async function updateSessionActivity(sessionId) {
   await pool.query(
     'UPDATE user_sessions SET last_activity_at = NOW() WHERE id = $1',
@@ -367,7 +379,12 @@ export async function getRefreshTokenByHash(tokenHash) {
     `SELECT rt.*, u.email, u.name, u.avatar_url, u.provider
      FROM refresh_tokens rt
      JOIN users u ON rt.user_id = u.id
-     WHERE rt.token_hash = $1 AND rt.is_revoked = false AND rt.expires_at > NOW()
+     JOIN user_sessions s ON rt.session_id = s.id
+     WHERE rt.token_hash = $1
+       AND rt.is_revoked = false
+       AND rt.expires_at > NOW()
+       AND s.is_active = true
+       AND s.expires_at > NOW()
      LIMIT 1`,
     [tokenHash]
   );

@@ -3,6 +3,13 @@ import crypto from 'crypto';
 import { upsertUser } from '../db.js';
 import { createSession } from './session.js';
 import { setAuthCookies } from './middleware.js';
+import {
+  buildOAuthCallbackUrl,
+  clearOAuthReturnOriginCookie,
+  getOAuthRequestOrigin,
+  getOAuthReturnOrigin,
+  setOAuthReturnOriginCookie,
+} from './oauth-return.js';
 
 const router = Router();
 
@@ -11,16 +18,19 @@ const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 const GITHUB_USER_URL = 'https://api.github.com/user';
 const GITHUB_EMAILS_URL = 'https://api.github.com/user/emails';
 
-function getFrontendUrl() {
-  const origin = process.env.UI_ORIGIN;
-  if (!origin) {
-    throw new Error('UI_ORIGIN environment variable is required');
-  }
-  return origin.replace(/\/$/, '');
+function redirectWithError(req, res, error) {
+  return res.redirect(buildOAuthCallbackUrl(getOAuthReturnOrigin(req), error));
 }
 
-function redirectWithError(res, error) {
-  return res.redirect(`${getFrontendUrl()}/auth/callback?error=${encodeURIComponent(error)}`);
+function isSecureCookie() {
+  return process.env.NODE_ENV === 'production' && String(process.env.UI_ORIGIN).startsWith('https://');
+}
+
+function handleOAuthConfigError(req, res) {
+  if (process.env.UI_ORIGIN) {
+    return res.redirect(buildOAuthCallbackUrl(getOAuthRequestOrigin(req), 'oauth_not_configured'));
+  }
+  return res.status(500).json({ error: 'oauth_not_configured' });
 }
 
 // Validate required environment variables
@@ -33,16 +43,19 @@ const requiredEnvVars = ['GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', 'GITHUB_RED
 router.get('/github', (req, res) => {
   const missingVars = requiredEnvVars.filter(v => !process.env[v]);
   if (missingVars.length > 0) {
-    return res.status(500).json({ error: 'oauth_not_configured' });
+    return handleOAuthConfigError(req, res);
   }
 
   const state = crypto.randomBytes(32).toString('hex');
+  const returnOrigin = getOAuthRequestOrigin(req);
+
   res.cookie('github_oauth_state', state, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production' && String(process.env.UI_ORIGIN).startsWith('https://'),
+    secure: isSecureCookie(),
     sameSite: 'lax',
     maxAge: 15 * 60 * 1000,
   });
+  setOAuthReturnOriginCookie(res, returnOrigin);
 
   const params = new URLSearchParams({
     client_id: process.env.GITHUB_CLIENT_ID,
@@ -60,10 +73,11 @@ router.get('/github', (req, res) => {
 router.get('/github/callback', async (req, res) => {
   const missingVars = requiredEnvVars.filter(v => !process.env[v]);
   if (missingVars.length > 0) {
-    return res.status(500).json({ error: 'oauth_not_configured' });
+    return handleOAuthConfigError(req, res);
   }
 
   const { code, state } = req.query;
+  const returnOrigin = getOAuthReturnOrigin(req);
 
   let cookieState = req.cookies?.github_oauth_state;
   if (!cookieState && req.headers.cookie) {
@@ -71,12 +85,13 @@ router.get('/github/callback', async (req, res) => {
     if (match) cookieState = match[1];
   }
 
-  if (!code) return redirectWithError(res, 'missing_code');
+  if (!code) return redirectWithError(req, res, 'missing_code');
   if (!state || !cookieState || state !== cookieState) {
-    return redirectWithError(res, 'invalid_state');
+    return redirectWithError(req, res, 'invalid_state');
   }
 
   res.clearCookie('github_oauth_state');
+  clearOAuthReturnOriginCookie(res);
 
   try {
     const tokenRes = await fetch(GITHUB_TOKEN_URL, {
@@ -130,19 +145,16 @@ router.get('/github/callback', async (req, res) => {
       sessionToken: session.sessionToken
     });
 
-    // Redirect with tokens
-    const redirectUrl = new URL(`${getFrontendUrl()}/auth/callback`);
-    redirectUrl.searchParams.set('token', session.accessToken);
-    redirectUrl.searchParams.set('refreshToken', session.refreshToken);
-    redirectUrl.searchParams.set('sessionToken', session.sessionToken);
+    // Redirect without bearer tokens; the frontend verifies the cookie session.
+    const redirectUrl = new URL('/auth/callback', returnOrigin);
 
     res.redirect(redirectUrl.toString());
   } catch (err) {
     console.error('GitHub callback error:', err);
     if (err.message === 'MAX_SESSIONS_EXCEEDED') {
-      return redirectWithError(res, 'max_sessions_exceeded');
+      return redirectWithError(req, res, 'max_sessions_exceeded');
     }
-    redirectWithError(res, 'provider_failed');
+    redirectWithError(req, res, 'provider_failed');
   }
 });
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { SwarmSocket } from '../services/socket.js';
+import { api } from '../services/api';
 import { VFSContainer } from '../vfs/container.js';
 import { useStore } from '../store/useStore';
 
@@ -14,18 +15,23 @@ export function useAgent() {
     addMessage, addThought, setThinking,
     setDiffData, setVfsTree, setStreamingMessage,
     setVfsStatus,
+    user,
   } = useStore();
 
-  const token = localStorage.getItem('selina_token');
+  const token = api.getToken();
 
   useEffect(() => {
-    if (!token || socketRef.current) return;
+    if (!user || socketRef.current) return;
 
+    let cancelled = false;
+    let cleanupSocket = null;
     const vfs = new VFSContainer();
     vfsRef.current = vfs;
     setVfsStatus?.('booting');
 
     vfs.boot().then(() => {
+      if (cancelled) return;
+
       vfs.getTree('.').then(tree => setVfsTree(tree));
 
       const socket = new SwarmSocket(token);
@@ -161,7 +167,7 @@ export function useAgent() {
       // Cleanup: remove every named listener before disconnecting.
       // Without this, remounting the component (hot-reload / auth change) stacks
       // duplicate listeners — each event fires once per mount count.
-      return () => {
+      cleanupSocket = () => {
         socket.off('thought',          onThought);
         socket.off('thinking',         onThinking);
         socket.off('state_change',     onStateChange);
@@ -178,10 +184,17 @@ export function useAgent() {
         socketRef.current = null;
       };
     }).catch((err) => {
+      if (cancelled) return;
       setVfsStatus?.('error');
       addMessage({ role: 'system', content: `Workspace boot failed: ${err.message}` });
     });
-  }, [token]);
+
+    return () => {
+      cancelled = true;
+      cleanupSocket?.();
+      socketRef.current = null;
+    };
+  }, [token, user]);
   // Note: Zustand set-actions (addMessage etc.) are stable references —
   // they never change between renders, so omitting them from deps is safe.
 

@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { AnimatedVibeLogo, VibeLogo } from './VibeLogo';
 
 /**
  * Selina Loading System
  * 
  * Features:
- * - Pure black background as requested
- * - 8-segment string tracing animation
+ * - Pure black loading surface
+ * - Transparent logo mark with alpha-safe animation
  * - Rebranded to Selina
  */
 
@@ -55,12 +55,25 @@ export function LogoLoader({
   subtitle = 'Initializing workspace...',
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-12 bg-black">
+    <div className="flex h-full min-h-full w-full flex-col items-center justify-center gap-12 bg-black">
       <div className="relative">
         <AnimatedVibeLogo size={size} showStringAnim={true} />
       </div>
       {showText && <LoadingText text={text} subtitle={subtitle} />}
     </div>
+  );
+}
+
+export function LogoSpinner({ size = 48, className = '' }) {
+  return (
+    <motion.div
+      className={`flex items-center justify-center ${className}`}
+      style={{ width: size, height: size }}
+      animate={{ rotate: 360 }}
+      transition={{ duration: 1.8, repeat: Infinity, ease: 'linear' }}
+    >
+      <VibeLogo size={size} />
+    </motion.div>
   );
 }
 

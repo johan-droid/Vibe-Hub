@@ -4,6 +4,13 @@ import { OAuth2Client } from 'google-auth-library';
 import { upsertUser } from '../db.js';
 import { createSession } from './session.js';
 import { setAuthCookies } from './middleware.js';
+import {
+  buildOAuthCallbackUrl,
+  clearOAuthReturnOriginCookie,
+  getOAuthRequestOrigin,
+  getOAuthReturnOrigin,
+  setOAuthReturnOriginCookie,
+} from './oauth-return.js';
 
 const router = Router();
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -16,13 +23,8 @@ const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
  * GET /api/auth/google/config
  */
 router.get('/config', (req, res) => {
+  res.set('Cache-Control', 'no-store');
   res.json({ clientId: process.env.GOOGLE_CLIENT_ID });
-});
-
-// Log all requests to this router
-router.use((req, res, next) => {
-  console.log(`[Google Auth Router] ${req.method} ${req.path} - Body:`, Object.keys(req.body || {}));
-  next();
 });
 
 /**
@@ -31,7 +33,10 @@ router.use((req, res, next) => {
  */
 router.post('/verify-token', async (req, res) => {
   const { credential, access_token } = req.body;
-  console.log('[Google Auth] Verify token request received:', { hasCredential: !!credential, hasAccessToken: !!access_token, body: req.body });
+  console.log('[Google Auth] Verify token request received:', {
+    hasCredential: !!credential,
+    hasAccessToken: !!access_token
+  });
 
   try {
     let profile;
@@ -88,9 +93,7 @@ router.post('/verify-token', async (req, res) => {
     console.log('[Google Auth] Sending success response');
     res.json({
       success: true,
-      token: session.accessToken,
-      refreshToken: session.refreshToken,
-      sessionToken: session.sessionToken,
+      sessionId: session.sessionId,
       user: {
         id: user.id,
         email: user.email,
@@ -108,35 +111,37 @@ router.post('/verify-token', async (req, res) => {
   }
 });
 
-function getFrontendUrl() {
-  const origin = process.env.UI_ORIGIN;
-  if (!origin) {
-    throw new Error('UI_ORIGIN environment variable is required');
-  }
-  return origin.replace(/\/$/, '');
-}
-
 function isSecureCookie() {
   return process.env.NODE_ENV === 'production' && String(process.env.UI_ORIGIN).startsWith('https://');
 }
 
-function redirectWithError(res, error) {
-  return res.redirect(`${getFrontendUrl()}/auth/callback?error=${encodeURIComponent(error)}`);
+function redirectWithError(req, res, error) {
+  return res.redirect(buildOAuthCallbackUrl(getOAuthReturnOrigin(req), error));
 }
 
 const requiredEnvVars = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REDIRECT_URI', 'UI_ORIGIN'];
 
+function handleOAuthConfigError(req, res) {
+  if (process.env.UI_ORIGIN) {
+    return res.redirect(buildOAuthCallbackUrl(getOAuthRequestOrigin(req), 'oauth_not_configured'));
+  }
+  return res.status(500).json({ error: 'oauth_not_configured' });
+}
+
 router.get('/google', (req, res) => {
   const missingVars = requiredEnvVars.filter(v => !process.env[v]);
-  if (missingVars.length > 0) return res.status(500).json({ error: 'oauth_not_configured' });
+  if (missingVars.length > 0) return handleOAuthConfigError(req, res);
 
   const state = crypto.randomBytes(32).toString('hex');
+  const returnOrigin = getOAuthRequestOrigin(req);
+
   res.cookie('google_oauth_state', state, {
     httpOnly: true,
     secure: isSecureCookie(),
     sameSite: 'lax',
     maxAge: 15 * 60 * 1000,
   });
+  setOAuthReturnOriginCookie(res, returnOrigin);
 
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID,
@@ -152,19 +157,21 @@ router.get('/google', (req, res) => {
 
 router.get('/google/callback', async (req, res) => {
   const missingVars = requiredEnvVars.filter(v => !process.env[v]);
-  if (missingVars.length > 0) return res.status(500).json({ error: 'oauth_not_configured' });
+  if (missingVars.length > 0) return handleOAuthConfigError(req, res);
 
   const { code, state } = req.query;
+  const returnOrigin = getOAuthReturnOrigin(req);
   let cookieState = req.cookies?.google_oauth_state;
   if (!cookieState && req.headers.cookie) {
     const match = req.headers.cookie.match(/(?:^|;\s*)google_oauth_state=([^;]*)/);
     if (match) cookieState = match[1];
   }
 
-  if (!code) return redirectWithError(res, 'missing_code');
-  if (!state || !cookieState || state !== cookieState) return redirectWithError(res, 'invalid_state');
+  if (!code) return redirectWithError(req, res, 'missing_code');
+  if (!state || !cookieState || state !== cookieState) return redirectWithError(req, res, 'invalid_state');
 
   res.clearCookie('google_oauth_state');
+  clearOAuthReturnOriginCookie(res);
 
   try {
     const tokenRes = await fetch(GOOGLE_TOKEN_URL, {
@@ -208,19 +215,16 @@ router.get('/google/callback', async (req, res) => {
       sessionToken: session.sessionToken
     });
 
-    // Redirect with tokens for frontend processing
-    const redirectUrl = new URL(`${getFrontendUrl()}/auth/callback`);
-    redirectUrl.searchParams.set('token', session.accessToken);
-    redirectUrl.searchParams.set('refreshToken', session.refreshToken);
-    redirectUrl.searchParams.set('sessionToken', session.sessionToken);
+    // Redirect without bearer tokens; the frontend verifies the cookie session.
+    const redirectUrl = new URL('/auth/callback', returnOrigin);
 
     res.redirect(redirectUrl.toString());
   } catch (err) {
     console.error('Google callback error:', err);
     if (err.message === 'MAX_SESSIONS_EXCEEDED') {
-      return redirectWithError(res, 'max_sessions_exceeded');
+      return redirectWithError(req, res, 'max_sessions_exceeded');
     }
-    redirectWithError(res, 'provider_failed');
+    redirectWithError(req, res, 'provider_failed');
   }
 });
 

@@ -29,7 +29,7 @@ function CheckRow({ ok, title, detail, action }) {
 
 export default function SecurityAudit({ signals: providedSignals = null }) {
   const { user } = useStore();
-  const ownSignals = useBackendSignals({ intervalMs: 60_000, enabled: !providedSignals });
+  const ownSignals = useBackendSignals({ intervalMs: 60_000, enabled: !providedSignals && Boolean(user) });
   const signals = providedSignals || ownSignals;
   const providerStatus = signals.diagnostics?.providerStatus || {};
   const activeProvider = providerStatus.activeProvider || 'gemini';

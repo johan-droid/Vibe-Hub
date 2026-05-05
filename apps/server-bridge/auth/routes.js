@@ -23,12 +23,21 @@ import {
   logoutAllSessions,
   getUserActiveSessions,
   createSession,
-  validateSession,
-  validateAccessToken
+  validateSession
 } from './session.js';
 import { getUserAuthHistory } from '../db.js';
 
 const router = Router();
+
+function authUserPayload(req) {
+  return {
+    id: req.user.id,
+    email: req.user.email,
+    name: req.user.name,
+    avatarUrl: req.user.avatar_url,
+    provider: req.user.provider
+  };
+}
 
 /**
  * POST /api/auth/refresh
@@ -37,15 +46,39 @@ const router = Router();
 router.post('/refresh', handleRefreshToken);
 
 /**
+ * GET /api/auth/status
+ * Non-erroring session probe for app bootstrap.
+ */
+router.get('/status', optionalAuth, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+
+  if (!req.user) {
+    return res.json({
+      success: true,
+      authenticated: false,
+      user: null,
+      sessionId: null
+    });
+  }
+
+  res.json({
+    success: true,
+    authenticated: true,
+    user: authUserPayload(req),
+    sessionId: req.sessionId
+  });
+});
+
+/**
  * POST /api/auth/logout
  * Logout current session
  */
-router.post('/logout', requireAuth, async (req, res) => {
+router.post('/logout', optionalAuth, async (req, res) => {
   try {
     const { sessionId } = req;
-    const userId = req.user.id;
+    const userId = req.user?.id;
 
-    if (sessionId) {
+    if (userId && sessionId) {
       await logoutSession(userId, sessionId, 'user_logout');
     }
 
@@ -168,13 +201,7 @@ router.get('/me', optionalAuth, async (req, res) => {
 
     res.json({
       success: true,
-      user: {
-        id: req.user.id,
-        email: req.user.email,
-        name: req.user.name,
-        avatarUrl: req.user.avatar_url,
-        provider: req.user.provider
-      },
+      user: authUserPayload(req),
       sessionId: req.sessionId
     });
   } catch (err) {

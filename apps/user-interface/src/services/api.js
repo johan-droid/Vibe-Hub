@@ -31,12 +31,16 @@ async function readError(res) {
  */
 class ApiClient {
   constructor() {
-    this.accessToken = localStorage.getItem(ACCESS_TOKEN_KEY) || null;
-    this.refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY) || null;
-    this.sessionToken = localStorage.getItem(SESSION_TOKEN_KEY) || null;
+    this.accessToken = null;
+    this.refreshToken = null;
+    this.sessionToken = null;
     this.csrfToken = null;
     this.csrfPromise = null;
     this.refreshPromise = null;
+    this.googleConfigPromise = null;
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
+    localStorage.removeItem(SESSION_TOKEN_KEY);
   }
 
   getToken() {
@@ -45,13 +49,14 @@ class ApiClient {
     if (legacy) {
       this.accessToken = legacy;
       localStorage.removeItem('selina_token');
-      localStorage.setItem(ACCESS_TOKEN_KEY, legacy);
+      localStorage.removeItem(ACCESS_TOKEN_KEY);
     }
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
     return this.accessToken;
   }
 
   hasToken() {
-    return Boolean(this.getToken() || this.sessionToken);
+    return Boolean(this.getToken());
   }
 
   setToken(token) {
@@ -59,9 +64,9 @@ class ApiClient {
     this.setAccessToken(token);
   }
 
-  setAccessToken(token) {
+  setAccessToken(token, { persist = false } = {}) {
     this.accessToken = token;
-    if (token) {
+    if (token && persist) {
       localStorage.setItem(ACCESS_TOKEN_KEY, token);
     } else {
       localStorage.removeItem(ACCESS_TOKEN_KEY);
@@ -70,26 +75,18 @@ class ApiClient {
 
   setRefreshToken(token) {
     this.refreshToken = token;
-    if (token) {
-      localStorage.setItem(REFRESH_TOKEN_KEY, token);
-    } else {
-      localStorage.removeItem(REFRESH_TOKEN_KEY);
-    }
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
   }
 
   setSessionToken(token) {
     this.sessionToken = token;
-    if (token) {
-      localStorage.setItem(SESSION_TOKEN_KEY, token);
-    } else {
-      localStorage.removeItem(SESSION_TOKEN_KEY);
-    }
+    localStorage.removeItem(SESSION_TOKEN_KEY);
   }
 
   setAuthTokens({ accessToken, refreshToken, sessionToken }) {
-    this.setAccessToken(accessToken);
-    if (refreshToken) this.setRefreshToken(refreshToken);
-    if (sessionToken) this.setSessionToken(sessionToken);
+    this.setAccessToken(accessToken || null);
+    this.setRefreshToken(refreshToken || null);
+    this.setSessionToken(sessionToken || null);
   }
 
   clearToken() {
@@ -134,11 +131,10 @@ class ApiClient {
 
         const data = await res.json();
         if (data.success) {
-          this.setAuthTokens({
-            accessToken: data.accessToken,
-            refreshToken: data.refreshToken
-          });
-          return data.accessToken;
+          if (data.accessToken) {
+            this.setAccessToken(data.accessToken);
+          }
+          return data.accessToken || null;
         }
         throw new Error('Invalid refresh response');
       } catch (err) {
@@ -291,19 +287,36 @@ class ApiClient {
     return this.get('/api/me');
   }
 
+  /** Probe current auth state without causing an expected 401 on app startup */
+  async authStatus() {
+    return this.get('/api/auth/status', { skipRefresh: true });
+  }
+
   /** Get Google OAuth URL */
   getGoogleAuthUrl() {
-    return `${API_BASE}/api/auth/google`;
+    const url = new URL(`${API_BASE}/api/auth/google`);
+    url.searchParams.set('returnOrigin', window.location.origin);
+    return url.toString();
   }
 
   /** Get Google Config */
   async getGoogleConfig() {
-    return this.get('/api/auth/config');
+    if (!this.googleConfigPromise) {
+      this.googleConfigPromise = this.get('/api/auth/config');
+    }
+    return this.googleConfigPromise;
   }
 
   /** Verify Google Token (Popup/One-Tap) */
-  async verifyGoogleToken(token) {
-    return this.post('/api/auth/google/verify-token', { token });
+  async verifyGoogleToken(tokenOrPayload) {
+    const body = typeof tokenOrPayload === 'object' && tokenOrPayload !== null
+      ? {
+          credential: tokenOrPayload.credential,
+          access_token: tokenOrPayload.accessToken || tokenOrPayload.access_token,
+        }
+      : { credential: tokenOrPayload };
+
+    return this.post('/api/auth/google/verify-token', body, { skipCsrf: true });
   }
 
   // --- REPOSITORY MANAGEMENT (V6) ---
@@ -347,7 +360,9 @@ class ApiClient {
 
   /** Get GitHub OAuth URL */
   getGithubAuthUrl() {
-    return `${API_BASE}/api/auth/github`;
+    const url = new URL(`${API_BASE}/api/auth/github`);
+    url.searchParams.set('returnOrigin', window.location.origin);
+    return url.toString();
   }
 
   // --- SAAS-GRADE AUTH MANAGEMENT ---

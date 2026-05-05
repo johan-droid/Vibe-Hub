@@ -1,19 +1,17 @@
 import jwt from 'jsonwebtoken';
 import {
-  validateAccessToken,
+  validateAccessTokenSession,
   validateSession,
   rotateRefreshToken,
-  generateSecureToken,
-  hashToken
 } from './session.js';
 
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'test' || process.env.VITEST ? 'test-secret' : undefined);
 
 function isSecureCookie() {
   return process.env.NODE_ENV === 'production' && String(process.env.UI_ORIGIN).startsWith('https://');
 }
 
-if (!JWT_SECRET && process.env.NODE_ENV !== 'test') {
+if (!JWT_SECRET) {
   console.error('FATAL: JWT_SECRET environment variable is not set.');
   process.exit(1);
 }
@@ -51,20 +49,9 @@ function parseCookies(header = '') {
   }
 }
 
-/**
- * Read access token from Authorization header or cookies
- */
-function readAccessToken(req) {
-  const header = req.headers.authorization;
+function readBearerToken(header) {
   if (header?.startsWith('Bearer ')) return header.split(' ')[1];
-  return parseCookies(req.headers.cookie).selina_access_token;
-}
-
-/**
- * Read session token from HTTP-only cookie
- */
-function readSessionToken(req) {
-  return parseCookies(req.headers.cookie).selina_session;
+  return null;
 }
 
 /**
@@ -74,6 +61,46 @@ function readRefreshToken(req) {
   return parseCookies(req.headers.cookie).selina_refresh;
 }
 
+function normalizeUser(session) {
+  return {
+    id: session.userId,
+    email: session.email,
+    name: session.name,
+    avatar_url: session.avatarUrl,
+    provider: session.provider
+  };
+}
+
+export async function authenticateFromHeaders(headers = {}, explicitAccessToken = null) {
+  const cookies = parseCookies(headers.cookie);
+  const accessToken =
+    explicitAccessToken ||
+    readBearerToken(headers.authorization) ||
+    cookies.selina_access_token;
+
+  if (accessToken) {
+    const session = await validateAccessTokenSession(accessToken);
+    if (session) {
+      return {
+        user: normalizeUser(session),
+        sessionId: session.sessionId
+      };
+    }
+  }
+
+  if (cookies.selina_session) {
+    const session = await validateSession(cookies.selina_session);
+    if (session) {
+      return {
+        user: normalizeUser(session),
+        sessionId: session.sessionId
+      };
+    }
+  }
+
+  return null;
+}
+
 /**
  * Set authentication cookies with security flags
  */
@@ -81,9 +108,9 @@ export function setAuthCookies(res, { accessToken, refreshToken, sessionToken })
   const secure = isSecureCookie();
   const sameSite = secure ? 'none' : 'lax';
 
-  // Access token (short-lived, accessible for API calls)
+  // Access token (short-lived, sent automatically with API calls)
   res.cookie('selina_access_token', accessToken, {
-    httpOnly: false, // Allow JS to read for API calls
+    httpOnly: true,
     secure,
     sameSite,
     maxAge: 15 * 60 * 1000, // 15 minutes
@@ -130,32 +157,11 @@ export function clearAuthCookies(res) {
  * Supports both JWT Bearer tokens and HTTP-only session cookies
  */
 export async function requireAuth(req, res, next) {
-  // Try access token first (from Authorization header or cookie)
-  const accessToken = readAccessToken(req);
-  if (accessToken) {
-    const decoded = validateAccessToken(accessToken);
-    if (decoded) {
-      req.user = { id: decoded.id };
-      req.sessionId = decoded.sessionId;
-      return next();
-    }
-  }
-
-  // Try session cookie (HTTP-only)
-  const sessionToken = readSessionToken(req);
-  if (sessionToken) {
-    const session = await validateSession(sessionToken);
-    if (session) {
-      req.user = {
-        id: session.userId,
-        email: session.email,
-        name: session.name,
-        avatar_url: session.avatarUrl,
-        provider: session.provider
-      };
-      req.sessionId = session.sessionId;
-      return next();
-    }
+  const auth = await authenticateFromHeaders(req.headers);
+  if (auth) {
+    req.user = auth.user;
+    req.sessionId = auth.sessionId;
+    return next();
   }
 
   // No valid auth found
@@ -167,32 +173,11 @@ export async function requireAuth(req, res, next) {
  * Useful for endpoints that work differently for authenticated users
  */
 export async function optionalAuth(req, res, next) {
-  // Try access token first
-  const accessToken = readAccessToken(req);
-  if (accessToken) {
-    const decoded = validateAccessToken(accessToken);
-    if (decoded) {
-      req.user = { id: decoded.id };
-      req.sessionId = decoded.sessionId;
-      return next();
-    }
-  }
-
-  // Try session cookie
-  const sessionToken = readSessionToken(req);
-  if (sessionToken) {
-    const session = await validateSession(sessionToken);
-    if (session) {
-      req.user = {
-        id: session.userId,
-        email: session.email,
-        name: session.name,
-        avatar_url: session.avatarUrl,
-        provider: session.provider
-      };
-      req.sessionId = session.sessionId;
-      return next();
-    }
+  const auth = await authenticateFromHeaders(req.headers);
+  if (auth) {
+    req.user = auth.user;
+    req.sessionId = auth.sessionId;
+    return next();
   }
 
   // No auth - continue without user
@@ -221,9 +206,7 @@ export async function handleRefreshToken(req, res) {
     });
 
     return res.json({
-      success: true,
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken // Also return for non-cookie clients
+      success: true
     });
   } catch (err) {
     clearAuthCookies(res);
@@ -244,11 +227,3 @@ export function verifyToken(token) {
   }
 }
 
-/**
- * Legacy: Read token from request (header or cookie)
- */
-function readToken(req) {
-  const header = req.headers.authorization;
-  if (header?.startsWith('Bearer ')) return header.split(' ')[1];
-  return parseCookies(req.headers.cookie).selina_token || readAccessToken(req);
-}

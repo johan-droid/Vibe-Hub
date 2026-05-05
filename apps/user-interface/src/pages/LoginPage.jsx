@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { GoogleOAuthProvider, useGoogleLogin } from '@react-oauth/google';
 import { 
   Github, 
   ArrowLeft, 
@@ -34,113 +33,32 @@ const staggerContainer = {
   },
 };
 
-const GoogleLoginButton = ({ onLoading }) => {
-  const navigate = useNavigate();
-  const setUser = useStore(state => state.setUser);
-
-  const googleLogin = useGoogleLogin({
-    flow: 'implicit',
-    onSuccess: async (tokenResponse) => {
-      onLoading(true);
-      try {
-        const res = await api.post('/api/auth/google/verify-token', {
-          access_token: tokenResponse.access_token
-        }, { skipCsrf: true });
-
-        if (res.success && res.token) {
-          // Store tokens FIRST (synchronous localStorage)
-          api.setAuthTokens({
-            accessToken: res.token,
-            refreshToken: res.refreshToken,
-            sessionToken: res.sessionToken
-          });
-          
-          // Store user in Zustand (triggers re-render)
-          setUser(res.user);
-          
-          // Give store time to persist, then navigate
-          await new Promise(resolve => setTimeout(resolve, 100));
-          navigate('/dashboard', { replace: true });
-        } else {
-          alert('Login failed: ' + (res.error || 'Invalid response'));
-        }
-      } catch (err) {
-        console.error('Login error:', err);
-        alert('Login failed: ' + (err.message || 'Network error'));
-      } finally {
-        onLoading(false);
-      }
-    },
-    onError: error => {
-        // Google login error
-      alert('Google login failed: ' + (error.error_description || error.error || 'Unknown error'));
-    },
-    onNonOAuthError: error => {
-        // Google login popup error
-      alert('Google login popup failed. Please check popup blocker settings.');
-    }
-  });
-
-  const handleGoogleClick = () => {
-    try {
-      googleLogin();
-      // Popup opened
-    } catch (err) {
-      // Failed to open login popup
-      alert('Failed to open Google login. Please check if popups are blocked.');
-    }
-  };
-
-  return (
-    <Button
-      onClick={handleGoogleClick}
-      className="w-full h-14 rounded-xl bg-white text-gray-900 border border-outline-variant hover:bg-gray-100 hover:border-google-blue/40 shadow-sm transition-all duration-300"
-      size="md"
-    >
-      <div className="flex items-center gap-3 w-full justify-center">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M23.766 12.2764C23.766 11.4607 23.6999 10.6406 23.5588 9.83807H12.24V14.4591H18.7217C18.4528 15.9105 17.5885 17.1586 16.3814 17.9729V20.9622H20.1509C22.3655 18.922 23.6514 15.8805 23.766 12.2764Z" fill="#4285F4"/>
-          <path d="M12.24 24C15.486 24 18.2259 22.9247 20.1554 21.0639L16.3859 18.0746C15.3406 18.7845 14.0042 19.1979 12.2445 19.1979C9.10813 19.1979 6.44976 17.0784 5.49845 14.2255H1.60303V17.2435C3.60634 21.2335 7.73357 24 12.24 24Z" fill="#34A853"/>
-          <path d="M5.49392 14.2255C5.24151 13.4735 5.10915 12.673 5.10915 11.8545C5.10915 11.036 5.24151 10.2355 5.49392 9.4835V6.46545H1.60303C0.75168 8.16364 0.259766 10.05 0.259766 11.8545C0.259766 13.6591 0.75168 15.5455 1.60303 17.2435L5.49392 14.2255Z" fill="#FBBC05"/>
-          <path d="M12.24 4.80205C14.0087 4.80205 15.5833 5.40909 16.8378 6.59318L20.2414 3.18955C18.2169 1.29818 15.477 0.254545 12.24 0.254545C7.73357 0.254545 3.02102 3.02102 1.60303 7.01102L5.49392 10.0291C6.44523 7.17614 9.1036 4.80205 12.24 4.80205Z" fill="#EA4335"/>
-        </svg>
-        <span className="text-base font-bold">Continue with Google</span>
-      </div>
-    </Button>
-  );
-};
-
 export default function LoginPage() {
   const navigate = useNavigate();
-  const user = useStore(state => state.user);
-  const [googleConfig, setGoogleConfig] = useState(null);
+  const logout = useStore(state => state.logout);
   const [isLoading, setIsLoading] = useState(false);
-  const [configError, setConfigError] = useState(null);
 
-  // Redirect if already logged in
-  useEffect(() => {
-    if (user) {
-      // User already authenticated
-      navigate('/dashboard', { replace: true });
+  const handleLogin = async (provider) => {
+    setIsLoading(true);
+
+    const authUrl = provider === 'google'
+      ? api.getGoogleAuthUrl()
+      : provider === 'github'
+        ? api.getGithubAuthUrl()
+        : null;
+
+    if (!authUrl) {
+      setIsLoading(false);
+      return;
     }
-  }, [user, navigate]);
 
-  useEffect(() => {
-    // Load Google OAuth configuration
-    api.getGoogleConfig().then(config => {
-      // Google config loaded successfully
-      setGoogleConfig(config);
-    }).catch(err => {
-      // Failed to load Google config
-      setConfigError(err.message);
-    });
-  }, []);
-
-  const handleLogin = (provider) => {
-    if (provider === 'google' && !googleConfig) {
-      window.location.href = api.getGoogleAuthUrl();
-    } else if (provider === 'github') {
-      window.location.href = api.getGithubAuthUrl();
+    try {
+      logout();
+      await api.logout();
+    } catch {
+      api.clearAllTokens();
+    } finally {
+      window.location.assign(authUrl);
     }
   };
 
@@ -183,31 +101,22 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-4">
-            {configError && (
-              <div className="p-3 rounded-lg bg-error/10 text-error text-sm">
-                Config error: {configError}
+            <Button
+              onClick={() => handleLogin('google')}
+              disabled={isLoading}
+              className="w-full h-14 rounded-xl bg-white text-gray-900 border border-outline-variant hover:bg-gray-100 hover:border-google-blue/40 shadow-sm transition-all duration-300"
+              size="md"
+            >
+              <div className="flex items-center gap-3 w-full justify-center">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M23.766 12.2764C23.766 11.4607 23.6999 10.6406 23.5588 9.83807H12.24V14.4591H18.7217C18.4528 15.9105 17.5885 17.1586 16.3814 17.9729V20.9622H20.1509C22.3655 18.922 23.6514 15.8805 23.766 12.2764Z" fill="#4285F4"/>
+                  <path d="M12.24 24C15.486 24 18.2259 22.9247 20.1554 21.0639L16.3859 18.0746C15.3406 18.7845 14.0042 19.1979 12.2445 19.1979C9.10813 19.1979 6.44976 17.0784 5.49845 14.2255H1.60303V17.2435C3.60634 21.2335 7.73357 24 12.24 24Z" fill="#34A853"/>
+                  <path d="M5.49392 14.2255C5.24151 13.4735 5.10915 12.673 5.10915 11.8545C5.10915 11.036 5.24151 10.2355 5.49392 9.4835V6.46545H1.60303C0.75168 8.16364 0.259766 10.05 0.259766 11.8545C0.259766 13.6591 0.75168 15.5455 1.60303 17.2435L5.49392 14.2255Z" fill="#FBBC05"/>
+                  <path d="M12.24 4.80205C14.0087 4.80205 15.5833 5.40909 16.8378 6.59318L20.2414 3.18955C18.2169 1.29818 15.477 0.254545 12.24 0.254545C7.73357 0.254545 3.02102 3.02102 1.60303 7.01102L5.49392 10.0291C6.44523 7.17614 9.1036 4.80205 12.24 4.80205Z" fill="#EA4335"/>
+                </svg>
+                <span className="text-base font-bold">{isLoading ? 'Opening Google...' : 'Continue with Google'}</span>
               </div>
-            )}
-            {googleConfig ? (
-              <GoogleLoginButton onLoading={setIsLoading} />
-            ) : (
-              <Button
-                onClick={() => handleLogin('google')}
-                disabled={isLoading}
-                className="w-full h-14 rounded-xl bg-white text-gray-900 border border-outline-variant hover:bg-gray-100 hover:border-google-blue/40 shadow-sm transition-all duration-300"
-                size="md"
-              >
-                <div className="flex items-center gap-3 w-full justify-center">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M23.766 12.2764C23.766 11.4607 23.6999 10.6406 23.5588 9.83807H12.24V14.4591H18.7217C18.4528 15.9105 17.5885 17.1586 16.3814 17.9729V20.9622H20.1509C22.3655 18.922 23.6514 15.8805 23.766 12.2764Z" fill="#4285F4"/>
-                    <path d="M12.24 24C15.486 24 18.2259 22.9247 20.1554 21.0639L16.3859 18.0746C15.3406 18.7845 14.0042 19.1979 12.2445 19.1979C9.10813 19.1979 6.44976 17.0784 5.49845 14.2255H1.60303V17.2435C3.60634 21.2335 7.73357 24 12.24 24Z" fill="#34A853"/>
-                    <path d="M5.49392 14.2255C5.24151 13.4735 5.10915 12.673 5.10915 11.8545C5.10915 11.036 5.24151 10.2355 5.49392 9.4835V6.46545H1.60303C0.75168 8.16364 0.259766 10.05 0.259766 11.8545C0.259766 13.6591 0.75168 15.5455 1.60303 17.2435L5.49392 14.2255Z" fill="#FBBC05"/>
-                    <path d="M12.24 4.80205C14.0087 4.80205 15.5833 5.40909 16.8378 6.59318L20.2414 3.18955C18.2169 1.29818 15.477 0.254545 12.24 0.254545C7.73357 0.254545 3.02102 3.02102 1.60303 7.01102L5.49392 10.0291C6.44523 7.17614 9.1036 4.80205 12.24 4.80205Z" fill="#EA4335"/>
-                  </svg>
-                  <span className="text-base font-bold">{isLoading ? 'Loading...' : 'Continue with Google'}</span>
-                </div>
-              </Button>
-            )}
+            </Button>
 
             <Button
               onClick={() => handleLogin('github')}
@@ -239,14 +148,6 @@ export default function LoginPage() {
       </motion.div>
     </div>
   );
-
-  if (googleConfig) {
-    return (
-      <GoogleOAuthProvider clientId={googleConfig.clientId}>
-        {content}
-      </GoogleOAuthProvider>
-    );
-  }
 
   return content;
 }

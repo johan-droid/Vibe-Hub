@@ -11,10 +11,13 @@ import {
   Globe,
   Layout,
   Lock,
+  Mail,
   Play,
+  Shield,
   ShieldCheck,
   Sparkles,
   Terminal,
+  Twitter,
   Zap,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -270,6 +273,107 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* Stats Section */}
+        <section className="py-24 md:py-32 px-6 md:px-10 border-y border-outline-variant/20 bg-surface-container-lowest/50">
+          <div className="mx-auto max-w-7xl">
+            <motion.div 
+              initial="hidden"
+              whileInView="show"
+              viewport={{ once: true }}
+              variants={staggerContainer}
+              className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12"
+            >
+              {[
+                { value: '50K+', label: 'Active Developers' },
+                { value: '2M+', label: 'Code Generations' },
+                { value: '99.9%', label: 'Uptime SLA' },
+                { value: '4.9/5', label: 'User Rating' },
+              ].map((stat, idx) => (
+                <motion.div 
+                  key={idx}
+                  variants={fadeUp}
+                  className="text-center"
+                >
+                  <div className="text-4xl md:text-5xl font-black text-gradient-google mb-2">{stat.value}</div>
+                  <div className="text-sm font-bold uppercase tracking-wider text-on-surface-variant">{stat.label}</div>
+                </motion.div>
+              ))}
+            </motion.div>
+          </div>
+        </section>
+
+        {/* Testimonials Section */}
+        <section className="py-24 md:py-40 px-6 md:px-10">
+          <div className="mx-auto max-w-7xl">
+            <motion.div 
+              initial="hidden"
+              whileInView="show"
+              viewport={{ once: true }}
+              variants={staggerContainer}
+              className="text-center mb-16 md:mb-24"
+            >
+              <motion.p variants={fadeUp} className="label-large text-primary mb-4">Testimonials</motion.p>
+              <motion.h2 variants={fadeUp} className="headline-large mb-6">
+                Loved by developers <br />
+                <span className="text-gradient">worldwide</span>
+              </motion.h2>
+            </motion.div>
+
+            <motion.div 
+              initial="hidden"
+              whileInView="show"
+              viewport={{ once: true }}
+              variants={staggerContainer}
+              className="grid md:grid-cols-3 gap-6"
+            >
+              {[
+                {
+                  quote: "Selina has completely transformed how I build software. It's like having a senior developer pair programming with me 24/7.",
+                  author: 'Sarah Chen',
+                  role: 'Lead Engineer at TechCorp',
+                  avatar: 'SC'
+                },
+                {
+                  quote: "The memory feature is game-changing. Selina remembers my preferences and coding style across all my projects.",
+                  author: 'Marcus Johnson',
+                  role: 'Indie Developer',
+                  avatar: 'MJ'
+                },
+                {
+                  quote: "Best AI coding assistant I've used. The integration with my existing workflow was seamless and immediate.",
+                  author: 'Elena Rodriguez',
+                  role: 'CTO at StartupXYZ',
+                  avatar: 'ER'
+                },
+              ].map((testimonial, idx) => (
+                <motion.div
+                  key={idx}
+                  variants={bentoItem}
+                  className="panel p-8 flex flex-col"
+                >
+                  <div className="flex gap-1 mb-6">
+                    {[...Array(5)].map((_, i) => (
+                      <Sparkles key={i} size={16} className="text-google-yellow fill-google-yellow" />
+                    ))}
+                  </div>
+                  <p className="text-base font-medium text-on-surface leading-relaxed mb-8 flex-grow">
+                    "{testimonial.quote}"
+                  </p>
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                      <span className="text-sm font-black text-primary">{testimonial.avatar}</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-on-surface">{testimonial.author}</p>
+                      <p className="text-xs font-medium text-on-surface-variant">{testimonial.role}</p>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </motion.div>
+          </div>
+        </section>
+
         {/* Call to Action */}
         <section className="py-24 md:py-40 px-6 md:px-10">
           <div className="mx-auto max-w-6xl">
@@ -316,51 +420,194 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer className="border-t border-outline-variant/30 bg-surface-container-lowest px-6 py-16 md:px-10 md:py-24">
-        <div className="mx-auto max-w-7xl grid gap-12 md:grid-cols-4 lg:grid-cols-5">
-          <div className="lg:col-span-2">
-            <div className="flex items-center gap-4 mb-8">
-              <BrandMark />
-              <span className="text-2xl font-black tracking-tight text-on-surface">Selina</span>
-            </div>
-            <p className="text-base font-medium text-on-surface-variant max-w-sm leading-relaxed mb-8">
-              The agentic workspace built for creators. Ship faster, safer, and with more joy.
-            </p>
-            <div className="flex gap-5 text-on-surface-variant">
-              <a href="https://github.com/vibe-platform/vibe-hub" target="_blank" rel="noreferrer" className="hover:text-primary transition-colors"><Github size={24} /></a>
-              <a href="#" className="hover:text-primary transition-colors"><Globe size={24} /></a>
-            </div>
-          </div>
-          <div>
-            <h4 className="text-sm font-black uppercase tracking-widest text-on-surface mb-6">Product</h4>
-            <ul className="space-y-4 text-base font-medium text-on-surface-variant">
-              <li><a href="#capabilities" className="hover:text-primary transition-colors">Features</a></li>
-              <li><a href="#" className="hover:text-primary transition-colors">Pricing</a></li>
-              <li><a href="#" className="hover:text-primary transition-colors">Changelog</a></li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="text-sm font-black uppercase tracking-widest text-on-surface mb-6">Resources</h4>
-            <ul className="space-y-4 text-base font-medium text-on-surface-variant">
-              <li><a href="#" className="hover:text-primary transition-colors">Documentation</a></li>
-              <li><a href="#" className="hover:text-primary transition-colors">Community</a></li>
-              <li><a href="#" className="hover:text-primary transition-colors">API</a></li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="text-sm font-black uppercase tracking-widest text-on-surface mb-6">Company</h4>
-            <ul className="space-y-4 text-base font-medium text-on-surface-variant">
-              <li><a href="#" className="hover:text-primary transition-colors">About</a></li>
-              <li><a href="#" className="hover:text-primary transition-colors">Privacy</a></li>
-              <li><a href="#" className="hover:text-primary transition-colors">Terms</a></li>
-            </ul>
+      {/* SaaS-Grade Professional Footer */}
+      <footer className="border-t border-outline-variant/30 bg-surface-container-lowest">
+        {/* Newsletter Section */}
+        <div className="px-6 md:px-10 py-16 md:py-20 border-b border-outline-variant/20">
+          <div className="mx-auto max-w-7xl">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="flex flex-col lg:flex-row items-center justify-between gap-10"
+            >
+              <div className="text-center lg:text-left">
+                <h3 className="text-2xl md:text-3xl font-black tracking-tight text-on-surface mb-3">
+                  Stay ahead of the curve
+                </h3>
+                <p className="text-base font-medium text-on-surface-variant max-w-md">
+                  Get weekly insights on AI development, productivity tips, and product updates.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/50" size={20} />
+                  <input 
+                    type="email" 
+                    placeholder="Enter your email"
+                    className="h-14 w-full sm:w-80 rounded-2xl bg-surface-container-low border border-outline-variant/50 pl-12 pr-4 text-base font-medium text-on-surface placeholder:text-on-surface-variant/50 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                  />
+                </div>
+                <Button 
+                  variant="filled" 
+                  size="lg" 
+                  className="h-14 px-8 rounded-2xl font-black whitespace-nowrap"
+                >
+                  Subscribe
+                </Button>
+              </div>
+            </motion.div>
           </div>
         </div>
-        <div className="mx-auto max-w-7xl mt-24 pt-12 border-t border-outline-variant/30 flex flex-col md:flex-row items-center justify-between gap-6">
-          <span className="text-sm font-medium text-on-surface-variant/60">© {new Date().getFullYear()} Selina Intelligence Labs. All rights reserved.</span>
-          <div className="flex items-center gap-2 text-sm font-bold text-google-green">
-            <span className={`h-2 w-2 rounded-full ${isOnline ? 'animate-pulse bg-google-green' : 'bg-google-red'}`} />
-            {isOnline ? 'All systems operational' : 'Partial outage'}
+
+        {/* Main Footer Content */}
+        <div className="px-6 md:px-10 py-16 md:py-24">
+          <div className="mx-auto max-w-7xl">
+            <div className="grid gap-12 md:gap-8 lg:grid-cols-12">
+              {/* Brand Column */}
+              <div className="lg:col-span-4">
+                <div className="flex items-center gap-3 mb-6">
+                  <BrandMark />
+                  <span className="text-2xl font-black tracking-tight text-on-surface">Selina</span>
+                </div>
+                <p className="text-base font-medium text-on-surface-variant leading-relaxed mb-6 max-w-sm">
+                  The agentic workspace that learns your style, connects your tools, and helps you ship faster with AI-powered intelligence.
+                </p>
+                
+                {/* Social Links */}
+                <div className="flex gap-3 mb-8">
+                  {[
+                    { icon: Github, href: 'https://github.com/vibe-platform/vibe-hub', label: 'GitHub' },
+                    { icon: Twitter, href: '#', label: 'Twitter' },
+                    { icon: Globe, href: '#', label: 'Website' },
+                  ].map((social) => (
+                    <a 
+                      key={social.label}
+                      href={social.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="h-10 w-10 rounded-xl bg-surface-container-low border border-outline-variant/30 flex items-center justify-center text-on-surface-variant hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all duration-300"
+                      aria-label={social.label}
+                    >
+                      <social.icon size={18} />
+                    </a>
+                  ))}
+                </div>
+
+                {/* Trust Badges */}
+                <div className="flex flex-wrap gap-3">
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-google-green/10 border border-google-green/20">
+                    <Shield size={14} className="text-google-green" />
+                    <span className="text-xs font-bold text-google-green">SOC 2 Compliant</span>
+                  </div>
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-google-blue/10 border border-google-blue/20">
+                    <Lock size={14} className="text-google-blue" />
+                    <span className="text-xs font-bold text-google-blue">GDPR Ready</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Links Columns */}
+              <div className="lg:col-span-8">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+                  {/* Product */}
+                  <div>
+                    <h4 className="text-sm font-black uppercase tracking-widest text-on-surface mb-5">Product</h4>
+                    <ul className="space-y-3">
+                      {['Features', 'Pricing', 'Changelog', 'Roadmap', 'Integrations'].map((item) => (
+                        <li key={item}>
+                          <a 
+                            href={item === 'Features' ? '#capabilities' : '#'} 
+                            className="text-sm font-medium text-on-surface-variant hover:text-primary transition-colors duration-200"
+                          >
+                            {item}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Resources */}
+                  <div>
+                    <h4 className="text-sm font-black uppercase tracking-widest text-on-surface mb-5">Resources</h4>
+                    <ul className="space-y-3">
+                      {['Documentation', 'API Reference', 'Community', 'Blog', 'Guides'].map((item) => (
+                        <li key={item}>
+                          <a 
+                            href="#" 
+                            className="text-sm font-medium text-on-surface-variant hover:text-primary transition-colors duration-200"
+                          >
+                            {item}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Company */}
+                  <div>
+                    <h4 className="text-sm font-black uppercase tracking-widest text-on-surface mb-5">Company</h4>
+                    <ul className="space-y-3">
+                      {['About', 'Careers', 'Contact', 'Partners', 'Press Kit'].map((item) => (
+                        <li key={item}>
+                          <a 
+                            href="#" 
+                            className="text-sm font-medium text-on-surface-variant hover:text-primary transition-colors duration-200"
+                          >
+                            {item}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Legal */}
+                  <div>
+                    <h4 className="text-sm font-black uppercase tracking-widest text-on-surface mb-5">Legal</h4>
+                    <ul className="space-y-3">
+                      {['Privacy Policy', 'Terms of Service', 'Cookie Policy', 'Security', 'Status'].map((item) => (
+                        <li key={item}>
+                          <a 
+                            href="#" 
+                            className="text-sm font-medium text-on-surface-variant hover:text-primary transition-colors duration-200"
+                          >
+                            {item}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Bar */}
+        <div className="border-t border-outline-variant/20 bg-surface-container-low/50">
+          <div className="mx-auto max-w-7xl px-6 md:px-10 py-6">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 text-sm font-medium text-on-surface-variant/60">
+                <span>© {new Date().getFullYear()} Selina Intelligence Labs</span>
+                <span className="hidden sm:inline">•</span>
+                <span>All rights reserved</span>
+              </div>
+
+              <div className="flex items-center gap-6">
+                {/* System Status */}
+                <div className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-surface-container-low border border-outline-variant/30">
+                  <span className={`h-2 w-2 rounded-full ${isOnline ? 'animate-pulse bg-google-green' : 'bg-google-red'}`} />
+                  <span className={`text-xs font-bold ${isOnline ? 'text-google-green' : 'text-google-red'}`}>
+                    {isOnline ? 'All Systems Operational' : 'Degraded Performance'}
+                  </span>
+                </div>
+                
+                {/* Version */}
+                <span className="text-xs font-medium text-on-surface-variant/40">
+                  v2.0.0-beta
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </footer>

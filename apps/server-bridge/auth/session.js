@@ -14,6 +14,7 @@ import jwt from 'jsonwebtoken';
 import {
   createUserSession,
   getUserSessionByToken,
+  getUserSessionById,
   updateSessionActivity,
   revokeUserSession,
   revokeAllUserSessions,
@@ -27,7 +28,7 @@ import {
   logAuthEvent
 } from '../db.js';
 
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'test' || process.env.VITEST ? 'test-secret' : undefined);
 const SESSION_EXPIRY_DAYS = parseInt(process.env.SESSION_EXPIRY_DAYS || '30', 10);
 const REFRESH_TOKEN_EXPIRY_DAYS = parseInt(process.env.REFRESH_TOKEN_EXPIRY_DAYS || '90', 10);
 const MAX_CONCURRENT_SESSIONS = parseInt(process.env.MAX_CONCURRENT_SESSIONS || '10', 10);
@@ -194,6 +195,34 @@ export function validateAccessToken(token) {
   }
 }
 
+function normalizeSession(session) {
+  return {
+    userId: session.user_id,
+    sessionId: session.id,
+    email: session.email,
+    name: session.name,
+    avatarUrl: session.avatar_url,
+    provider: session.provider,
+    expiresAt: session.expires_at
+  };
+}
+
+/**
+ * Validate a signed access token against its backing DB session.
+ * A JWT alone is not enough: revoked or expired sessions must stop working
+ * immediately instead of waiting for access-token expiry.
+ */
+export async function validateAccessTokenSession(token) {
+  const decoded = validateAccessToken(token);
+  if (!decoded?.id || !decoded?.sessionId || decoded.type !== 'access') return null;
+
+  const session = await getUserSessionById(decoded.sessionId);
+  if (!session || String(session.user_id) !== String(decoded.id)) return null;
+
+  await updateSessionActivity(session.id);
+  return normalizeSession(session);
+}
+
 /**
  * Exchange refresh token for new access token (token rotation)
  */
@@ -265,15 +294,7 @@ export async function validateSession(sessionToken) {
   // Update last activity
   await updateSessionActivity(session.id);
   
-  return {
-    userId: session.user_id,
-    sessionId: session.id,
-    email: session.email,
-    name: session.name,
-    avatarUrl: session.avatar_url,
-    provider: session.provider,
-    expiresAt: session.expires_at
-  };
+  return normalizeSession(session);
 }
 
 /**

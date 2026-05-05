@@ -24,7 +24,8 @@ export class SwarmSocket {
       ? 'wss://vibe-hub-bridge.onrender.com'
       : `ws://${window.location.hostname}:3001`);
     
-    this.ws = new WebSocket(`${wsBase}/ws?token=${this.token}`);
+    const tokenQuery = this.token ? `?token=${encodeURIComponent(this.token)}` : '';
+    this.ws = new WebSocket(`${wsBase}/ws${tokenQuery}`);
 
     this.ws.onopen = () => {
       this.emit('connected');
@@ -184,11 +185,12 @@ export class OrchestratorSocket {
   }
 
   connect(userId = null) {
-    const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    const SOCKET_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:3001`;
     
     this.socket = io(SOCKET_URL, {
       path: '/socket.io',
       auth: { token: api.getToken() },
+      withCredentials: true,
       autoConnect: true,
       reconnection: true,
       reconnectionAttempts: 5,
