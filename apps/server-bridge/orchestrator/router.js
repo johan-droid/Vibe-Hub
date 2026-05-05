@@ -303,6 +303,19 @@ function recordRollback(userId) {
     return state;
 }
 
+function validationDetails(error) {
+    const issues = error?.issues || error?.errors || [];
+    return issues.map(issue => ({
+        field: Array.isArray(issue.path) ? issue.path.join('.') : '',
+        message: issue.message
+    }));
+}
+
+function publicErrorMessage(error) {
+    if (process.env.NODE_ENV === 'production') return 'Internal server error';
+    return error?.message || 'Internal server error';
+}
+
 function authorizeVfsEntry(filePath, userId) {
     const entry = typeof vfs.getStagedFile === 'function' ? vfs.getStagedFile(filePath) : null;
     if (!entry) return { ok: false, status: 404, error: 'Staged file not found.' };
@@ -375,14 +388,21 @@ async function handleCodeJobStatus(req, res) {
 
     const job = await codeQueue.getStatus(req.params.jobId, req.user?.id);
     if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
-    if (job.forbidden) return res.status(403).json({ success: false, error: 'Forbidden' });
+    if (job.forbidden) return res.status(403).json({ success: false, error: 'You do not have access to this job.' });
 
     res.json({ success: true, job });
 }
 
 async function handleCommitRequest(req, res) {
     const parsed = req.validatedBody ? { success: true, data: req.validatedBody } : vfsCommitSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ success: false, error: 'Validation failed' });
+    if (!parsed.success) {
+        return res.status(400).json({
+            success: false,
+            error: 'Validation failed',
+            details: validationDetails(parsed.error),
+            requestId: req.id
+        });
+    }
 
     const { filePath, approved } = parsed.data;
     const authorization = authorizeVfsEntry(filePath, req.user?.id);
@@ -391,22 +411,24 @@ async function handleCommitRequest(req, res) {
     try {
         if (!approved) {
             vfs.rejectFile(filePath, 'User rejected', { userId: req.user?.id });
-            return res.json({ success: true, message: "Rejected" });
+            return res.json({ success: true, message: 'rejected', filePath });
         }
         await vfs.approveFile(filePath, { userId: req.user?.id });
         const entry = await vfs.commitToDisk(filePath, fs, { userId: req.user?.id });
-        res.json({ success: true, filePath: entry.filePath });
+        res.json({ success: true, message: 'committed', filePath: entry.filePath });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: publicErrorMessage(error) });
     }
 }
 
 async function handleGetPendingFiles(req, res) {
     try {
-        const pending = vfs.getPendingFiles().filter(e => String(e.metadata?.userId) === String(req.user?.id));
+        const pending = typeof vfs.getPendingFilesForUser === 'function'
+            ? vfs.getPendingFilesForUser(req.user?.id)
+            : vfs.getPendingFiles({ userId: req.user?.id }).filter(e => String(e.metadata?.userId) === String(req.user?.id));
         res.json({ success: true, files: pending });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: publicErrorMessage(error) });
     }
 }
 
@@ -415,7 +437,7 @@ async function handleGetVfsStats(req, res) {
         const stats = vfs.getStats({ userId: req.user?.id });
         res.json({ success: true, stats });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: publicErrorMessage(error) });
     }
 }
 

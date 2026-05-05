@@ -6,6 +6,14 @@
 
 import { z } from 'zod';
 
+function formatZodIssues(error) {
+  const issues = error?.issues || error?.errors || [];
+  return issues.map(e => ({
+    field: Array.isArray(e.path) ? e.path.join('.') : '',
+    message: e.message
+  }));
+}
+
 // Helper for path validation (prevents directory traversal)
 const safePath = z.string()
   .min(1, 'Path is required')
@@ -92,10 +100,7 @@ export function validateRequest(schema) {
         return res.status(400).json({
           success: false,
           error: 'Validation failed',
-          details: error.errors.map(e => ({
-            field: e.path.join('.'),
-            message: e.message
-          })),
+          details: formatZodIssues(error),
           requestId: req.id
         });
       }
@@ -116,7 +121,7 @@ export function validateQuery(schema) {
         return res.status(400).json({
           success: false,
           error: 'Query validation failed',
-          details: error.errors,
+          details: formatZodIssues(error),
           requestId: req.id
         });
       }
