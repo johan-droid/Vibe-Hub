@@ -6,6 +6,7 @@ const productionBaseEnv = {
   DATABASE_URL: 'postgres://user:pass@example.com:5432/db',
   JWT_SECRET: 'jwt-secret-for-tests',
   CSRF_SECRET: 'csrf-secret-for-tests',
+  VIBE_MASTER_KEY: 'master-key-for-tests',
   UI_ORIGIN: 'https://vibe-hub-ui.onrender.com',
   SELINA_MODEL_PROVIDER: 'nim',
   NIM_API_KEY: 'nim-key-for-tests',
@@ -33,6 +34,13 @@ describe('Environment validation', () => {
 
     expect(() => validateEnvironment(env))
       .toThrow('Missing required production environment variables: CSRF_SECRET');
+  });
+
+  it('requires VIBE_MASTER_KEY in production', () => {
+    const env = { ...productionBaseEnv, VIBE_MASTER_KEY: '' };
+
+    expect(() => validateEnvironment(env))
+      .toThrow('Missing required production environment variables: VIBE_MASTER_KEY');
   });
 
   it('requires credentials for the selected production model provider', () => {

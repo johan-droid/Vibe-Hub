@@ -17,7 +17,7 @@ class KeyManager {
         this.keys = new Map();
         return;
       }
-      throw new Error('FATAL SECURITY ERROR: VIBE_MASTER_KEY environment variable is required');
+      throw new Error('FATAL SECURITY ERROR: VIBE_MASTER_KEY is required. Set it in Render Dashboard env vars or apply render.yaml with VIBE_MASTER_KEY generateValue; do not commit this secret.');
     }
     this.masterKey = process.env.VIBE_MASTER_KEY;
     this.keys = new Map();

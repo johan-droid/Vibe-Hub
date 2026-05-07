@@ -10,6 +10,7 @@ const envSchema = z.object({
   REDIS_URL: optionalUrl,
   JWT_SECRET: z.string().optional(),
   CSRF_SECRET: z.string().optional(),
+  VIBE_MASTER_KEY: z.string().optional(),
   UI_ORIGIN: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
@@ -58,7 +59,7 @@ export function validateEnvironment(env = process.env) {
   if (env.NODE_ENV === 'production') {
     const activeProvider = (env.SELINA_MODEL_PROVIDER || env.SELINA_AGENT_PROVIDER || 'nim').toLowerCase();
     const providerKey = PROVIDER_ENV_KEYS[activeProvider];
-    const required = ['DATABASE_URL', 'JWT_SECRET', 'CSRF_SECRET', 'UI_ORIGIN'];
+    const required = ['DATABASE_URL', 'JWT_SECRET', 'CSRF_SECRET', 'VIBE_MASTER_KEY', 'UI_ORIGIN'];
 
     const missing = required.filter(key => !env[key]);
     const providerAliases = PROVIDER_ENV_ALIASES[activeProvider] || [providerKey].filter(Boolean);

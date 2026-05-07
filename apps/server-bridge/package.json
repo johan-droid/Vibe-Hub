@@ -4,6 +4,11 @@
   "private": true,
   "main": "index.js",
   "type": "module",
+  "packageManager": "npm@10.8.2",
+  "engines": {
+    "node": "20.x",
+    "npm": ">=10"
+  },
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",

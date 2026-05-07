@@ -3,6 +3,11 @@
   "version": "3.0.0",
   "private": true,
   "description": "Autonomous IDE powered by a multi-agent AI swarm",
+  "packageManager": "npm@10.8.2",
+  "engines": {
+    "node": "20.x",
+    "npm": ">=10"
+  },
   "workspaces": [
     "apps/user-interface",
     "apps/server-bridge"
