@@ -13,7 +13,9 @@
     "dev": "npx concurrently -n UI,BRAIN -c cyan,magenta \"npm run dev:ui\" \"npm run dev:server\"",
     "build:ui": "npm run build --workspace=apps/user-interface",
     "start:server": "npm run start --workspace=apps/server-bridge",
-    "validate": "node --check apps/server-bridge/index.js && node --check apps/server-bridge/orchestrator/index.js && node --check apps/server-bridge/orchestrator/skill-loader.js"
+    "validate": "node --check apps/server-bridge/index.js && node --check apps/server-bridge/orchestrator/index.js && node --check apps/server-bridge/orchestrator/skill-loader.js",
+    "sanitize": "node scripts/selina-sanitize.mjs",
+    "release:gate": "node scripts/selina-release-gate.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"
@@ -22,6 +24,9 @@
     "workbox-build": {
       "@rollup/plugin-terser": "^1.0.0"
     },
+    "dompurify": "^3.4.2",
+    "express-rate-limit": "^8.5.1",
+    "ip-address": "^10.2.0",
     "serialize-javascript": "^7.0.5"
   }
 }

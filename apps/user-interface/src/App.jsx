@@ -5,17 +5,21 @@ import { useStore } from './store/useStore';
 import { useJobResumption } from './hooks/useJobResumption';
 import { clearExpiredTier2 } from './utils/localStorage';
 import { FullPageLoader } from './components/LogoLoader';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { api } from './services/api';
+import { ThemeProvider } from "./context/ThemeContext";
+import "./styles/globals.css";
+import { SELINA_BRAND } from './brand/selina';
 
 // ── Lazy Pages (Performance) ──────────────────────────────────────────────────
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
-const Workspace = lazy(() => import('./pages/Workspace'));
 const AuthCallback = lazy(() => import('./pages/AuthCallback'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
 
 // ── Premium Initialization Loader ──────────────────────────────────────────────
 function LoadingScreen() {
-  return <FullPageLoader text="Selina" />;
+  return <FullPageLoader text={SELINA_BRAND.productName} />;
 }
 
 // ── Application Root ─────────────────────────────────────────────────────────
@@ -50,7 +54,15 @@ export default function App() {
       try {
         const profile = await api.authStatus();
         if (cancelled) return;
-        setUser(profile.authenticated ? profile.user : null);
+        const authenticatedUser = profile.authenticated ? profile.user : null;
+        setUser(authenticatedUser);
+        
+        // Fetch remote settings if authenticated
+        if (authenticatedUser) {
+          useStore.getState().fetchSettings().catch(err => {
+            console.error('[App] Failed to fetch settings:', err);
+          });
+        }
       } catch {
         if (cancelled) return;
         setUser(null);
@@ -81,18 +93,20 @@ export default function App() {
           transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
           className="min-h-screen w-screen overflow-x-hidden bg-surface-container-lowest text-on-surface"
         >
-          <Suspense fallback={<LoadingScreen />}>
-            <Routes location={location} key={location.pathname}>
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/auth/callback" element={<AuthCallback />} />
-              <Route 
-                path="/dashboard/*" 
-                element={user ? <Workspace /> : <Navigate to="/login" replace state={{ from: location }} />} 
-              />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </Suspense>
+          <ErrorBoundary>
+            <Suspense fallback={<LoadingScreen />}>
+              <Routes location={location} key={location.pathname}>
+                <Route path="/" element={<LandingPage />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/auth/callback" element={<AuthCallback />} />
+                <Route 
+                  path="/dashboard/*" 
+                  element={user ? <Dashboard /> : <Navigate to="/login" replace state={{ from: location }} />} 
+                />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
         </motion.div>
       )}
     </AnimatePresence>

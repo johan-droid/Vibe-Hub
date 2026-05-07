@@ -1,12 +1,14 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { agentAuthManager } from '../auth/agent-auth.js';
 
 let _geminiClient = null;
 function getGeminiClient() {
   if (!_geminiClient) {
-    if (!process.env.GEMINI_API_KEY) {
+    const apiKey = agentAuthManager.getBearerToken('gemini');
+    if (!apiKey) {
       throw new Error('[Embeddings] GEMINI_API_KEY is not set.');
     }
-    _geminiClient = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    _geminiClient = new GoogleGenerativeAI(apiKey);
   }
   return _geminiClient;
 }

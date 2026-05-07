@@ -3,6 +3,7 @@ import { SwarmSocket } from '../services/socket.js';
 import { api } from '../services/api';
 import { VFSContainer } from '../vfs/container.js';
 import { useStore } from '../store/useStore';
+import { getAgentLoop } from '../services/AgentLoop.js';
 
 /**
  * useAgent — Connects the Brain to the client-side WebContainer.
@@ -15,6 +16,8 @@ export function useAgent() {
     addMessage, addThought, setThinking,
     setDiffData, setVfsTree, setStreamingMessage,
     setVfsStatus,
+    setAgentLoopStatus,
+    addOrchestratorEvent, setPendingApproval,
     user,
   } = useStore();
 
@@ -29,6 +32,69 @@ export function useAgent() {
     vfsRef.current = vfs;
     setVfsStatus?.('booting');
 
+    // Initialize agent loop with progress callbacks
+    getAgentLoop(vfs, 
+      (progress) => {
+        // Progress callback
+        const currentStatus = useStore.getState().agentLoopStatus;
+        setAgentLoopStatus({
+          isRunning: true,
+          currentIteration: progress.iteration || 0,
+          maxIterations: 10,
+          history: [...(currentStatus.history || []), progress].slice(-200)
+        });
+        addOrchestratorEvent({
+          type: 'state_change',
+          status: 'running',
+          title: progress.title || 'Agent loop progress',
+          summary: progress.message || progress.summary || '',
+          metadata: progress,
+          source: 'selina',
+        });
+      },
+      (result) => {
+        // Complete callback
+        addMessage({
+          role: 'system',
+          content: result.success 
+            ? `✅ Agent loop completed successfully after ${result.iterations} iterations!`
+            : `❌ Agent loop failed after ${result.iterations} iterations. Last error: ${result.errors?.[0]?.message || 'Unknown error'}`
+        });
+        setAgentLoopStatus({
+          isRunning: false,
+          currentIteration: result.iterations,
+          maxIterations: 10,
+          lastResult: result
+        });
+        addOrchestratorEvent({
+          type: 'result',
+          status: result.success ? 'completed' : 'failed',
+          title: result.success ? 'Agent loop completed' : 'Agent loop failed',
+          summary: result.success ? 'Validation finished successfully.' : result.errors?.[0]?.message || 'Agent loop failed.',
+          metadata: result,
+          source: 'selina',
+        });
+      },
+      (error) => {
+        // Error callback
+        addMessage({
+          role: 'system',
+          content: `Agent loop error: ${error.message}`
+        });
+        setAgentLoopStatus({
+          isRunning: false,
+          error: error.message
+        });
+        addOrchestratorEvent({
+          type: 'error',
+          status: 'failed',
+          title: 'Agent loop error',
+          summary: error.message,
+          source: 'selina',
+        });
+      }
+    );
+
     vfs.boot().then(() => {
       if (cancelled) return;
 
@@ -42,13 +108,13 @@ export function useAgent() {
         const result = await vfs.executeTool(name, args);
 
         // Emit diffs for surgical edits
-        if (name === 'edit_file' && result?.results) {
+        if (['edit_file', 'replace_file_content', 'multi_replace_file_content'].includes(name) && result?.results) {
           const successfulEdits = result.results.filter(r => r.status === 'ok');
           if (successfulEdits.length > 0) {
             try {
-              const newContent = await vfs.readFile(args.path);
+              const newContent = await vfs.readFile(args.path || args.TargetFile);
               setDiffData({
-                path: args.path,
+                path: args.path || args.TargetFile,
                 oldValue: '',
                 newValue: newContent,
                 isSurgical: true,
@@ -68,7 +134,7 @@ export function useAgent() {
         }
 
         // Refresh tree after file changes
-        if (['edit_file', 'create_file', 'write_file'].includes(name)) {
+        if (['edit_file', 'replace_file_content', 'multi_replace_file_content', 'create_file', 'write_file'].includes(name)) {
           vfs.getTree('.').then(tree => setVfsTree(tree));
         }
 
@@ -77,8 +143,19 @@ export function useAgent() {
 
       const onThought     = (msg) => addThought(msg);
       const onThinking    = (val) => setThinking(val);
-      const onStateChange = ({ state, message }) =>
+      const onStateChange = (event) => {
+        const { state, message } = event;
         useStore.getState().setAgentStatus(state, message);
+        addOrchestratorEvent({
+          ...event,
+          type: 'state_change',
+          status: state,
+          title: `State: ${state}`,
+          summary: message || '',
+          state,
+          source: 'orchestrator',
+        });
+      };
       const onStreamChunk = (delta) => {
         setStreamingMessage((prev) => (prev || '') + delta);
       };
@@ -87,6 +164,14 @@ export function useAgent() {
         // Clear streaming state and push final message to history
         setStreamingMessage(null);
         addMessage({ role: 'assistant', content });
+        addOrchestratorEvent({
+          type: 'result',
+          status: 'completed',
+          title: 'Assistant response',
+          summary: typeof content === 'string' ? content.slice(0, 220) : '',
+          details: content,
+          source: 'selina',
+        });
 
         const activeSessionId = useStore.getState().activeSessionId;
         if (activeSessionId) {
@@ -99,10 +184,40 @@ export function useAgent() {
         }
       };
 
-      const onError       = (msg) =>
+      const onError       = (msg) => {
         addMessage({ role: 'system', content: `Error: ${msg}` });
-      const onTerminal    = (data) =>
+        addOrchestratorEvent({
+          type: 'error',
+          status: 'failed',
+          title: 'Runtime error',
+          summary: msg,
+          source: 'orchestrator',
+        });
+      };
+      const onTerminal    = (data) => {
         useStore.getState().appendTerminalOutput(data);
+        addOrchestratorEvent({
+          type: 'terminal_output',
+          status: 'streaming',
+          title: 'Terminal output',
+          summary: typeof data === 'string' ? data.slice(0, 180) : '',
+          details: data,
+          source: 'terminal',
+        });
+      };
+      const onToolCall    = (event) => {
+        addOrchestratorEvent({
+          ...event,
+          type: 'tool_call',
+          title: event.status === 'started'
+            ? `Calling ${event.tool}`
+            : `${event.tool} ${event.status || 'updated'}`,
+          summary: event.error || `${event.metadata?.source || 'tool'} tool ${event.status || 'updated'}`,
+        });
+        setAgentLoopStatus({
+          isRunning: event.status === 'started' ? true : useStore.getState().agentLoopStatus.isRunning,
+        });
+      };
       const onConflict    = ({ risk }) =>
         addMessage({
           role: 'system',
@@ -115,6 +230,16 @@ export function useAgent() {
         });
 
       const onClarification = (data) => {
+        addOrchestratorEvent({
+          ...data,
+          type: 'clarification_request',
+          status: 'blocked',
+          id: data.clarificationId,
+          title: 'Clarification requested',
+          summary: data.context,
+          details: data.questions,
+          source: 'selina',
+        });
         addMessage({
           role:            'assistant',
           content:         `**I have some questions before proceeding:**\n\n${data.context}\n\n` +
@@ -125,6 +250,26 @@ export function useAgent() {
       };
 
       const onPlan = (data) => {
+        const isApprovalGate = data.steps?.some((step) =>
+          /mutate|execution|write|approval|tool can/i.test(`${step.reason || ''} ${step.action || ''}`)
+        );
+        setPendingApproval({
+          planId: data.planId,
+          steps: data.steps || [],
+          risks: data.risks || [],
+          kind: isApprovalGate ? 'tool_approval' : 'plan_review',
+          createdAt: new Date().toISOString(),
+        });
+        addOrchestratorEvent({
+          ...data,
+          type: 'plan_request',
+          status: 'approval_required',
+          id: data.planId,
+          title: isApprovalGate ? 'Approval gate' : 'Plan review requested',
+          summary: isApprovalGate ? 'A high-risk tool needs explicit consent.' : 'Selina is waiting for plan approval.',
+          details: { steps: data.steps, risks: data.risks },
+          source: 'selina',
+        });
         const stepsText = data.steps
           .map((s, i) => `${i + 1}. **${s.file}** — ${s.action}${s.reason ? ` _(${s.reason})_` : ''}`)
           .join('\n');
@@ -146,6 +291,7 @@ export function useAgent() {
       socket.on('result',           onResult);
       socket.on('error',            onError);
       socket.on('terminal_output',  onTerminal);
+      socket.on('tool_call',        onToolCall);
       socket.on('conflict_warning', onConflict);
       socket.on('clarification',    onClarification);
       socket.on('plan',             onPlan);
@@ -175,6 +321,7 @@ export function useAgent() {
         socket.off('result',           onResult);
         socket.off('error',            onError);
         socket.off('terminal_output',  onTerminal);
+        socket.off('tool_call',        onToolCall);
         socket.off('conflict_warning', onConflict);
         socket.off('clarification',    onClarification);
         socket.off('plan',             onPlan);
@@ -185,6 +332,15 @@ export function useAgent() {
       };
     }).catch((err) => {
       if (cancelled) return;
+      
+      // Check if this is actually a success case (singleton already booted)
+      if (err.message?.includes('single WebContainer instance')) {
+        // WebContainer is already running, which is fine
+        setVfsStatus?.('ready');
+        vfs.getTree('.').then(tree => setVfsTree(tree));
+        return;
+      }
+      
       setVfsStatus?.('error');
       addMessage({ role: 'system', content: `Workspace boot failed: ${err.message}` });
     });
@@ -221,7 +377,16 @@ export function useAgent() {
 
   const sendPlanApproval = useCallback((planId, approved) => {
     socketRef.current?.sendPlanResponse(planId, approved);
-  }, []);
+    setPendingApproval(null);
+    addOrchestratorEvent({
+      type: 'plan_response',
+      status: approved ? 'approved' : 'denied',
+      id: planId,
+      title: approved ? 'Approval granted' : 'Approval denied',
+      summary: approved ? 'The blocked action may continue.' : 'The blocked action was denied.',
+      source: 'user',
+    });
+  }, [addOrchestratorEvent, setPendingApproval]);
 
   return { sendPrompt, sendClarificationAnswer, sendPlanApproval };
 }

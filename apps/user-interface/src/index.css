@@ -4,20 +4,20 @@
 
 @layer base {
   :root {
-    --primary: 217 84% 56%;
+    --primary: 166 72% 42%;
     --on-primary: 0 0% 100%;
-    --primary-container: 217 88% 95%;
-    --on-primary-container: 218 72% 22%;
+    --primary-container: 166 76% 94%;
+    --on-primary-container: 166 72% 16%;
 
-    --secondary: 225 18% 20%;
+    --secondary: 38 78% 48%;
     --on-secondary: 0 0% 100%;
-    --secondary-container: 222 20% 94%;
-    --on-secondary-container: 225 18% 20%;
+    --secondary-container: 38 90% 93%;
+    --on-secondary-container: 38 65% 18%;
 
-    --tertiary: 150 56% 38%;
+    --tertiary: 231 74% 68%;
     --on-tertiary: 0 0% 100%;
-    --tertiary-container: 150 48% 94%;
-    --on-tertiary-container: 150 50% 20%;
+    --tertiary-container: 231 78% 94%;
+    --on-tertiary-container: 231 60% 22%;
 
     --error: 4 76% 55%;
     --on-error: 0 0% 100%;
@@ -55,24 +55,24 @@
   }
 
   [data-theme='dark'] {
-    --primary: 210 100% 66%; 
-    --on-primary: 210 100% 10%;
-    --primary-container: 210 100% 15%;
-    --on-primary-container: 210 100% 95%;
+    --primary: 166 88% 61%;
+    --on-primary: 166 70% 7%;
+    --primary-container: 166 72% 13%;
+    --on-primary-container: 166 92% 90%;
 
-    --secondary: 32 30% 90%; 
-    --on-secondary: 28 45% 10%;
-    --secondary-container: 28 40% 15%;
-    --on-secondary-container: 32 30% 95%;
+    --secondary: 40 92% 67%;
+    --on-secondary: 37 48% 8%;
+    --secondary-container: 36 40% 14%;
+    --on-secondary-container: 40 88% 90%;
 
-    --surface: 224 24% 6%;
-    --surface-dim: 224 28% 4%;
-    --surface-bright: 224 20% 10%;
-    --surface-container-lowest: 224 30% 3%;
-    --surface-container-low: 224 25% 6%;
-    --surface-container: 224 22% 9%;
-    --surface-container-high: 224 18% 12%;
-    --surface-container-highest: 224 16% 16%;
+    --surface: 220 18% 7%;
+    --surface-dim: 220 20% 4%;
+    --surface-bright: 220 15% 11%;
+    --surface-container-lowest: 220 22% 3%;
+    --surface-container-low: 220 18% 7%;
+    --surface-container: 220 15% 10%;
+    --surface-container-high: 220 13% 13%;
+    --surface-container-highest: 220 11% 17%;
 
     --on-surface: 220 28% 98%;
     --on-surface-variant: 220 12% 78%;
@@ -145,7 +145,7 @@
   }
   
   .text-gradient-google {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-[#4285F4] via-[#EA4335] to-[#FBBC05];
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-[#43F3C5] via-[#F7C35F] to-[#8DA2FF];
   }
 
   .panel {

@@ -11,7 +11,15 @@ import path from 'path';
 class KeyManager {
   constructor() {
     this.storagePath = path.join(process.cwd(), 'data', 'security', 'vault.json');
-    this.masterKey = process.env.VIBE_MASTER_KEY || 'vibe-hub-default-master-key-32-chars!!';
+    if (!process.env.VIBE_MASTER_KEY) {
+      if (process.env.NODE_ENV === 'test') {
+        this.masterKey = crypto.randomBytes(32).toString('hex');
+        this.keys = new Map();
+        return;
+      }
+      throw new Error('FATAL SECURITY ERROR: VIBE_MASTER_KEY environment variable is required');
+    }
+    this.masterKey = process.env.VIBE_MASTER_KEY;
     this.keys = new Map();
   }
 

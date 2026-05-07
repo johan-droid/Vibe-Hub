@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useStore } from '../store/useStore';
@@ -12,10 +12,12 @@ const errorCopy = {
   provider_failed: 'The provider rejected the sign-in request. Please verify the OAuth credentials.',
   profile_failed: 'We could not load your profile after sign-in. Please try again.',
   max_sessions_exceeded: 'Too many active sessions. Please log out from another device and try again.',
+  database_error: 'Database connection failed. Please try again in a moment.',
+  oauth_config_error: 'OAuth configuration error. Please check the redirect URI matches Google Console settings.',
 };
 
 /**
- * AuthCallback handles the OAuth redirect, stores the JWT, and restores profile state.
+ * AuthCallback handles the OAuth redirect, relies on HttpOnly cookies, and restores profile state.
  */
 export default function AuthCallback() {
   const [searchParams] = useSearchParams();
@@ -23,13 +25,31 @@ export default function AuthCallback() {
   const setUser = useStore(s => s.setUser);
   const [status, setStatus] = useState('loading');
   const [message, setMessage] = useState('Securing your dashboard session...');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const processedCodeRef = useRef(null);
+  const timeoutRef = useRef(null);
 
   const providerError = useMemo(() => searchParams.get('error'), [searchParams]);
 
   useEffect(() => {
     let cancelled = false;
 
+    // Set a timeout to force redirect if authentication takes too long
+    timeoutRef.current = setTimeout(() => {
+      if (!cancelled) {
+        console.warn('Authentication timeout, forcing redirect to dashboard');
+        navigate('/dashboard', { replace: true });
+      }
+    }, 15000); // 15 second timeout
+
     async function completeAuth() {
+      // Prevent duplicate requests due to React StrictMode
+      const handoffCode = searchParams.get('code');
+      if (processedCodeRef.current === handoffCode) {
+        return;
+      }
+      processedCodeRef.current = handoffCode;
+
       if (providerError) {
         api.clearAllTokens();
         setUser(null);
@@ -39,25 +59,59 @@ export default function AuthCallback() {
       }
 
       // Legacy callbacks may still include a short-lived access token.
-      // New callbacks rely on HTTP-only cookies and verify through auth status.
+      // It is accepted only in memory during migration; cookies are authoritative.
       const accessToken = searchParams.get('token');
 
       if (accessToken) api.setAuthTokens({ accessToken });
 
       try {
-        const userData = await api.authStatus();
-        if (cancelled) return;
-
-        if (!userData.authenticated) {
-          throw new Error('Session cookie was not accepted. Please start sign-in again.');
+        let exchangedUser = null;
+        if (handoffCode) {
+          setMessage('Exchanging authentication code...');
+          const exchange = await Promise.race([
+            api.exchangeOAuthHandoff(handoffCode),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Authentication timed out')), 10000)
+            )
+          ]);
+          if (cancelled) return;
+          if (!exchange.authenticated || !exchange.user) {
+            throw new Error('Sign-in handoff expired. Please start sign-in again.');
+          }
+          exchangedUser = exchange.user;
+          setMessage('Authentication successful! Verifying session...');
         }
 
-        setUser(userData.user);
-        setStatus('success');
-        setMessage('Session verified. Opening your dashboard...');
-        window.setTimeout(() => navigate('/dashboard', { replace: true }), 350);
+        // Skip additional authStatus check if we already have user data
+        const finalUser = exchangedUser || null;
+        if (finalUser) {
+          setUser(finalUser);
+          setStatus('success');
+          setMessage('Session verified. Opening your dashboard...');
+          window.setTimeout(() => navigate('/dashboard', { replace: true }), 350);
+        } else {
+          // Fallback to authStatus check
+          setMessage('Verifying authentication status...');
+          const userData = await Promise.race([
+            api.authStatus(),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Status check timed out')), 5000)
+            )
+          ]);
+          if (cancelled) return;
+
+          if (!userData.authenticated) {
+            throw new Error('No verified sign-in session was found. Please start sign-in again.');
+          }
+
+          setUser(userData.user);
+          setStatus('success');
+          setMessage('Session verified. Opening your dashboard...');
+          window.setTimeout(() => navigate('/dashboard', { replace: true }), 350);
+        }
       } catch (err) {
         if (cancelled) return;
+        console.error('Authentication error:', err);
         api.clearAllTokens();
         setUser(null);
         setStatus('error');
@@ -68,6 +122,9 @@ export default function AuthCallback() {
     completeAuth();
     return () => {
       cancelled = true;
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
     };
   }, [navigate, providerError, searchParams, setUser]);
 

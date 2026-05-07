@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { ModelService, normalizeJsonSchema } from '../orchestrator/models.js';
+import { AgentAuthManager } from '../auth/agent-auth.js';
+import { ModelService, classifyModelError, normalizeJsonSchema } from '../orchestrator/models.js';
 
 describe('ModelService gateway', () => {
   it('normalizes Gemini-style schemas to JSON schema for external providers', () => {
@@ -37,13 +38,113 @@ describe('ModelService gateway', () => {
 
     const profile = service.selectProfile({ effortLevel: 'deep', domain: 'code' });
     expect(profile.provider).toBe('openai');
+    expect(profile.apiMode).toBe('responses');
     expect(profile.model).toBe('codex-grade-model');
     expect(profile.retries).toBe(4);
     expect(profile.timeoutMs).toBe(12000);
 
     const diagnostics = service.diagnostics();
     expect(diagnostics.providerStatus.openai.configured).toBe(true);
+    expect(diagnostics.providerStatus.openai.apiMode).toBe('responses');
     expect(JSON.stringify(diagnostics)).not.toContain('sk-secret-value');
+  });
+
+  it('selects a NIM Qwen Coder profile without exposing secrets', () => {
+    const service = new ModelService({
+      SELINA_MODEL_PROVIDER: 'nim',
+      NIM_API_KEY: 'nvapi-secret-value',
+      SELINA_MODEL_RETRIES: '1',
+    });
+
+    const profile = service.selectProfile({ effortLevel: 'standard', domain: 'code' });
+    expect(profile.provider).toBe('nim');
+    expect(profile.apiMode).toBe('chat');
+    expect(profile.model).toBe('qwen/qwen2.5-coder-32b-instruct');
+    expect(service.providerKind(profile)).toBe('openai-compatible');
+
+    const diagnostics = service.diagnostics();
+    expect(diagnostics.providerStatus.nim).toMatchObject({
+      configured: true,
+      model: 'qwen/qwen2.5-coder-32b-instruct',
+      baseUrl: 'https://integrate.api.nvidia.com/v1',
+    });
+    expect(JSON.stringify(diagnostics)).not.toContain('nvapi-secret-value');
+  });
+
+  it('builds Responses API function tools for OpenAI agents', () => {
+    const service = new ModelService({
+      SELINA_MODEL_PROVIDER: 'openai',
+      OPENAI_API_KEY: 'sk-secret-value',
+      OPENAI_MODEL: 'gpt-5.5',
+    });
+    const profile = service.selectProfile({ effortLevel: 'standard', domain: 'code' });
+
+    const request = service.buildOpenAIResponsesRequest({
+      profile,
+      instructions: 'You are Selina.',
+      input: [{ role: 'user', content: 'Read a file' }],
+      tools: [{
+        name: 'read_file',
+        description: 'Read a file',
+        parameters: {
+          type: 'OBJECT',
+          properties: { path: { type: 'STRING' } },
+          required: ['path'],
+        },
+      }],
+    });
+
+    expect(request.store).toBe(false);
+    expect(request.parallel_tool_calls).toBe(false);
+    expect(request.tools[0]).toMatchObject({
+      type: 'function',
+      name: 'read_file',
+      strict: false,
+    });
+    expect(request.tools[0].parameters.properties.path.type).toBe('string');
+  });
+
+  it('normalizes Responses API message and function-call output', async () => {
+    const service = new ModelService({
+      SELINA_MODEL_PROVIDER: 'openai',
+      OPENAI_API_KEY: 'sk-secret-value',
+      OPENAI_MODEL: 'gpt-5.5',
+    });
+    const profile = service.selectProfile({ effortLevel: 'standard', domain: 'code' });
+    service.fetchJsonWithAuth = async () => ({
+      id: 'resp_test',
+      output: [
+        {
+          type: 'message',
+          content: [{ type: 'output_text', text: 'I need to inspect the file.' }],
+        },
+        {
+          type: 'function_call',
+          id: 'fc_test',
+          call_id: 'call_test',
+          name: 'read_file',
+          arguments: '{"path":"src/App.jsx"}',
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    });
+
+    const result = await service.openAIResponses({
+      profile,
+      instructions: 'You are Selina.',
+      input: [{ role: 'user', content: 'Read App.' }],
+      tools: [],
+    });
+
+    expect(result.content).toBe('I need to inspect the file.');
+    expect(result.toolCalls).toEqual([
+      expect.objectContaining({
+        callId: 'call_test',
+        name: 'read_file',
+        args: { path: 'src/App.jsx' },
+      }),
+    ]);
+    expect(result.responseId).toBe('resp_test');
   });
 
   it('trims Gemini history within a token budget and starts on a user turn', () => {
@@ -69,5 +170,83 @@ describe('ModelService gateway', () => {
     const diagnostics = service.diagnostics();
     expect(diagnostics.auditTail).toHaveLength(25);
     expect(JSON.stringify(diagnostics)).not.toContain('secret');
+  });
+
+  it('classifies Gemini free-tier quota exhaustion as fallbackable but not retryable', () => {
+    const classification = classifyModelError(new Error(
+      '[429 Too Many Requests] Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash Please retry in 46.383132222s.'
+    ));
+
+    expect(classification.code).toBe('quota_exceeded');
+    expect(classification.retryable).toBe(false);
+    expect(classification.fallbackable).toBe(true);
+    expect(classification.retryAfterMs).toBe(46384);
+  });
+
+  it('selects only explicitly configured fallback providers with credentials', () => {
+    const env = {
+      SELINA_MODEL_PROVIDER: 'gemini',
+      GEMINI_API_KEY: 'gemini-key',
+      OPENAI_API_KEY: 'sk-openai',
+      OPENAI_MODEL: 'gpt-fallback',
+      ANTHROPIC_MODEL: 'claude-fallback',
+      SELINA_MODEL_FALLBACKS: 'openai,anthropic,qwen',
+    };
+    const auth = new AgentAuthManager({ env });
+    const service = new ModelService(env, auth);
+    const primary = service.selectProfile({ effortLevel: 'standard', domain: 'code' });
+    const fallbacks = service.selectFallbackProfiles(primary);
+
+    expect(primary.provider).toBe('gemini');
+    expect(fallbacks).toHaveLength(1);
+    expect(fallbacks[0]).toMatchObject({
+      provider: 'openai',
+      model: 'gpt-fallback',
+      apiMode: 'responses',
+    });
+  });
+
+  it('falls back from NIM quota exhaustion to the configured OpenAI provider', async () => {
+    const env = {
+      SELINA_MODEL_PROVIDER: 'nim',
+      NIM_API_KEY: 'nvapi-primary',
+      NIM_MODEL: 'qwen/qwen2.5-coder-32b-instruct',
+      OPENAI_API_KEY: 'sk-openai',
+      OPENAI_MODEL: 'gpt-fallback',
+      SELINA_MODEL_FALLBACKS: 'openai',
+    };
+    const auth = new AgentAuthManager({ env });
+    const service = new ModelService(env, auth);
+
+    service.openAICompatibleChat = async ({ profile }) => {
+      if (profile.provider === 'nim') {
+        throw new Error('[429 Too Many Requests] Quota exceeded for metric: free_tier_requests. Please retry in 46s.');
+      }
+      return { content: 'unexpected chat fallback' };
+    };
+    service.openAIResponses = async ({ profile }) => ({
+      content: `fallback via ${profile.provider}`,
+    });
+
+    const result = await service.completeText({
+      prompt: 'Refactor this file.',
+      domain: 'code',
+      effortLevel: 'standard',
+    });
+
+    expect(result.content).toBe('fallback via openai');
+    expect(result.profile).toMatchObject({
+      provider: 'openai',
+      model: 'gpt-fallback',
+    });
+    expect(service.audit).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'provider_fallback',
+        fromProvider: 'nim',
+        toProvider: 'openai',
+        reason: 'quota_exceeded',
+        retryAfterMs: 46000,
+      }),
+    ]));
   });
 });

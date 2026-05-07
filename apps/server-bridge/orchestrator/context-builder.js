@@ -15,7 +15,7 @@ import pool from '../db.js';
 
 // ─── Strict Language Enforcement ─────────────────────────────────────────────
 
-const ALLOWED_LANGUAGES = ['en', 'hi', 'oria'];
+export const ALLOWED_LANGUAGES = Object.freeze(['en', 'hi', 'or']);
 
 export class LanguageEnforcer {
   /**
@@ -36,11 +36,11 @@ export class LanguageEnforcer {
    */
   static getLanguagePrompt(userLang = 'en') {
     const validated = this.validateLanguage(userLang);
-    const langNames = { en: 'English', hi: 'Hindi', oria: 'Odia' };
+    const langNames = { en: 'English', hi: 'Hindi', or: 'Odia' };
     
     return `=== LANGUAGE POLICY ===
 You MUST respond in ${langNames[validated]} only. 
-Supported languages: English (en), Hindi (hi), Odia (oria).
+Supported languages: English (en), Hindi (hi), Odia (or).
 Current user preference: ${langNames[validated]}.
 
 If user input is in another language, acknowledge it but respond in ${langNames[validated]}.

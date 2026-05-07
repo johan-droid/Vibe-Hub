@@ -59,3 +59,4 @@ Thumbs.db
 
 # Vibe Hub Specific
 # (Add any project-specific ignore patterns here)
+apps/server-bridge/scratch/rollouts/

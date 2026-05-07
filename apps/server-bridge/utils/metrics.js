@@ -56,6 +56,24 @@ const activeSockets = new client.Gauge({
   help: 'Active WebSocket and Socket.io connections.',
 });
 
+const agentToolCalls = new client.Counter({
+  name: 'agent_tool_calls_total',
+  help: 'Agent tool calls by tool, source, and status.',
+  labelNames: ['tool', 'source', 'status'],
+});
+
+const approvalDecisions = new client.Counter({
+  name: 'agent_approval_decisions_total',
+  help: 'Agent approval decisions by tool and decision.',
+  labelNames: ['tool', 'decision'],
+});
+
+const mcpToolCalls = new client.Counter({
+  name: 'mcp_tool_calls_total',
+  help: 'MCP tool calls by server, tool, and status.',
+  labelNames: ['server', 'tool', 'status'],
+});
+
 metricsRegistry.registerMetric(httpDuration);
 metricsRegistry.registerMetric(stateTransitions);
 metricsRegistry.registerMetric(sandboxDuration);
@@ -64,6 +82,9 @@ metricsRegistry.registerMetric(vfsEntries);
 metricsRegistry.registerMetric(llmDuration);
 metricsRegistry.registerMetric(llmCost);
 metricsRegistry.registerMetric(activeSockets);
+metricsRegistry.registerMetric(agentToolCalls);
+metricsRegistry.registerMetric(approvalDecisions);
+metricsRegistry.registerMetric(mcpToolCalls);
 
 export function metricsMiddleware(req, res, next) {
   const end = httpDuration.startTimer();
@@ -120,6 +141,29 @@ export function recordLlmCost(costUsd, labels = {}) {
 
 export function setActiveWebsocketConnections(count) {
   activeSockets.set(count);
+}
+
+export function recordAgentToolCallMetric(tool, source, status) {
+  agentToolCalls.inc({
+    tool: String(tool || 'unknown'),
+    source: String(source || 'unknown'),
+    status: String(status || 'unknown'),
+  });
+}
+
+export function recordApprovalDecisionMetric(tool, decision) {
+  approvalDecisions.inc({
+    tool: String(tool || 'unknown'),
+    decision: String(decision || 'unknown'),
+  });
+}
+
+export function recordMcpToolCallMetric(server, tool, status) {
+  mcpToolCalls.inc({
+    server: String(server || 'unknown'),
+    tool: String(tool || 'unknown'),
+    status: String(status || 'unknown'),
+  });
 }
 
 export async function renderMetrics() {

@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -12,32 +11,16 @@ import { captureException } from '../utils/sentry.js';
 import { recordSandboxDuration } from '../utils/metrics.js';
 import { repoManager } from './repository_manager.js';
 import { mcpManager } from '../mcp/MCPManager.js';
+import { ToolSchemaError } from './tool_schema.js';
+import { modelService } from './models.js';
+import { resolveExpertProfile } from './expert-routing.js';
+import { authorizeToolCall, ToolAuthError } from './tool_auth_guard.js';
+import { hashToolParams, verifyActionGrant } from '../auth/action-grants.js';
 
 
 // Resolve directory for skill files
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SKILLS_DIR = path.join(__dirname, 'skills');
-
-/**
- * AIService — Singleton Pattern
- * Prevents memory spikes and repeated client initialization.
- */
-class AIService {
-    constructor() {
-        this.apiKey = process.env.GEMINI_API_KEY;
-        if (this.apiKey) {
-            this.client = new GoogleGenerativeAI(this.apiKey);
-            this.model = this.client.getGenerativeModel({ model: 'gemini-2.0-flash' });
-        }
-    }
-
-    static getInstance() {
-        if (!this.instance) {
-            this.instance = new AIService();
-        }
-        return this.instance;
-    }
-}
 
 /**
  * Router — Principal Systems Architect Implementation
@@ -48,7 +31,6 @@ class AIService {
  */
 class Router {
     constructor() {
-        this.ai = AIService.getInstance();
         this.skillCache = new Map(); // path -> content
         
         // Expert Domain Mapping
@@ -75,20 +57,23 @@ class Router {
         }
 
         // L1: Fast Heuristic Pass (Zero Latency)
+        // Check for multiple domains using regex
+        const matchedDomains = [];
         for (const [domain, config] of Object.entries(this.domains)) {
             if (config.triggers.some(regex => regex.test(prompt))) {
-                return await this.getExpertConfig(domain, skillProfile);
+                matchedDomains.push(domain);
             }
+        }
+        
+        if (matchedDomains.length > 0) {
+            const configs = await Promise.all(matchedDomains.map(d => this.getExpertConfig(d, skillProfile)));
+            return { domain: matchedDomains[0], swarm: configs, skillProfile };
         }
 
         // L2: LLM Intent Classification (Zero-Shot)
-        if (!this.ai.model) {
-            return await this.getExpertConfig('code');
-        }
-
         try {
             const classificationPrompt = `
-                Act as a lightweight intent classifier. Classify the user prompt into exactly ONE of these domains: 
+                Act as a lightweight intent classifier. Classify the user prompt into ONE OR MORE of these domains: 
                 git, debug, ui, code, manager, security, creative.
                 
                 - manager: High-level planning, architectural changes, or complex tasks.
@@ -100,14 +85,22 @@ class Router {
                 - git: Repository management, branching, or commits.
  
                 User Prompt: "${prompt}"
-                Respond with only the domain name.
+                Respond with only a comma-separated list of the domain names.
             `;
 
-            const result = await this.ai.model.generateContent(classificationPrompt);
-            const domain = result.response.text().trim().toLowerCase();
+            const result = await modelService.completeText({
+                prompt: classificationPrompt,
+                provider: process.env.SELINA_EXPERT_MANAGER_PROVIDER || process.env.SELINA_MODEL_PROVIDER,
+                effortLevel: 'quick',
+                domain: 'manager',
+                meta: { phase: 'router_classification' },
+            });
+            const domainsStr = result.content.trim().toLowerCase();
+            const domains = domainsStr.split(',').map(d => d.trim()).filter(d => this.domains[d]);
             
-            if (this.domains[domain]) {
-                return await this.getExpertConfig(domain, skillProfile);
+            if (domains.length > 0) {
+                const configs = await Promise.all(domains.map(d => this.getExpertConfig(d, skillProfile)));
+                return { domain: domains[0], swarm: configs, skillProfile };
             }
         } catch (err) {
             // L2 classification failed
@@ -128,7 +121,12 @@ class Router {
                 const content = await fs.readFile(skillPath, 'utf-8');
                 this.skillCache.set(skillPath, content);
             } catch (err) {
-                return { domain, systemPrompt: `You are a ${domain} expert.` };
+                return {
+                    domain,
+                    systemPrompt: `You are a ${domain} expert.`,
+                    skillProfile,
+                    expertProfile: resolveExpertProfile({ domain, modelService }),
+                };
             }
         }
 
@@ -136,6 +134,11 @@ class Router {
             domain,
             systemPrompt: this.skillCache.get(skillPath),
             skillProfile,
+            expertProfile: resolveExpertProfile({
+                domain,
+                effortLevel: skillProfile?.effortLevel || 'standard',
+                modelService,
+            }),
         };
     }
 
@@ -157,7 +160,7 @@ ${prompt}
      * Execute task through XState machine with rollback capability
      * Streams state transitions via Socket.io for real-time UI updates
      */
-    async executeWithStateMachine(prompt, userId, targetFile, io, socketId, requestId = null) {
+    async executeWithStateMachine(prompt, userId, targetFile, io, socketId, requestId = null, effortLevel = 'standard') {
         const onFileStaged = (entry) => {
             if (io && socketId) {
                 io.to(socketId).emit('file_staged', {
@@ -209,6 +212,9 @@ ${prompt}
                         status: state.value,
                         message: this.mapStateToMessage(state.value),
                         retries: state.context.retries,
+                        maxRetries: state.context.maxRetries,
+                        effortLevel: state.context.effortLevel,
+                        crossFileCoherenceEnabled: state.context.crossFileCoherenceEnabled,
                         timestamp: new Date().toISOString()
                     });
                 }
@@ -223,6 +229,8 @@ ${prompt}
                         code: state.context.generatedCode,
                         astGraph: state.context.astGraph,
                         retries: state.context.retries,
+                        effortLevel: state.context.effortLevel,
+                        crossFileCoherenceEnabled: state.context.crossFileCoherenceEnabled,
                         stagedFile: state.context.stagedFile
                     });
                 } else if (state.value === 'fatal_failure') {
@@ -254,7 +262,8 @@ ${prompt}
                 userId,
                 targetFile,
                 originalCode,
-                requestId
+                requestId,
+                effortLevel
             });
         });
     }
@@ -265,7 +274,7 @@ ${prompt}
             loading_contexts: "Locking organizational and user boundaries...",
             parsing_ast: "Building semantic code graph...",
             drafting_code: "Synthesizing logic with LLM...",
-            sandboxing: "Executing in offline GitHub Actions sandbox...",
+            sandboxing: "Executing in local Docker sandbox with network disabled...",
             evaluating_failure: "Sandbox execution failed. Analyzing trace...",
             rollback: "CRITICAL: Forcing architectural rollback. Pivoting approach...",
             success: "Code verified and ready.",
@@ -338,7 +347,7 @@ async function handleCodeRequest(req, res) {
         });
     }
 
-    const { prompt, targetFile, socketId } = parsed.data;
+    const { prompt, targetFile, socketId, effortLevel } = parsed.data;
     const userId = req.user?.id || parsed.data.userId;
     const io = req.app.get('io');
     const codeQueue = req.app.get('codeQueue');
@@ -358,7 +367,7 @@ async function handleCodeRequest(req, res) {
     }
 
     if (codeQueue) {
-        const queued = await codeQueue.enqueue({ prompt, userId, targetFile, socketId, requestId: req.id });
+        const queued = await codeQueue.enqueue({ prompt, userId, targetFile, socketId, requestId: req.id, effortLevel });
         if (io && socketId) {
             io.to(socketId).emit('agent_status', {
                 status: 'queued',
@@ -372,7 +381,7 @@ async function handleCodeRequest(req, res) {
     }
 
     try {
-        const result = await router.executeWithStateMachine(prompt, userId, targetFile, io, socketId, req.id);
+        const result = await router.executeWithStateMachine(prompt, userId, targetFile, io, socketId, req.id, effortLevel);
         resetRetryState(userId);
         res.status(200).json({ success: true, data: result });
     } catch (error) {
@@ -478,12 +487,54 @@ async function handleListServers(req, res) {
     }
 }
 
+async function handleMcpDiagnostics(req, res) {
+    try {
+        res.json({ success: true, diagnostics: mcpManager.diagnostics() });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+}
+
 async function handleCallTool(req, res) {
     try {
-        const { toolId, arguments: args } = req.body;
+        const { toolId, arguments: args, actionGrant, runId } = req.body;
+        if (!toolId) {
+            res.status(400).json({ success: false, code: 'MCP_TOOL_ID_REQUIRED', error: 'toolId is required' });
+            return;
+        }
+        const tool = mcpManager.tools.find(item => item.uniqueId === toolId) || mcpManager.localTools?.get?.(toolId);
+        const llmToolName = toolId.replace(/:/g, '__');
+        const paramsHash = hashToolParams(args || {});
+        await authorizeToolCall(llmToolName, args || {}, {
+            authSnapshot: req.user ? { type: 'user-session', userId: req.user.id, expiresAt: null } : null,
+            toolDefinition: tool,
+            paramsHash,
+            approvalFn: async () => {
+                if (!actionGrant || !runId) return false;
+                return verifyActionGrant(actionGrant, {
+                    userId: req.user.id,
+                    runId,
+                    toolName: toolId,
+                    paramsHash,
+                }).ok;
+            },
+        });
         const result = await mcpManager.callTool(toolId, args);
         res.json({ success: true, result });
     } catch (error) {
+        if (error instanceof ToolAuthError) {
+            res.status(403).json({ success: false, code: 'TOOL_AUTH_DENIED', error: error.message });
+            return;
+        }
+        if (error instanceof ToolSchemaError) {
+            res.status(400).json({
+                success: false,
+                code: 'TOOL_SCHEMA_INVALID',
+                error: error.message,
+                details: error.details || [],
+            });
+            return;
+        }
         res.status(500).json({ success: false, error: error.message });
     }
 }
@@ -501,5 +552,5 @@ async function handleRegisterServer(req, res) {
 export { 
     Router, router, handleCodeRequest, handleCodeJobStatus, handleCommitRequest, 
     handleGetPendingFiles, handleGetVfsStats, handleLinkRepo, handleListRepos, 
-    handleListTools, handleListServers, handleCallTool, handleRegisterServer 
+    handleListTools, handleListServers, handleMcpDiagnostics, handleCallTool, handleRegisterServer 
 };

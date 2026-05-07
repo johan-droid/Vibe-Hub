@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import { v4 as uuid } from 'uuid';
+import { sanitizeEnvironment } from '../utils/env-sanitizer.js';
 
 /**
  * MCPClient — High Reliability Implementation
@@ -24,7 +25,9 @@ class MCPClient {
       this.child = spawn(this.command, this.args, {
         stdio: ['pipe', 'pipe', 'inherit'],
         shell: true,
-        env: this.options.env || process.env
+        env: sanitizeEnvironment(this.options.env || process.env, {
+          inherit: this.options.env ? 'all' : 'core',
+        })
       });
 
       this.child.stdout.on('data', (data) => {

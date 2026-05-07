@@ -4,7 +4,7 @@
  * Run this to initialize or update the database schema:
  *   node db-migrate.js
  * 
- * This creates all tables needed for the Vibe-Hub application
+ * This creates all tables needed for the Selina application
  * including SaaS-grade authentication tables.
  */
 
@@ -14,9 +14,23 @@ import pg from 'pg';
 // Load environment variables
 dotenv.config();
 
+const normalizeDatabaseUrl = (connectionString) => {
+  if (!connectionString) return connectionString;
+  try {
+    const url = new URL(connectionString);
+    const sslMode = url.searchParams.get('sslmode')?.toLowerCase();
+    if (!sslMode || ['prefer', 'require', 'verify-ca'].includes(sslMode)) {
+      url.searchParams.set('sslmode', 'verify-full');
+    }
+    return url.toString();
+  } catch {
+    return connectionString;
+  }
+};
+
 const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  connectionString: normalizeDatabaseUrl(process.env.DATABASE_URL),
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : { rejectUnauthorized: false },
 });
 
 async function migrate() {
@@ -269,6 +283,35 @@ async function migrate() {
     await client.query('CREATE INDEX IF NOT EXISTS idx_audit_logs_event_type ON audit_logs(event_type);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_audit_logs_user_created ON audit_logs(user_id, created_at DESC);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_audit_logs_resource ON audit_logs(resource_type, resource_id);');
+    // OAuth Storage
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS oauth_states (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        state_token VARCHAR(255) NOT NULL UNIQUE,
+        provider VARCHAR(50) NOT NULL,
+        return_origin TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        expires_at TIMESTAMPTZ NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_oauth_states_token ON oauth_states(state_token);
+      CREATE INDEX IF NOT EXISTS idx_oauth_states_expires ON oauth_states(expires_at);
+
+      CREATE TABLE IF NOT EXISTS oauth_handoffs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        handoff_code VARCHAR(255) NOT NULL UNIQUE,
+        provider VARCHAR(50) NOT NULL,
+        user_data JSONB NOT NULL,
+        session_data JSONB NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        expires_at TIMESTAMPTZ NOT NULL,
+        consumed_at TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS idx_oauth_handoffs_code ON oauth_handoffs(handoff_code);
+      CREATE INDEX IF NOT EXISTS idx_oauth_handoffs_expires ON oauth_handoffs(expires_at);
+      CREATE INDEX IF NOT EXISTS idx_oauth_handoffs_consumed ON oauth_handoffs(consumed_at);
+    `);
+    console.log('OAuth storage tables created');
+
     console.log('All tables created successfully');
     
     await client.query('COMMIT');

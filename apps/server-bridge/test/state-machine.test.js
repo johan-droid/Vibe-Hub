@@ -6,7 +6,10 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createActor } from 'xstate';
-import agentMachine from '../orchestrator/state_machine.js';
+import agentMachine, {
+  normalizeEffortLevel,
+  retryLimitForEffort,
+} from '../orchestrator/state_machine.js';
 
 describe('Agent State Machine', () => {
   let service;
@@ -46,6 +49,21 @@ describe('Agent State Machine', () => {
       expect(service.getSnapshot().context.userId).toBe('user-123');
       expect(service.getSnapshot().context.targetFile).toBe('/test/file.js');
       expect(service.getSnapshot().context.originalCode).toBe('function old() {}');
+    });
+
+    it('should apply effort-level retry guardrails on START_TASK', () => {
+      service.start();
+      service.send({
+        type: 'START_TASK',
+        prompt: 'Deep refactor',
+        userId: 'user-123',
+        targetFile: '/test/file.js',
+        effortLevel: 'deep'
+      });
+
+      expect(service.getSnapshot().context.effortLevel).toBe('deep');
+      expect(service.getSnapshot().context.maxRetries).toBe(5);
+      expect(service.getSnapshot().context.crossFileCoherenceEnabled).toBe(true);
     });
   });
 
@@ -311,6 +329,16 @@ describe('Agent State Machine', () => {
 });
 
 describe('State Machine Guards', () => {
+  it('normalizes effort levels and maps retry limits deterministically', () => {
+    expect(normalizeEffortLevel('quick')).toBe('quick');
+    expect(normalizeEffortLevel('standard')).toBe('standard');
+    expect(normalizeEffortLevel('deep')).toBe('deep');
+    expect(normalizeEffortLevel('unknown')).toBe('standard');
+    expect(retryLimitForEffort('quick')).toBe(0);
+    expect(retryLimitForEffort('standard')).toBe(3);
+    expect(retryLimitForEffort('deep')).toBe(5);
+  });
+
   it('should require targetFile for AST parsing', () => {
     // If targetFile is null/undefined, should handle gracefully
   });

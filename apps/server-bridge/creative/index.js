@@ -14,14 +14,12 @@ export class CreativeService {
    * Search for design inspiration.
    */
   async searchInspiration(query, source = 'mobbin') {
-    // Simulate high-fidelity design results
     return {
       query,
       source,
-      patterns: [
-        { title: 'Minimalist Grid', url: 'https://cdn.example.com/grid.jpg' },
-        { title: 'Glassmorphic Cards', url: 'https://cdn.example.com/cards.jpg' }
-      ]
+      status: 'unavailable',
+      patterns: [],
+      reason: 'Design inspiration search provider is not configured.',
     };
   }
 
@@ -30,24 +28,17 @@ export class CreativeService {
    * v4.0: Structured for DALL-E 3 / Stable Diffusion integration.
    */
   async generateAsset(prompt, style = 'minimalist') {
-    // In production, you would call OpenAI/Midjourney/Gemini-Imagen
-    // const response = await openai.images.generate({ model: "dall-e-3", prompt, style });
-    
-    // Using a realistic placeholder service for high-fidelity demos
-    const seed = Math.floor(Math.random() * 1000000);
-    const mockUrl = `https://pollinations.ai/p/${encodeURIComponent(prompt)}?width=1024&height=1024&seed=${seed}&model=flux`;
-    
-    const asset = { 
+    const asset = {
       id: uuid(),
-      prompt, 
-      style, 
-      url: mockUrl, 
+      prompt,
+      style,
+      url: null,
       createdAt: new Date(),
-      status: 'completed',
+      status: 'unavailable',
+      reason: 'Image generation provider is not configured.',
       metadata: {
-        dimensions: '1024x1024',
-        model: 'flux-selina-core'
-      }
+        providerRequired: true,
+      },
     };
     
     this.generationHistory.push(asset);
@@ -57,11 +48,14 @@ export class CreativeService {
   /**
    * Generate alternative UI variants.
    */
-  async getUiVariants(componentId, selina) {
-    return [
-      { variant: 'A', description: 'Maximum Minimalism', tokenOverrides: { spacing: 'tight' } },
-      { variant: 'B', description: 'Bold Brutalism', tokenOverrides: { spacing: 'loose', colors: { primary: '#000' } } }
-    ];
+  async getUiVariants(componentId, aesthetic) {
+    return {
+      componentId,
+      aesthetic,
+      status: 'unavailable',
+      variants: [],
+      reason: 'UI variant provider is not configured.',
+    };
   }
 }
 

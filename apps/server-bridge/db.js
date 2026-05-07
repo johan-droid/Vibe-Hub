@@ -1,13 +1,19 @@
 import pg from 'pg';
+import logger from './utils/detailed-logger.js';
 
 const SSL_MODES_WITH_CURRENT_VERIFY_FULL_BEHAVIOR = new Set(['prefer', 'require', 'verify-ca']);
 
+// Export pool for use in other modules
+export let pool;
+
 export function normalizeDatabaseUrl(connectionString = process.env.DATABASE_URL, env = process.env) {
-  if (!connectionString || env.NODE_ENV !== 'production') return connectionString;
+  if (!connectionString) return connectionString;
 
   try {
     const url = new URL(connectionString);
     const sslMode = url.searchParams.get('sslmode')?.toLowerCase();
+    if (env.NODE_ENV !== 'production' && !env.DATABASE_SSL_MODE) return connectionString;
+
     const desiredSslMode = env.DATABASE_SSL_MODE || 'verify-full';
 
     if (!sslMode || SSL_MODES_WITH_CURRENT_VERIFY_FULL_BEHAVIOR.has(sslMode)) {
@@ -20,7 +26,8 @@ export function normalizeDatabaseUrl(connectionString = process.env.DATABASE_URL
   }
 }
 
-const pool = new pg.Pool({
+// Connection config optimized for serverless/neon databases
+pool = new pg.Pool({
   connectionString: normalizeDatabaseUrl(),
   ssl: process.env.NODE_ENV === 'production'
     ? {
@@ -29,16 +36,26 @@ const pool = new pg.Pool({
           ca: Buffer.from(process.env.DATABASE_SSL_CA, 'base64').toString('utf-8'),
         }),
       }
-    : false,
-  max: Number.parseInt(process.env.PG_POOL_MAX || '10', 10),
-  min: Number.parseInt(process.env.PG_POOL_MIN || '0', 10),
-  idleTimeoutMillis: Number.parseInt(process.env.PG_IDLE_TIMEOUT_MS || '30000', 10),
-  connectionTimeoutMillis: Number.parseInt(process.env.PG_CONNECTION_TIMEOUT_MS || '2000', 10),
+    : { rejectUnauthorized: false }, // Allow self-signed certs in dev
+  max: Number.parseInt(process.env.PG_POOL_MAX || '20', 10),
+  min: Number.parseInt(process.env.PG_POOL_MIN || '2', 10),
+  idleTimeoutMillis: Number.parseInt(process.env.PG_IDLE_TIMEOUT_MS || '60000', 10),
+  connectionTimeoutMillis: Number.parseInt(process.env.PG_CONNECTION_TIMEOUT_MS || '10000', 10), // 10s for Neon
+  statement_timeout: Number.parseInt(process.env.PG_STATEMENT_TIMEOUT_MS || '30000', 10),
+  query_timeout: Number.parseInt(process.env.PG_QUERY_TIMEOUT_MS || '30000', 10),
 });
 
-pool.on('error', () => {
-  // Unexpected error on idle client
+// Log pool errors for debugging
+pool.on('error', (err, client) => {
+  logger.error('Database', 'Unexpected error on idle client', err);
 });
+
+// Monitor pool metrics in development
+if (process.env.NODE_ENV === 'development') {
+  pool.on('connect', () => {
+    logger.debug('Database', 'New client connected', { total: pool.totalCount, idle: pool.idleCount });
+  });
+}
 
 /**
  * Initialize database tables with exponential backoff retry
@@ -74,6 +91,7 @@ export async function initDB(retries = 5) {
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID REFERENCES users(id) ON DELETE CASCADE,
         session_token VARCHAR(255) UNIQUE NOT NULL, -- Hashed session identifier
+        provider VARCHAR(50), -- OAuth provider (google, github)
         device_fingerprint VARCHAR(255), -- Browser/device fingerprint
         device_info JSONB DEFAULT '{}'::jsonb, -- { browser, os, device, userAgent }
         ip_address INET,
@@ -232,6 +250,33 @@ export async function initDB(retries = 5) {
       CREATE INDEX IF NOT EXISTS idx_ast_graphs_project ON ast_graphs(project_name);
       CREATE INDEX IF NOT EXISTS idx_ast_graphs_file ON ast_graphs(file_path);
 
+      CREATE TABLE IF NOT EXISTS oauth_states (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        state_token VARCHAR(255) NOT NULL UNIQUE,
+        provider VARCHAR(50) NOT NULL,
+        return_origin TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        expires_at TIMESTAMPTZ NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_oauth_states_token ON oauth_states(state_token);
+      CREATE INDEX IF NOT EXISTS idx_oauth_states_expires ON oauth_states(expires_at);
+
+      CREATE TABLE IF NOT EXISTS oauth_handoffs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        handoff_code VARCHAR(255) NOT NULL UNIQUE,
+        provider VARCHAR(50) NOT NULL,
+        user_data JSONB NOT NULL,
+        session_data JSONB NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        expires_at TIMESTAMPTZ NOT NULL,
+        consumed_at TIMESTAMPTZ
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_oauth_handoffs_code ON oauth_handoffs(handoff_code);
+      CREATE INDEX IF NOT EXISTS idx_oauth_handoffs_expires ON oauth_handoffs(expires_at);
+      CREATE INDEX IF NOT EXISTS idx_oauth_handoffs_consumed ON oauth_handoffs(consumed_at);
+
       CREATE TABLE IF NOT EXISTS audit_logs (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         event_type VARCHAR(100) NOT NULL,
@@ -246,7 +291,111 @@ export async function initDB(retries = 5) {
       CREATE INDEX IF NOT EXISTS idx_audit_logs_event_type ON audit_logs(event_type);
       CREATE INDEX IF NOT EXISTS idx_audit_logs_user_created ON audit_logs(user_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_audit_logs_resource ON audit_logs(resource_type, resource_id);
+
+      CREATE TABLE IF NOT EXISTS agent_runs (
+        id TEXT PRIMARY KEY,
+        root_run_id TEXT NOT NULL,
+        parent_run_id TEXT,
+        depth INT DEFAULT 0,
+        sequence INT DEFAULT 0,
+        user_id TEXT,
+        project_name TEXT DEFAULT 'default',
+        expert TEXT,
+        provider TEXT,
+        model TEXT,
+        status TEXT DEFAULT 'running',
+        prompt TEXT,
+        metadata JSONB DEFAULT '{}'::jsonb,
+        started_at TIMESTAMPTZ DEFAULT NOW(),
+        completed_at TIMESTAMPTZ
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_agent_runs_user_started ON agent_runs(user_id, started_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_agent_runs_root ON agent_runs(root_run_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_runs_parent ON agent_runs(parent_run_id);
+
+      CREATE TABLE IF NOT EXISTS agent_run_events (
+        id TEXT PRIMARY KEY,
+        run_id TEXT REFERENCES agent_runs(id) ON DELETE CASCADE,
+        root_run_id TEXT,
+        parent_run_id TEXT,
+        sequence INT DEFAULT 0,
+        method TEXT NOT NULL,
+        event_type TEXT,
+        status TEXT,
+        payload JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_agent_run_events_run_created ON agent_run_events(run_id, created_at ASC);
+      CREATE INDEX IF NOT EXISTS idx_agent_run_events_root_created ON agent_run_events(root_run_id, created_at ASC);
+      CREATE INDEX IF NOT EXISTS idx_agent_run_events_method ON agent_run_events(method);
+
+      CREATE TABLE IF NOT EXISTS agent_action_grants (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        grant_id TEXT UNIQUE NOT NULL,
+        user_id TEXT NOT NULL,
+        run_id TEXT NOT NULL,
+        tool_name TEXT NOT NULL,
+        params_hash TEXT NOT NULL,
+        decision TEXT NOT NULL,
+        reason TEXT,
+        approval_source TEXT DEFAULT 'user',
+        expires_at TIMESTAMPTZ NOT NULL,
+        payload JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_agent_action_grants_run ON agent_action_grants(run_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_agent_action_grants_user ON agent_action_grants(user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_agent_action_grants_scope ON agent_action_grants(run_id, tool_name, params_hash);
+
+      CREATE TABLE IF NOT EXISTS agent_memory_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT,
+        project_name TEXT DEFAULT 'default',
+        kind TEXT NOT NULL,
+        content TEXT NOT NULL,
+        embedding vector(768),
+        metadata JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_agent_memory_items_project ON agent_memory_items(user_id, project_name, kind);
+
+      CREATE TABLE IF NOT EXISTS mcp_server_registry (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        server_name TEXT UNIQUE NOT NULL,
+        command TEXT,
+        args JSONB DEFAULT '[]'::jsonb,
+        risk_metadata JSONB DEFAULT '{}'::jsonb,
+        status TEXT DEFAULT 'registered',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_mcp_server_registry_status ON mcp_server_registry(status);
     `);
+
+    // ── MIGRATIONS: Add missing columns to existing tables ─────────────────
+    try {
+      await pool.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'user_sessions' AND column_name = 'provider'
+          ) THEN
+            ALTER TABLE user_sessions ADD COLUMN provider VARCHAR(50);
+            RAISE NOTICE 'Added provider column to user_sessions';
+          END IF;
+        END $$;
+      `);
+      console.log('[Startup] Database migrations applied');
+    } catch (migrationErr) {
+      console.error('[Startup] Migration warning:', migrationErr.message);
+      // Don't fail startup for migration issues
+    }
   } catch (err) {
     if (retries > 0) {
       await new Promise(resolve => setTimeout(resolve, 5000));
@@ -257,20 +406,52 @@ export async function initDB(retries = 5) {
 }
 
 /**
+ * Retry wrapper for database operations with exponential backoff
+ */
+async function withRetry(operation, retries = 3, baseDelay = 1000) {
+  let lastError;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await operation();
+    } catch (err) {
+      lastError = err;
+      const isConnectionError = err.message?.includes('timeout') ||
+                                err.message?.includes('terminated') ||
+                                err.code === 'ECONNRESET' ||
+                                err.code === 'ETIMEDOUT' ||
+                                err.code === '08000' || // connection_exception
+                                err.code === '08003' || // connection_does_not_exist
+                                err.code === '08006';  // connection_failure
+
+      if (!isConnectionError || attempt === retries - 1) {
+        throw err;
+      }
+
+      const delay = baseDelay * Math.pow(2, attempt);
+      console.log(`[DB Retry] Attempt ${attempt + 1}/${retries} failed, retrying in ${delay}ms...`, err.message);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  throw lastError;
+}
+
+/**
  * Find or create user from OAuth data
  */
 export async function upsertUser({ email, name, avatarUrl, provider, providerId }) {
-  const result = await pool.query(
-    `INSERT INTO users (email, name, avatar_url, provider, provider_id)
-     VALUES ($1, $2, $3, $4, $5)
-     ON CONFLICT (email) DO UPDATE SET
-       name = EXCLUDED.name,
-       avatar_url = EXCLUDED.avatar_url,
-       last_login = NOW()
-     RETURNING *`,
-    [email, name, avatarUrl, provider, providerId]
-  );
-  return result.rows[0];
+  return withRetry(async () => {
+    const result = await pool.query(
+      `INSERT INTO users (email, name, avatar_url, provider, provider_id)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (email) DO UPDATE SET
+         name = EXCLUDED.name,
+         avatar_url = EXCLUDED.avatar_url,
+         last_login = NOW()
+       RETURNING *`,
+      [email, name, avatarUrl, provider, providerId]
+    );
+    return result.rows[0];
+  }, 3, 500);
 }
 
 export async function getUserById(id) {
@@ -282,14 +463,16 @@ export async function getUserById(id) {
  * SAAS-GRADE: User Session Management Helpers
  */
 
-export async function createUserSession({ userId, sessionToken, deviceFingerprint, deviceInfo, ipAddress, ipGeo, expiresAt }) {
-  const result = await pool.query(
-    `INSERT INTO user_sessions (user_id, session_token, device_fingerprint, device_info, ip_address, ip_geo, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
-     RETURNING *`,
-    [userId, sessionToken, deviceFingerprint, JSON.stringify(deviceInfo || {}), ipAddress, JSON.stringify(ipGeo || {}), expiresAt]
-  );
-  return result.rows[0];
+export async function createUserSession({ userId, sessionToken, provider, deviceFingerprint, deviceInfo, ipAddress, ipGeo, expiresAt }) {
+  return withRetry(async () => {
+    const result = await pool.query(
+      `INSERT INTO user_sessions (user_id, session_token, provider, device_fingerprint, device_info, ip_address, ip_geo, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [userId, sessionToken, provider, deviceFingerprint, deviceInfo || {}, ipAddress, ipGeo || {}, expiresAt]
+    );
+    return result.rows[0];
+  }, 3, 500);
 }
 
 export async function getUserSessionByToken(sessionToken) {
@@ -360,18 +543,34 @@ export async function countActiveUserSessions(userId) {
   return parseInt(result.rows[0].count, 10);
 }
 
+export async function revokeOldestUserSession(userId, reason = 'limit_reached') {
+  await pool.query(
+    `UPDATE user_sessions
+     SET is_active = false, revoked_at = NOW(), revoked_reason = $1
+     WHERE id = (
+       SELECT id FROM user_sessions
+       WHERE user_id = $2 AND is_active = true
+       ORDER BY created_at ASC
+       LIMIT 1
+     )`,
+    [reason, userId]
+  );
+}
+
 /**
  * SAAS-GRADE: Refresh Token Helpers
  */
 
 export async function createRefreshToken({ userId, sessionId, tokenHash, previousTokenHash = null, expiresAt }) {
-  const result = await pool.query(
-    `INSERT INTO refresh_tokens (user_id, session_id, token_hash, previous_token_hash, expires_at)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING *`,
-    [userId, sessionId, tokenHash, previousTokenHash, expiresAt]
-  );
-  return result.rows[0];
+  return withRetry(async () => {
+    const result = await pool.query(
+      `INSERT INTO refresh_tokens (user_id, session_id, token_hash, previous_token_hash, expires_at)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [userId, sessionId, tokenHash, previousTokenHash, expiresAt]
+    );
+    return result.rows[0];
+  }, 3, 500);
 }
 
 export async function getRefreshTokenByHash(tokenHash) {
@@ -421,11 +620,17 @@ export async function markRefreshTokenUsed(tokenHash) {
  */
 
 export async function logAuthEvent({ userId, sessionId, eventType, provider, deviceInfo, ipAddress, ipGeo, details = {} }) {
-  await pool.query(
-    `INSERT INTO login_audit_log (user_id, session_id, event_type, provider, device_info, ip_address, ip_geo, details)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [userId, sessionId, eventType, provider, JSON.stringify(deviceInfo || {}), ipAddress, JSON.stringify(ipGeo || {}), JSON.stringify(details)]
-  );
+  // Fire-and-forget: don't block OAuth flow for logging
+  return withRetry(async () => {
+    await pool.query(
+      `INSERT INTO login_audit_log (user_id, session_id, event_type, provider, device_info, ip_address, ip_geo, details)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [userId, sessionId, eventType, provider, JSON.stringify(deviceInfo || {}), ipAddress, JSON.stringify(ipGeo || {}), JSON.stringify(details)]
+    );
+  }, 2, 250).catch(err => {
+    // Silently fail - auth should not fail due to logging issues
+    console.error('[Audit Log] Failed to log auth event:', err.message);
+  });
 }
 
 export async function getUserAuthHistory(userId, limit = 50) {
@@ -503,9 +708,9 @@ export async function upsertOrgConstraint({ project_name, constraint_type, conte
 
 /**
  * V6: User Preferences Helpers
- * Language restricted to: English (en), Hindi (hi), Odia (oria)
+ * Language restricted to: English (en), Hindi (hi), Odia (or)
  */
-const ALLOWED_LANGUAGES = ['en', 'hi', 'oria'];
+const ALLOWED_LANGUAGES = ['en', 'hi', 'or'];
 
 function validateLanguage(lang) {
   const normalized = (lang || 'en').toLowerCase().trim();
@@ -534,11 +739,6 @@ export async function upsertUserPreference({ user_id, preference_type, content }
     const requestedLang = content?.code || content?.language || 'en';
     const validatedLang = validateLanguage(requestedLang);
     content = { ...content, code: validatedLang };
-    
-    // If language is not allowed, reject
-    if (validatedLang !== requestedLang.toLowerCase().trim()) {
-      throw new Error(`Language '${requestedLang}' not allowed. Only English (en), Hindi (hi), and Odia (oria) are permitted.`);
-    }
   }
   
   const result = await pool.query(
@@ -602,6 +802,161 @@ export async function getChatMessages(sessionId) {
     [sessionId]
   );
   return result.rows;
+}
+
+/**
+ * Agent run, event, grant, and memory helpers.
+ */
+export async function upsertAgentRun({
+  id,
+  rootRunId,
+  parentRunId = null,
+  depth = 0,
+  sequence = 0,
+  userId = null,
+  projectName = 'default',
+  expert = null,
+  provider = null,
+  model = null,
+  status = 'running',
+  prompt = '',
+  metadata = {},
+}) {
+  const result = await pool.query(
+    `INSERT INTO agent_runs (
+       id, root_run_id, parent_run_id, depth, sequence, user_id, project_name,
+       expert, provider, model, status, prompt, metadata
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+     ON CONFLICT (id) DO UPDATE SET
+       expert = EXCLUDED.expert,
+       provider = EXCLUDED.provider,
+       model = EXCLUDED.model,
+       status = EXCLUDED.status,
+       metadata = agent_runs.metadata || EXCLUDED.metadata
+     RETURNING *`,
+    [
+      id,
+      rootRunId,
+      parentRunId,
+      depth,
+      sequence,
+      userId,
+      projectName,
+      expert,
+      provider,
+      model,
+      status,
+      prompt,
+      JSON.stringify(metadata || {}),
+    ]
+  );
+  return result.rows[0];
+}
+
+export async function updateAgentRunStatus(runId, status, metadata = {}) {
+  const result = await pool.query(
+    `UPDATE agent_runs
+     SET status = $2,
+         metadata = metadata || $3::jsonb,
+         completed_at = CASE WHEN $2 IN ('completed', 'failed', 'cancelled') THEN NOW() ELSE completed_at END
+     WHERE id = $1
+     RETURNING *`,
+    [runId, status, JSON.stringify(metadata || {})]
+  );
+  return result.rows[0] || null;
+}
+
+export async function recordAgentRunEvent({
+  id,
+  runId,
+  rootRunId,
+  parentRunId = null,
+  sequence = 0,
+  method,
+  eventType = null,
+  status = null,
+  payload = {},
+}) {
+  const result = await pool.query(
+    `INSERT INTO agent_run_events (
+       id, run_id, root_run_id, parent_run_id, sequence, method, event_type, status, payload
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     ON CONFLICT (id) DO NOTHING
+     RETURNING *`,
+    [id, runId, rootRunId, parentRunId, sequence, method, eventType, status, JSON.stringify(payload || {})]
+  );
+  return result.rows[0] || null;
+}
+
+export async function getAgentRun(runId, userId = null) {
+  const params = [runId];
+  let query = 'SELECT * FROM agent_runs WHERE id = $1';
+  if (userId) {
+    query += ' AND user_id = $2';
+    params.push(userId);
+  }
+  const result = await pool.query(query, params);
+  return result.rows[0] || null;
+}
+
+export async function getAgentRunEvents(runId, userId = null) {
+  const params = [runId];
+  let query = `
+    SELECT e.*
+    FROM agent_run_events e
+    JOIN agent_runs r ON r.id = e.run_id
+    WHERE e.run_id = $1
+  `;
+  if (userId) {
+    query += ' AND r.user_id = $2';
+    params.push(userId);
+  }
+  query += ' ORDER BY e.created_at ASC';
+  const result = await pool.query(query, params);
+  return result.rows;
+}
+
+export async function insertAgentActionGrant(grant) {
+  const result = await pool.query(
+    `INSERT INTO agent_action_grants (
+       grant_id, user_id, run_id, tool_name, params_hash, decision, reason,
+       approval_source, expires_at, payload
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, to_timestamp($9 / 1000.0), $10)
+     ON CONFLICT (grant_id) DO NOTHING
+     RETURNING *`,
+    [
+      grant.grantId,
+      grant.userId,
+      grant.runId,
+      grant.toolName,
+      grant.paramsHash,
+      grant.decision,
+      grant.reason,
+      grant.approvalSource,
+      grant.expiresAt,
+      JSON.stringify(grant),
+    ]
+  );
+  return result.rows[0] || null;
+}
+
+export async function insertAgentMemoryItem({
+  userId,
+  projectName = 'default',
+  kind,
+  content,
+  metadata = {},
+}) {
+  const result = await pool.query(
+    `INSERT INTO agent_memory_items (user_id, project_name, kind, content, metadata)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [userId, projectName, kind, content, JSON.stringify(metadata || {})]
+  );
+  return result.rows[0];
 }
 
 export default pool;

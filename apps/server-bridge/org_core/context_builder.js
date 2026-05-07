@@ -1,6 +1,9 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { withJsonCache } from '../utils/cache.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 class OrgContextBuilder {
   static async buildGlobalConstraints() {

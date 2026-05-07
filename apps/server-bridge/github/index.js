@@ -1,10 +1,10 @@
 /**
- * github/index.js — Selina-Hub GitHub Operations Module v4.0
- * ──────────────────────────────────────────────────────────
+ * github/index.js - Selina GitHub Operations Module v4.0
+ * ----------------------------------------------------------
  * Provides the agent swarm with safe, collaborative Git/GitHub operations.
  *
  * Design Decisions
- * ────────────────
+ * ----------------
  * 1. DUAL AUTH STRATEGY
  *    The module supports both GitHub App auth (for org/repo installations)
  *    and Personal Access Token (PAT) auth (for personal repos / dev mode).
@@ -115,8 +115,8 @@ export class GitHubService {
    * Create an isolated agent working branch.
    *
    * Convention: `selina/<unix-timestamp>/<slug>`
-   *   • The timestamp allows easy cleanup of stale agent branches.
-   *   • The slug is derived from the task description, capped at 40 chars.
+   *   - The timestamp allows easy cleanup of stale agent branches.
+   *   - The slug is derived from the task description, capped at 40 chars.
    *
    * @returns {{ branchName: string, sha: string }} — the new branch ref data
    */

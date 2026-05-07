@@ -1,10 +1,18 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { AgentAuthManager, agentAuthManager, authToken, callWithAuthRetry } from '../auth/agent-auth.js';
 
 const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
+const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
+const DEFAULT_QWEN_MODEL = 'qwen/qwen2.5-coder-32b-instruct';
+const DEFAULT_NIM_MODEL = 'qwen/qwen2.5-coder-32b-instruct';
+const DEFAULT_NIM_BASE_URL = 'https://integrate.api.nvidia.com/v1';
+const DEFAULT_ANTHROPIC_MODEL = 'claude-3-5-haiku-latest';
 const DEFAULT_TIMEOUT_MS = 45_000;
 const DEFAULT_RETRIES = 2;
+const DEFAULT_RETRY_AFTER_CAP_MS = 8_000;
 const DEFAULT_HISTORY_BUDGET = 24_000;
 const AUDIT_LIMIT = 250;
+const SUPPORTED_PROVIDERS = Object.freeze(['gemini', 'openai', 'qwen', 'nim', 'anthropic']);
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -20,6 +28,67 @@ function redact(value) {
   const text = String(value);
   if (text.length <= 10) return '[redacted]';
   return `${text.slice(0, 4)}...[redacted]...${text.slice(-4)}`;
+}
+
+function retryAfterMsFromMessage(message) {
+  const retryDelayMatch = message.match(/retryDelay"?\s*:?\s*"?(\d+(?:\.\d+)?)s/i);
+  const retryInMatch = message.match(/retry in\s+(\d+(?:\.\d+)?)s/i);
+  const value = retryDelayMatch?.[1] || retryInMatch?.[1];
+  return value ? Math.ceil(Number.parseFloat(value) * 1000) : null;
+}
+
+export function classifyModelError(error) {
+  const message = error?.message || String(error || '');
+  const lower = message.toLowerCase();
+  const retryAfterMs = retryAfterMsFromMessage(message);
+
+  if (/quota exceeded|quotafailure|free_tier|free tier|limit:\s*0/i.test(message)) {
+    return {
+      code: 'quota_exceeded',
+      retryable: false,
+      fallbackable: true,
+      retryAfterMs,
+      message,
+    };
+  }
+
+  if (lower.includes('401') || lower.includes('403') || lower.includes('unauthorized') || lower.includes('permission') || lower.includes('api key') || lower.includes('not authenticated')) {
+    return {
+      code: 'auth_failed',
+      retryable: false,
+      fallbackable: true,
+      retryAfterMs,
+      message,
+    };
+  }
+
+  if (lower.includes('429') || lower.includes('too many requests') || lower.includes('rate limit') || lower.includes('rate_limited')) {
+    return {
+      code: 'rate_limited',
+      retryable: true,
+      fallbackable: true,
+      retryAfterMs,
+      message,
+    };
+  }
+
+  if (lower.includes('503') || lower.includes('502') || lower.includes('504') || lower.includes('timeout') || lower.includes('aborted')) {
+    return {
+      code: 'transient_provider_error',
+      retryable: true,
+      fallbackable: true,
+      retryAfterMs,
+      message,
+    };
+  }
+
+  return {
+    code: 'unknown_provider_error',
+    retryable: false,
+    fallbackable: false,
+    retryAfterMs,
+    message,
+  };
 }
 
 function normalizeType(type) {
@@ -61,6 +130,16 @@ function toOpenAITools(tools = []) {
   }));
 }
 
+function toOpenAIResponsesTools(tools = []) {
+  return tools.map(tool => ({
+    type: 'function',
+    name: tool.name,
+    description: tool.description,
+    parameters: normalizeJsonSchema(tool.parameters || { type: 'OBJECT', properties: {} }),
+    strict: false,
+  }));
+}
+
 function toAnthropicTools(tools = []) {
   return tools.map(tool => ({
     name: tool.name,
@@ -77,13 +156,47 @@ function contentToText(content) {
   return JSON.stringify(content ?? '');
 }
 
+function parseToolArgs(argumentsText) {
+  if (!argumentsText) return {};
+  if (typeof argumentsText === 'object') return argumentsText;
+  try {
+    return JSON.parse(argumentsText);
+  } catch {
+    return {};
+  }
+}
+
+function extractResponseText(data = {}) {
+  if (data.output_text) return data.output_text;
+
+  return (data.output || [])
+    .filter(item => item.type === 'message')
+    .flatMap(item => item.content || [])
+    .filter(part => part.type === 'output_text' || part.text)
+    .map(part => part.text || '')
+    .join('\n');
+}
+
+function extractResponseToolCalls(data = {}) {
+  return (data.output || [])
+    .filter(item => item.type === 'function_call' && item.name)
+    .map(item => ({
+      id: item.id,
+      callId: item.call_id || item.id,
+      name: item.name,
+      args: parseToolArgs(item.arguments),
+      raw: item,
+    }));
+}
+
 /**
  * ModelService is the SaaS-grade provider gateway for Selina agents.
  * It centralizes model selection, token budgeting, retries/timeouts, and audit logs.
  */
 export class ModelService {
-  constructor(env = process.env) {
+  constructor(env = process.env, authManager = new AgentAuthManager({ env })) {
     this.env = env;
+    this.authManager = authManager;
     this.audit = [];
     this.clients = new Map();
   }
@@ -93,14 +206,23 @@ export class ModelService {
     return Math.ceil(text.length / 4);
   }
 
-  selectProfile({ modelName = DEFAULT_GEMINI_MODEL, effortLevel = 'standard', domain = 'code' } = {}) {
-    const provider = (this.env.SELINA_MODEL_PROVIDER || this.env.SELINA_AGENT_PROVIDER || 'gemini').toLowerCase();
+  selectProfile({ modelName = DEFAULT_GEMINI_MODEL, effortLevel = 'standard', domain = 'code', provider: providerOverride = null } = {}) {
+    const provider = (
+      providerOverride ||
+      this.env.SELINA_MODEL_PROVIDER ||
+      this.env.SELINA_AGENT_PROVIDER ||
+      'nim'
+    ).toLowerCase();
     const providerModel = {
       gemini: this.env.GEMINI_MODEL || this.env.SELINA_MODEL || modelName || DEFAULT_GEMINI_MODEL,
-      openai: this.env.OPENAI_MODEL || this.env.SELINA_MODEL,
-      qwen: this.env.QWEN_MODEL || this.env.SELINA_MODEL,
-      anthropic: this.env.ANTHROPIC_MODEL || this.env.SELINA_MODEL,
+      openai: this.env.OPENAI_MODEL || this.env.SELINA_MODEL || DEFAULT_OPENAI_MODEL,
+      qwen: this.env.QWEN_MODEL || this.env.SELINA_MODEL || DEFAULT_QWEN_MODEL,
+      nim: this.env.NIM_MODEL || this.env.NVIDIA_NIM_MODEL || this.env.SELINA_MODEL || DEFAULT_NIM_MODEL,
+      anthropic: this.env.ANTHROPIC_MODEL || this.env.SELINA_MODEL || DEFAULT_ANTHROPIC_MODEL,
     }[provider] || modelName;
+    const apiMode = provider === 'openai'
+      ? String(this.env.OPENAI_API_MODE || this.env.SELINA_OPENAI_API_MODE || 'responses').toLowerCase()
+      : 'chat';
 
     const outputByEffort = { quick: 1024, standard: 2048, deep: 4096 };
     const budgetByEffort = { quick: 8_000, standard: DEFAULT_HISTORY_BUDGET, deep: 64_000 };
@@ -108,6 +230,7 @@ export class ModelService {
     return {
       provider,
       model: providerModel || modelName || DEFAULT_GEMINI_MODEL,
+      apiMode,
       domain,
       effortLevel,
       maxOutputTokens: asInt(this.env.SELINA_MAX_OUTPUT_TOKENS, outputByEffort[effortLevel] || 2048),
@@ -117,13 +240,67 @@ export class ModelService {
     };
   }
 
+  fallbackProviderNames(primaryProvider) {
+    const raw = this.env.SELINA_MODEL_FALLBACKS || this.env.SELINA_PROVIDER_FALLBACKS || '';
+    return raw
+      .split(',')
+      .map(provider => provider.trim().toLowerCase())
+      .filter(provider => SUPPORTED_PROVIDERS.includes(provider))
+      .filter(provider => provider !== primaryProvider)
+      .filter(provider => this.authManager.hasProvider(provider));
+  }
+
+  selectFallbackProfiles(primaryProfile) {
+    return this.fallbackProviderNames(primaryProfile.provider)
+      .map(provider => this.selectProfile({
+        provider,
+        effortLevel: primaryProfile.effortLevel,
+        domain: primaryProfile.domain,
+      }))
+      .filter(profile => profile.model);
+  }
+
+  shouldFallback(error) {
+    return classifyModelError(error).fallbackable;
+  }
+
+  providerFailureMessage(error, profile) {
+    const classification = classifyModelError(error);
+    const retry = classification.retryAfterMs
+      ? ` Retry-after hint: ${Math.ceil(classification.retryAfterMs / 1000)}s.`
+      : '';
+    const fallbackHint = classification.fallbackable
+      ? ' Configure SELINA_MODEL_PROVIDER to another provider, or set SELINA_MODEL_FALLBACKS=nim,openai,qwen,anthropic,gemini with matching API keys.'
+      : '';
+
+    return `${profile.provider}:${profile.model} failed with ${classification.code}.${retry}${fallbackHint}`;
+  }
+
   providerStatus() {
     return {
-      activeProvider: (this.env.SELINA_MODEL_PROVIDER || this.env.SELINA_AGENT_PROVIDER || 'gemini').toLowerCase(),
-      gemini: { configured: Boolean(this.env.GEMINI_API_KEY), model: this.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL },
-      openai: { configured: Boolean(this.env.OPENAI_API_KEY), model: this.env.OPENAI_MODEL || null, baseUrl: this.env.OPENAI_BASE_URL || 'https://api.openai.com/v1' },
-      qwen: { configured: Boolean(this.env.QWEN_API_KEY), model: this.env.QWEN_MODEL || null, baseUrl: this.env.QWEN_BASE_URL || null },
-      anthropic: { configured: Boolean(this.env.ANTHROPIC_API_KEY), model: this.env.ANTHROPIC_MODEL || null, baseUrl: this.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com' },
+      activeProvider: (
+        this.env.SELINA_MODEL_PROVIDER ||
+        this.env.SELINA_AGENT_PROVIDER ||
+        'nim'
+      ).toLowerCase(),
+      gemini: { configured: this.authManager.hasProvider('gemini'), model: this.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL },
+      openai: {
+        configured: this.authManager.hasProvider('openai'),
+        model: this.env.OPENAI_MODEL || null,
+        baseUrl: this.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+        apiMode: String(this.env.OPENAI_API_MODE || this.env.SELINA_OPENAI_API_MODE || 'responses').toLowerCase(),
+      },
+      qwen: {
+        configured: this.authManager.hasProvider('qwen'),
+        model: this.env.QWEN_MODEL || DEFAULT_QWEN_MODEL,
+        baseUrl: this.env.QWEN_BASE_URL || null,
+      },
+      nim: {
+        configured: this.authManager.hasProvider('nim'),
+        model: this.env.NIM_MODEL || this.env.NVIDIA_NIM_MODEL || DEFAULT_NIM_MODEL,
+        baseUrl: this.env.NIM_BASE_URL || this.env.NVIDIA_NIM_BASE_URL || DEFAULT_NIM_BASE_URL,
+      },
+      anthropic: { configured: this.authManager.hasProvider('anthropic'), model: this.env.ANTHROPIC_MODEL || null, baseUrl: this.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com' },
     };
   }
 
@@ -132,6 +309,88 @@ export class ModelService {
       providerStatus: this.providerStatus(),
       auditTail: this.audit.slice(-25),
     };
+  }
+
+  async completeText({
+    prompt,
+    system = '',
+    provider = null,
+    modelName = DEFAULT_GEMINI_MODEL,
+    effortLevel = 'quick',
+    domain = 'classifier',
+    meta = {},
+  } = {}) {
+    const primary = this.selectProfile({ modelName, effortLevel, domain, provider });
+    const profiles = [primary, ...this.selectFallbackProfiles(primary)];
+    let lastError = null;
+
+    for (let index = 0; index < profiles.length; index++) {
+      const candidate = profiles[index];
+      try {
+        if (this.providerKind(candidate) === 'gemini') {
+          const model = this.getGeminiGenerativeModel({
+            model: candidate.model,
+            systemInstruction: system,
+            maxOutputTokens: candidate.maxOutputTokens,
+          });
+          const result = await this.withRetry(
+            () => model.generateContent(prompt),
+            candidate,
+            { phase: 'complete_text', ...meta }
+          );
+          return {
+            content: result.response.text(),
+            profile: candidate,
+          };
+        }
+
+        if (this.providerKind(candidate) === 'anthropic') {
+          const result = await this.anthropicChat({
+            profile: candidate,
+            system,
+            messages: [{ role: 'user', content: prompt }],
+            tools: [],
+          });
+          return { content: result.content, profile: candidate };
+        }
+
+        if (candidate.provider === 'openai' && candidate.apiMode === 'responses') {
+          const result = await this.openAIResponses({
+            profile: candidate,
+            instructions: system,
+            input: [{ role: 'user', content: prompt }],
+            tools: [],
+          });
+          return { content: result.content, profile: candidate };
+        }
+
+        const messages = [
+          ...(system ? [{ role: 'system', content: system }] : []),
+          { role: 'user', content: prompt },
+        ];
+        const result = await this.openAICompatibleChat({ profile: candidate, messages, tools: [] });
+        return { content: result.content, profile: candidate };
+      } catch (error) {
+        lastError = error;
+        const hasNext = index < profiles.length - 1;
+        const classification = classifyModelError(error);
+        const canFallback = hasNext && classification.fallbackable;
+        this.recordAudit({
+          kind: canFallback ? 'provider_fallback' : 'provider_failure',
+          fromProvider: candidate.provider,
+          fromModel: candidate.model,
+          toProvider: canFallback ? profiles[index + 1].provider : null,
+          toModel: canFallback ? profiles[index + 1].model : null,
+          reason: classification.code,
+          retryAfterMs: classification.retryAfterMs,
+          message: classification.message.slice(0, 220),
+          ...meta,
+        });
+        if (!canFallback) throw new Error(this.providerFailureMessage(error, candidate));
+      }
+    }
+
+    throw lastError;
   }
 
   recordAudit(event) {
@@ -145,7 +404,8 @@ export class ModelService {
   }
 
   getGeminiClient() {
-    if (!this.env.GEMINI_API_KEY) {
+    const apiKey = this.authManager.getBearerToken('gemini');
+    if (!apiKey) {
       return {
         getGenerativeModel: () => ({
           startChat: () => ({ sendMessageStream: () => { throw new Error('GEMINI_API_KEY missing'); } }),
@@ -155,7 +415,7 @@ export class ModelService {
     }
 
     if (!this.clients.has('gemini')) {
-      this.clients.set('gemini', new GoogleGenerativeAI(this.env.GEMINI_API_KEY));
+      this.clients.set('gemini', new GoogleGenerativeAI(apiKey));
     }
     return this.clients.get('gemini');
   }
@@ -210,8 +470,9 @@ export class ModelService {
       } catch (err) {
         clearTimeout(timeout);
         lastErr = err;
+        const classification = classifyModelError(err);
         const message = err?.message || String(err);
-        const retryable = /429|503|502|504|quota|rate|timeout|aborted/i.test(message);
+        const retryable = classification.retryable;
         this.recordAudit({
           kind: 'model_error',
           provider: profile.provider,
@@ -220,11 +481,17 @@ export class ModelService {
           durationMs: Date.now() - started,
           ok: false,
           retryable,
+          code: classification.code,
+          retryAfterMs: classification.retryAfterMs,
           error: message.slice(0, 220),
           ...meta,
         });
         if (!retryable || attempt >= profile.retries) break;
-        await sleep(Math.min(8000, 500 * 2 ** attempt) + Math.floor(Math.random() * 150));
+        const retryCapMs = asInt(this.env.SELINA_MODEL_MAX_RETRY_AFTER_MS, DEFAULT_RETRY_AFTER_CAP_MS);
+        const retryDelayMs = classification.retryAfterMs
+          ? Math.min(classification.retryAfterMs, retryCapMs)
+          : Math.min(retryCapMs, 500 * 2 ** attempt);
+        await sleep(retryDelayMs + Math.floor(Math.random() * 150));
       }
     }
     throw lastErr;
@@ -262,6 +529,23 @@ export class ModelService {
     }, profile, meta);
   }
 
+  async fetchJsonWithAuth(provider, url, buildOptions, profile, meta) {
+    return this.withRetry(async (signal) => {
+      const res = await callWithAuthRetry(this.authManager, provider, auth => {
+        const options = buildOptions(auth);
+        return fetch(url, { ...options, signal });
+      });
+      const text = await res.text();
+      let data;
+      try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+      if (!res.ok) {
+        const detail = data?.error?.message || data?.error || data?.message || res.statusText;
+        throw new Error(`${res.status} ${detail}`);
+      }
+      return data;
+    }, profile, meta);
+  }
+
   buildOpenAIRequest({ profile, messages, tools }) {
     return {
       model: profile.model,
@@ -273,20 +557,39 @@ export class ModelService {
     };
   }
 
-  async openAICompatibleChat({ profile, messages, tools = [] }) {
-    const providerConfig = profile.provider === 'qwen'
-      ? {
-          key: this.env.QWEN_API_KEY,
-          baseUrl: this.env.QWEN_BASE_URL,
-          headerName: 'Authorization',
-        }
-      : {
-          key: this.env.OPENAI_API_KEY,
-          baseUrl: this.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
-          headerName: 'Authorization',
-        };
+  buildOpenAIResponsesRequest({ profile, instructions, input, tools }) {
+    const body = {
+      model: profile.model,
+      input,
+      store: false,
+      parallel_tool_calls: false,
+      max_output_tokens: profile.maxOutputTokens,
+    };
 
-    if (!providerConfig.key) throw new Error(`${profile.provider.toUpperCase()} API key is missing`);
+    if (instructions) body.instructions = instructions;
+    if (tools?.length) body.tools = toOpenAIResponsesTools(tools);
+    return body;
+  }
+
+  async openAICompatibleChat({ profile, messages, tools = [] }) {
+    const providerConfig = {
+      openai: {
+        baseUrl: this.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+        headerName: 'Authorization',
+      },
+      qwen: {
+        baseUrl: this.env.QWEN_BASE_URL,
+        headerName: 'Authorization',
+      },
+      nim: {
+        baseUrl: this.env.NIM_BASE_URL || this.env.NVIDIA_NIM_BASE_URL || DEFAULT_NIM_BASE_URL,
+        headerName: 'Authorization',
+      },
+    }[profile.provider];
+
+    if (!providerConfig) throw new Error(`${profile.provider.toUpperCase()} is not an OpenAI-compatible provider`);
+
+    if (!this.authManager.hasProvider(profile.provider)) throw new Error(`${profile.provider.toUpperCase()} API key is missing`);
     if (!profile.model) throw new Error(`${profile.provider.toUpperCase()} model is missing`);
     const baseUrl = (providerConfig.baseUrl || '').replace(/\/$/, '');
     if (!baseUrl) throw new Error(`${profile.provider.toUpperCase()} base URL is missing`);
@@ -294,14 +597,14 @@ export class ModelService {
     const body = this.buildOpenAIRequest({ profile, messages, tools });
     const promptTokens = this.estimateTokens(messages);
 
-    const data = await this.fetchJson(`${baseUrl}/chat/completions`, {
+    const data = await this.fetchJsonWithAuth(profile.provider, `${baseUrl}/chat/completions`, (auth) => ({
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        [providerConfig.headerName]: `Bearer ${providerConfig.key}`,
+        [providerConfig.headerName]: `Bearer ${authToken(auth)}`,
       },
       body: JSON.stringify(body),
-    }, profile, { promptTokens });
+    }), profile, { promptTokens });
 
     const message = data.choices?.[0]?.message || {};
     return {
@@ -317,17 +620,43 @@ export class ModelService {
     };
   }
 
+  async openAIResponses({ profile, instructions, input, tools = [] }) {
+    if (!this.authManager.hasProvider('openai')) throw new Error('OPENAI_API_KEY is missing');
+    if (!profile.model) throw new Error('OPENAI_MODEL is missing');
+
+    const baseUrl = (this.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
+    const body = this.buildOpenAIResponsesRequest({ profile, instructions, input, tools });
+    const promptTokens = this.estimateTokens({ instructions, input });
+
+    const data = await this.fetchJsonWithAuth('openai', `${baseUrl}/responses`, (auth) => ({
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken(auth)}`,
+      },
+      body: JSON.stringify(body),
+    }), profile, { promptTokens, apiMode: 'responses' });
+
+    return {
+      content: extractResponseText(data),
+      toolCalls: extractResponseToolCalls(data),
+      rawItems: data.output || [],
+      responseId: data.id,
+      usage: data.usage,
+    };
+  }
+
   async anthropicChat({ profile, system, messages, tools = [] }) {
-    if (!this.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is missing');
+    if (!this.authManager.hasProvider('anthropic')) throw new Error('ANTHROPIC_API_KEY is missing');
     if (!profile.model) throw new Error('ANTHROPIC_MODEL is missing');
 
     const baseUrl = (this.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com').replace(/\/$/, '');
     const promptTokens = this.estimateTokens({ system, messages });
-    const data = await this.fetchJson(`${baseUrl}/v1/messages`, {
+    const data = await this.fetchJsonWithAuth('anthropic', `${baseUrl}/v1/messages`, (auth) => ({
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': this.env.ANTHROPIC_API_KEY,
+        'x-api-key': authToken(auth),
         'anthropic-version': this.env.ANTHROPIC_VERSION || '2023-06-01',
       },
       body: JSON.stringify({
@@ -338,7 +667,7 @@ export class ModelService {
         max_tokens: profile.maxOutputTokens,
         temperature: 0.2,
       }),
-    }, profile, { promptTokens });
+    }), profile, { promptTokens });
 
     const blocks = data.content || [];
     return {
@@ -355,20 +684,21 @@ export class ModelService {
   }
 
   providerKind(profile) {
-    if (profile.provider === 'qwen' || profile.provider === 'openai') return 'openai-compatible';
+    if (profile.provider === 'qwen' || profile.provider === 'openai' || profile.provider === 'nim') return 'openai-compatible';
     if (profile.provider === 'anthropic') return 'anthropic';
     return 'gemini';
   }
 
   providerSecretPreview(provider) {
     const key = {
-      gemini: this.env.GEMINI_API_KEY,
-      openai: this.env.OPENAI_API_KEY,
-      qwen: this.env.QWEN_API_KEY,
-      anthropic: this.env.ANTHROPIC_API_KEY,
+      gemini: this.authManager.getBearerToken('gemini'),
+      openai: this.authManager.getBearerToken('openai'),
+      qwen: this.authManager.getBearerToken('qwen'),
+      nim: this.authManager.getBearerToken('nim'),
+      anthropic: this.authManager.getBearerToken('anthropic'),
     }[provider];
     return redact(key);
   }
 }
 
-export const modelService = new ModelService();
+export const modelService = new ModelService(process.env, agentAuthManager);

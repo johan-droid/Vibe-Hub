@@ -1,237 +1,550 @@
-import React, { useState } from 'react';
-import { X, Globe, Lock, ShieldCheck, Cpu, Palette, Box, Trash2, LogOut, Settings as SettingsIcon, Fingerprint, ChevronRight, Sparkles, HardDrive, Shield } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import {
+  Bell,
+  Cpu,
+  Database,
+  Languages,
+  Lock,
+  Palette,
+  Save,
+  Settings as SettingsIcon,
+  ShieldAlert,
+  Terminal,
+  User,
+  X,
+  Zap,
+} from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useStore } from '../../../store/useStore';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Button } from './Button';
-import { IconButton } from './IconButton';
-import { api } from '../../../services/api';
+import { VibeLogoCompact } from '../../../components/VibeLogo';
+import { SELINA_BRAND } from '../../../brand/selina';
+
+const fieldShell = 'rounded-lg border border-white/10 bg-white/[0.035] px-4 py-3';
+const inputShell = 'rounded-md border border-white/10 bg-[#080A0F]/80 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-[#43F3C5]/45';
+
+function Toggle({ enabled, onChange, label, description }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-4">
+      <div className="min-w-0">
+        <span className="block text-sm font-bold text-white/85">{label}</span>
+        {description && <span className="mt-1 block text-xs leading-relaxed text-white/40">{description}</span>}
+      </div>
+      <button
+        onClick={() => onChange(!enabled)}
+        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition focus:outline-none ${
+          enabled ? 'bg-[#43F3C5]' : 'bg-white/15'
+        }`}
+        aria-pressed={enabled}
+      >
+        <span
+          className={`inline-block h-4 w-4 rounded-full transition ${
+            enabled ? 'translate-x-6 bg-[#07110F]' : 'translate-x-1 bg-white/80'
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
+function Slider({ value, min, max, step = 1, onChange, label, unit = '' }) {
+  return (
+    <div className="py-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <span className="text-sm font-bold text-white/85">{label}</span>
+        <span className="rounded-md border border-[#43F3C5]/20 bg-[#43F3C5]/10 px-2 py-1 font-mono text-xs text-[#43F3C5]">
+          {value}{unit}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-white/10 accent-[#43F3C5]"
+      />
+    </div>
+  );
+}
+
+function Select({ value, options, onChange, label, disabled = false }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-4">
+      <span className="text-sm font-bold text-white/85">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={disabled}
+        className={`${inputShell} min-w-44 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60`}
+      >
+        {options.map((option) => (
+          <option key={option.value || option} value={option.value || option}>
+            {option.label || option}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function Section({ eyebrow, children }) {
+  return (
+    <section className="space-y-3">
+      <h3 className="text-[11px] font-black uppercase tracking-[0.18em] text-white/35">{eyebrow}</h3>
+      <div className="divide-y divide-white/[0.07] rounded-lg border border-white/10 bg-white/[0.035] px-5">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function LanguageLock() {
+  return (
+    <div className="py-4">
+      <div className="mb-3 flex items-center gap-2">
+        <Languages size={15} className="text-[#F7C35F]" />
+        <span className="text-sm font-bold text-white/85">Language lock</span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {['en', 'hi', 'or'].map((language) => (
+          <span
+            key={language}
+            className="rounded-md border border-[#F7C35F]/20 bg-[#F7C35F]/10 px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-[#F7C35F]"
+          >
+            {language}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function SettingsModal({ isOpen, onClose }) {
-  const { repoUrl, githubPat, setSettings, logout } = useStore();
+  const { settings, setSettings, user, setExperienceMode, setAutonomyLevel } = useStore();
   const [activeTab, setActiveTab] = useState('agent');
-  const [localRepo, setLocalRepo] = useState(repoUrl);
-  const [localPat, setLocalPat] = useState(githubPat);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [localSettings, setLocalSettings] = useState(settings);
+
+  useEffect(() => {
+    if (isOpen) setLocalSettings(settings);
+  }, [isOpen, settings]);
 
   if (!isOpen) return null;
 
+  const updateLocal = (group, key, value) => {
+    setLocalSettings((prev) => ({
+      ...prev,
+      [group]: {
+        ...prev[group],
+        [key]: value,
+      },
+    }));
+  };
+
   const handleSave = () => {
-    setSettings({ repoUrl: localRepo, githubPat: localPat });
+    const normalizedAutonomy = Math.min(3, Math.max(1, Number(localSettings.workflow.autonomyLevel) || 2));
+    const normalizedMode = localSettings.workflow.experienceMode === 'learner' ? 'learner' : 'professional';
+    const nextSettings = {
+      ...localSettings,
+      agent: {
+        ...localSettings.agent,
+        sandboxType: 'Local Docker container',
+      },
+      workflow: {
+        ...localSettings.workflow,
+        experienceMode: normalizedMode,
+        autonomyLevel: normalizedAutonomy,
+      },
+    };
+
+    setExperienceMode(normalizedMode);
+    setAutonomyLevel(normalizedAutonomy);
+    setSettings(nextSettings);
     onClose();
   };
 
   const tabs = [
-    { id: 'agent', icon: Cpu, label: 'Intelligence', desc: 'AI model and reasoning engine configurations.' },
-    { id: 'git', icon: Box, label: 'Repository', desc: 'Manage your project source and credentials.' },
-    { id: 'appearance', icon: Palette, label: 'Aesthetics', desc: 'Visual theme and workspace density.' }
+    { id: 'agent', icon: Cpu, label: 'Selina Core', color: 'text-[#43F3C5]' },
+    { id: 'terminal', icon: Terminal, label: 'Terminal', color: 'text-[#8DA2FF]' },
+    { id: 'appearance', icon: Palette, label: 'Appearance', color: 'text-[#F7C35F]' },
+    { id: 'workflow', icon: Bell, label: 'Workflow', color: 'text-[#43F3C5]' },
+    { id: 'profile', icon: User, label: 'Profile', color: 'text-[#8DA2FF]' },
   ];
 
+  if (showAdvanced) {
+    tabs.splice(4, 0, { id: 'advanced', icon: ShieldAlert, label: 'Advanced', color: 'text-[#FF8F8F]' });
+  }
+
+  const activeLabel = tabs.find((tab) => tab.id === activeTab)?.label;
+  const displayName = user?.name || user?.email || 'Selina Developer';
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-      {/* Backdrop */}
-      <motion.div 
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
-        className="absolute inset-0 bg-black/40 backdrop-blur-xl"
+        className="absolute inset-0 bg-black/65 backdrop-blur-md"
       />
-      
-      {/* Modal Container */}
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.95, y: 30 }}
+
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 30 }}
-        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        className="relative w-full max-w-4xl h-[680px] overflow-hidden rounded-[3rem] bg-[#faf8f5] shadow-3xl shadow-black/20 border border-black/[0.05] flex"
+        exit={{ opacity: 0, scale: 0.97, y: 16 }}
+        className="relative flex h-[min(760px,92vh)] w-full max-w-6xl overflow-hidden rounded-lg border border-white/10 bg-[#0D1117] shadow-2xl"
       >
-        {/* Navigation Sidebar */}
-        <div className="w-80 bg-white border-r border-black/[0.03] flex flex-col p-10">
-          <div className="mb-12 flex items-center gap-5">
-            <div className="w-12 h-12 flex items-center justify-center rounded-2xl bg-google-blue/5 text-google-blue shadow-sm">
-              <SettingsIcon size={22} />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xl font-black tracking-tight text-on-surface leading-none">Settings</span>
-              <span className="mt-2 text-[9px] font-black text-on-surface-variant/40 uppercase tracking-[0.3em]">Workspace Core</span>
+        <aside className="hidden w-72 shrink-0 flex-col border-r border-white/10 bg-[#0B0E14] p-5 md:flex">
+          <div className="mb-8 flex items-center gap-3">
+            <VibeLogoCompact size={44} />
+            <div>
+              <h2 className="text-base font-black text-white">Settings</h2>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">Workspace Control</p>
             </div>
           </div>
 
-          <nav className="flex flex-col gap-3">
-            {tabs.map(tab => (
+          <nav className="flex-1 space-y-1">
+            {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className="relative group h-14 flex items-center px-5 rounded-[1.5rem] transition-all duration-500"
+                className={`relative flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition ${
+                  activeTab === tab.id
+                    ? 'bg-white/[0.07] text-white'
+                    : 'text-white/45 hover:bg-white/[0.045] hover:text-white/80'
+                }`}
               >
+                <tab.icon size={18} className={activeTab === tab.id ? tab.color : 'text-white/35'} />
+                <span className="text-sm font-bold">{tab.label}</span>
                 {activeTab === tab.id && (
-                  <motion.div 
-                    layoutId="settings-tab-pill"
-                    className="absolute inset-0 bg-google-blue/[0.05] border border-google-blue/10 rounded-[1.5rem] -z-10"
-                  />
-                )}
-                <tab.icon 
-                  size={20} 
-                  className={`transition-colors duration-500 ${activeTab === tab.id ? 'text-google-blue' : 'text-on-surface-variant/30 group-hover:text-on-surface'}`} 
-                />
-                <span className={`ml-5 text-sm font-bold transition-colors duration-500 ${activeTab === tab.id ? 'text-on-surface' : 'text-on-surface-variant/40 group-hover:text-on-surface'}`}>
-                  {tab.label}
-                </span>
-                {activeTab === tab.id && (
-                  <ChevronRight size={14} className="ml-auto text-google-blue opacity-40" />
+                  <motion.span layoutId="settings-active-tab" className="absolute left-0 top-2 h-8 w-1 rounded-r bg-[#43F3C5]" />
                 )}
               </button>
             ))}
           </nav>
 
-          <div className="mt-auto space-y-6">
-            <div className="p-6 rounded-[2rem] bg-google-red/5 border border-google-red/10 group overflow-hidden relative">
-               <div className="absolute -right-4 -top-4 w-12 h-12 bg-google-red/10 blur-[20px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-               <p className="text-[10px] font-black text-google-red uppercase tracking-widest mb-3">Critical Zone</p>
-               <Button
-                variant="text"
-                size="sm"
-                fullWidth
-                onClick={() => {
-                  if(confirm("Are you sure you want to purge all local session data? This cannot be undone.")) {
-                    api.logout()
-                      .catch(() => {})
-                      .finally(() => {
-                        logout();
-                        window.location.reload();
-                      });
-                  }
-                }}
-                className="!justify-start !p-0 !text-google-red/60 hover:!text-google-red font-black uppercase tracking-widest text-[9px]"
-              >
-                Purge Neural Session
-              </Button>
+          <div className="space-y-4 border-t border-white/10 pt-5">
+            <Toggle
+              enabled={showAdvanced}
+              onChange={setShowAdvanced}
+              label="Advanced Mode"
+              description="Expose power-user controls"
+            />
+            <div className="rounded-lg border border-white/10 bg-[#080A0F]/70 px-4 py-3 text-center text-[10px] font-black uppercase tracking-[0.18em] text-white/35">
+              {SELINA_BRAND.versionLabel}
             </div>
-            <p className="text-[9px] font-black text-on-surface-variant/20 text-center uppercase tracking-widest">Selina Engine v4.1.2_Stable</p>
           </div>
-        </div>
+        </aside>
 
-        {/* Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <header className="h-20 px-12 flex items-center justify-between border-b border-black/[0.03] bg-white/30 backdrop-blur-sm">
-            <div className="flex flex-col">
-              <h2 className="text-lg font-black text-on-surface leading-none">{tabs.find(t => t.id === activeTab).label}</h2>
-              <p className="mt-2 text-[10px] font-semibold text-on-surface-variant/40 uppercase tracking-widest">{tabs.find(t => t.id === activeTab).desc}</p>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="flex h-[4.5rem] shrink-0 items-center justify-between border-b border-white/10 bg-[#0D1117]/95 px-5 py-4 backdrop-blur">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <SettingsIcon size={17} className="text-[#43F3C5] md:hidden" />
+                <h2 className="truncate text-lg font-black tracking-tight text-white">{activeLabel}</h2>
+              </div>
+              <p className="mt-1 text-xs font-medium text-white/40">{SELINA_BRAND.productName} workspace configuration</p>
             </div>
-            <IconButton icon={X} variant="ghost" onClick={onClose} className="opacity-20 hover:opacity-100 hover:bg-black/5 rounded-xl transition-all" />
+            <button
+              onClick={onClose}
+              className="flex h-9 w-9 items-center justify-center rounded-md text-white/50 transition hover:bg-white/[0.06] hover:text-white"
+              aria-label="Close settings"
+            >
+              <X size={18} />
+            </button>
           </header>
 
-          <div className="flex-1 overflow-y-auto p-12 scrollbar-none">
+          <div className="min-h-0 flex-1 overflow-y-auto p-5 md:p-8">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -15 }}
-                transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                className="space-y-10"
+                initial={{ opacity: 0, x: 8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -8 }}
+                transition={{ duration: 0.18 }}
+                className="mx-auto max-w-3xl space-y-7"
               >
                 {activeTab === 'agent' && (
-                  <div className="space-y-10">
-                    <div className="space-y-5">
-                      <label className="text-[10px] font-black text-google-blue uppercase tracking-[0.4em] ml-2">Active Specialist</label>
-                      <div className="p-8 rounded-[2.5rem] bg-white border border-black/[0.03] shadow-sm flex items-center justify-between group hover:border-google-blue/20 transition-all duration-500">
-                        <div className="flex items-center gap-6">
-                          <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-google-blue/5 text-google-blue group-hover:scale-110 transition-transform">
-                            <Cpu size={28} />
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="text-xl font-black text-on-surface tracking-tight">Gemini 1.5 Flash</span>
-                            <span className="mt-1 text-[10px] font-black text-google-green uppercase tracking-widest">Online / Performance Optimized</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 px-5 py-2 rounded-full bg-google-green/5 text-google-green border border-google-green/10 text-[9px] font-black uppercase tracking-widest">
-                           <div className="h-1.5 w-1.5 rounded-full bg-google-green animate-pulse" />
-                           Ready
+                  <>
+                    <Section eyebrow="Core Processing">
+                      <Slider
+                        label="Max automatic retries"
+                        value={localSettings.agent.maxRetries}
+                        min={1}
+                        max={10}
+                        onChange={(value) => updateLocal('agent', 'maxRetries', value)}
+                      />
+                      <div className="flex items-center justify-between gap-4 py-4">
+                        <span className="text-sm font-bold text-white/85">Timeout per command</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={localSettings.agent.timeout}
+                            onChange={(event) => updateLocal('agent', 'timeout', Number.parseInt(event.target.value, 10) || 30)}
+                            className={`${inputShell} w-24 text-center`}
+                          />
+                          <span className="text-xs font-medium text-white/35">seconds</span>
                         </div>
                       </div>
-                    </div>
+                      <Select
+                        label="Model / Provider"
+                        value={localSettings.agent.model}
+                        options={['GPT-4o', 'Claude 3.5 Sonnet', 'Gemini 1.5 Pro', 'DeepSeek Coder']}
+                        onChange={(value) => updateLocal('agent', 'model', value)}
+                      />
+                    </Section>
 
-                    <div className="p-10 rounded-[3rem] bg-google-blue/[0.02] border border-google-blue/10 relative overflow-hidden group">
-                      <div className="absolute -right-10 -top-10 w-40 h-40 bg-google-blue/5 blur-[50px] rounded-full group-hover:scale-125 transition-transform duration-700" />
-                      <div className="relative z-10">
-                        <div className="flex items-center gap-4 text-google-blue mb-6">
-                           <Shield size={22} />
-                           <span className="text-xs font-black uppercase tracking-[0.3em]">Agent Protocols</span>
-                        </div>
-                        <p className="text-base text-on-surface-variant/60 leading-relaxed font-semibold">
-                          Your workspace agents follow strict architectural guidelines. Every code modification is analyzed for performance impacts and potential security regressions before being suggested.
+                    <Section eyebrow="Architecture Locks">
+                      <Toggle
+                        label="Auto-accept changes"
+                        enabled={localSettings.agent.autoAccept}
+                        onChange={(value) => updateLocal('agent', 'autoAccept', value)}
+                        description="Apply changes after passing validation"
+                      />
+                      <Select
+                        label="Sandbox type"
+                        value="Local Docker container"
+                        options={['Local Docker container']}
+                        onChange={() => updateLocal('agent', 'sandboxType', 'Local Docker container')}
+                        disabled
+                      />
+                      <div className="flex items-start gap-3 py-4">
+                        <Lock size={16} className="mt-0.5 shrink-0 text-[#43F3C5]" />
+                        <p className="text-sm leading-relaxed text-white/45">
+                          Deployment and execution stay inside the local Docker sandbox.
                         </p>
                       </div>
-                    </div>
-                  </div>
+                      <LanguageLock />
+                    </Section>
+                  </>
                 )}
 
-                {activeTab === 'git' && (
-                  <div className="space-y-10">
-                    <div className="space-y-5">
-                      <label className="text-[10px] font-black text-google-red uppercase tracking-[0.4em] ml-2">Source Control Link</label>
-                      <div className="relative group">
-                        <div className="absolute left-6 top-1/2 -translate-y-1/2 text-google-blue opacity-30 group-focus-within:opacity-100 group-focus-within:scale-110 transition-all">
-                          <Globe size={20} />
-                        </div>
-                        <input 
-                          type="text"
-                          value={localRepo}
-                          onChange={(e) => setLocalRepo(e.target.value)}
-                          placeholder="Repository URL (GitHub/GitLab)"
-                          className="w-full h-18 bg-white border border-black/[0.03] rounded-[1.8rem] pl-16 pr-8 text-base font-bold text-on-surface placeholder:text-on-surface-variant/20 focus:outline-none focus:border-google-blue/30 focus:shadow-2xl focus:shadow-black/[0.02] transition-all font-mono"
-                        />
-                      </div>
-                    </div>
+                {activeTab === 'terminal' && (
+                  <>
+                    <Section eyebrow="Visibility">
+                      <Select
+                        label="Terminal visibility"
+                        value={localSettings.terminal.visibility}
+                        options={['Never show', 'On Error', 'Always show']}
+                        onChange={(value) => updateLocal('terminal', 'visibility', value)}
+                      />
+                      <Toggle
+                        label="Peek auto-dismiss"
+                        enabled={localSettings.terminal.peekAutoDismiss}
+                        onChange={(value) => updateLocal('terminal', 'peekAutoDismiss', value)}
+                        description="Collapse terminal preview after focus leaves"
+                      />
+                    </Section>
 
-                    <div className="space-y-5">
-                      <label className="text-[10px] font-black text-google-yellow uppercase tracking-[0.4em] ml-2">Authentication Key</label>
-                      <div className="relative group">
-                        <div className="absolute left-6 top-1/2 -translate-y-1/2 text-google-blue opacity-30 group-focus-within:opacity-100 group-focus-within:scale-110 transition-all">
-                          <Fingerprint size={20} />
-                        </div>
-                        <input 
-                          type="password"
-                          value={localPat}
-                          onChange={(e) => setLocalPat(e.target.value)}
-                          placeholder="Personal Access Token (ghp_...)"
-                          className="w-full h-18 bg-white border border-black/[0.03] rounded-[1.8rem] pl-16 pr-8 text-base font-bold text-on-surface placeholder:text-on-surface-variant/20 focus:outline-none focus:border-google-blue/30 focus:shadow-2xl focus:shadow-black/[0.02] transition-all font-mono"
+                    <Section eyebrow="Log Management">
+                      <Select
+                        label="Log retention"
+                        value={localSettings.terminal.logRetention}
+                        options={['Until session ends', '1 hour', '24 hours', 'Forever']}
+                        onChange={(value) => updateLocal('terminal', 'logRetention', value)}
+                      />
+                      <div className="flex items-center justify-between gap-4 py-4">
+                        <span className="text-sm font-bold text-white/85">Max log lines</span>
+                        <input
+                          type="number"
+                          value={localSettings.terminal.maxLogLines}
+                          onChange={(event) => updateLocal('terminal', 'maxLogLines', Number.parseInt(event.target.value, 10) || 10000)}
+                          className={`${inputShell} w-28 text-center`}
                         />
                       </div>
-                      <div className="flex items-center gap-3 px-4 text-[10px] font-semibold text-on-surface-variant/30 italic">
-                         <Lock size={12} />
-                         <span>Credentials are encrypted and stored in your local enclave.</span>
-                      </div>
-                    </div>
-                  </div>
+                      <Toggle label="Capture ANSI colors" enabled={localSettings.terminal.captureAnsi} onChange={(value) => updateLocal('terminal', 'captureAnsi', value)} />
+                      <Toggle label="Record execution timeline" enabled={localSettings.terminal.recordDiary} onChange={(value) => updateLocal('terminal', 'recordDiary', value)} />
+                    </Section>
+                  </>
                 )}
 
                 {activeTab === 'appearance' && (
-                  <div className="h-full flex flex-col items-center justify-center gap-8 py-20">
-                     <div className="relative">
-                        <div className="w-28 h-28 flex items-center justify-center rounded-[2.5rem] border border-black/[0.03] bg-white shadow-2xl shadow-black/[0.05]">
-                          <Palette size={48} className="text-google-blue opacity-10" />
+                  <>
+                    <Section eyebrow="Interface">
+                      <Select
+                        label="Theme"
+                        value={localSettings.appearance.theme}
+                        options={['Dark', 'Light', 'System']}
+                        onChange={(value) => updateLocal('appearance', 'theme', value)}
+                      />
+                      <Slider label="Font size" value={localSettings.appearance.fontSize} min={12} max={20} unit="px" onChange={(value) => updateLocal('appearance', 'fontSize', value)} />
+                      <Select
+                        label="Code font"
+                        value={localSettings.appearance.codeFont}
+                        options={['JetBrains Mono', 'Fira Code', 'Roboto Mono', 'Cascadia Code']}
+                        onChange={(value) => updateLocal('appearance', 'codeFont', value)}
+                      />
+                    </Section>
+
+                    <Section eyebrow="Motion">
+                      <Select
+                        label="Animation intensity"
+                        value={localSettings.appearance.animationIntensity}
+                        options={['Full', 'Reduced', 'Off']}
+                        onChange={(value) => updateLocal('appearance', 'animationIntensity', value)}
+                      />
+                      <Select
+                        label="Sound effects"
+                        value={localSettings.appearance.soundEffects}
+                        options={['On', 'Errors only', 'Off']}
+                        onChange={(value) => updateLocal('appearance', 'soundEffects', value)}
+                      />
+                      <Toggle label="Minimap in diff" enabled={localSettings.appearance.minimap} onChange={(value) => updateLocal('appearance', 'minimap', value)} />
+                    </Section>
+                  </>
+                )}
+
+                {activeTab === 'workflow' && (
+                  <>
+                    <Section eyebrow="Orchestrator Experience">
+                      <Select
+                        label="Experience mode"
+                        value={localSettings.workflow.experienceMode || 'professional'}
+                        options={[
+                          { value: 'learner', label: 'Learner' },
+                          { value: 'professional', label: 'Professional' },
+                        ]}
+                        onChange={(value) => updateLocal('workflow', 'experienceMode', value)}
+                      />
+                      <Slider
+                        label="Autonomy level"
+                        value={localSettings.workflow.autonomyLevel || 2}
+                        min={1}
+                        max={3}
+                        onChange={(value) => updateLocal('workflow', 'autonomyLevel', value)}
+                      />
+                      <div className="flex items-start gap-3 py-4">
+                        <ShieldAlert size={16} className="mt-0.5 shrink-0 text-[#F7C35F]" />
+                        <p className="text-sm leading-relaxed text-white/45">
+                          Level 1 asks before tool use, level 2 auto-runs safe reads and gates risky actions, and level 3 keeps approvals for writes, execution, browser, GitHub, and MCP mutations.
+                        </p>
+                      </div>
+                    </Section>
+
+                    <Section eyebrow="Review Flow">
+                      <Toggle label="Show desktop notifications" enabled={localSettings.workflow.showNotifications} onChange={(value) => updateLocal('workflow', 'showNotifications', value)} />
+                      <Toggle label="Alert on manual review needed" enabled={localSettings.workflow.alertManualReview} onChange={(value) => updateLocal('workflow', 'alertManualReview', value)} />
+                      <Toggle label="Auto-open diff on change" enabled={localSettings.workflow.autoOpenDiff} onChange={(value) => updateLocal('workflow', 'autoOpenDiff', value)} />
+                      <Toggle label="Confirm before accepting all" enabled={localSettings.workflow.confirmAcceptAll} onChange={(value) => updateLocal('workflow', 'confirmAcceptAll', value)} />
+                    </Section>
+                  </>
+                )}
+
+                {activeTab === 'advanced' && (
+                  <>
+                    <Section eyebrow="Security">
+                      <div className="py-4">
+                        <span className="mb-2 block text-sm font-bold text-white/85">Allowed directories</span>
+                        <input
+                          type="text"
+                          placeholder="/src, /tests"
+                          value={localSettings.advanced.allowedDirectories}
+                          onChange={(event) => updateLocal('advanced', 'allowedDirectories', event.target.value)}
+                          className={`${inputShell} w-full`}
+                        />
+                      </div>
+                      <Toggle
+                        label="Debug mode"
+                        enabled={localSettings.advanced.debugMode}
+                        onChange={(value) => updateLocal('advanced', 'debugMode', value)}
+                        description="Stream diagnostic detail to the console"
+                      />
+                    </Section>
+
+                    <Section eyebrow="Data Management">
+                      <Select
+                        label="Session auto-save"
+                        value={localSettings.advanced.sessionAutoSave}
+                        options={['None', 'Gist', 'Local']}
+                        onChange={(value) => updateLocal('advanced', 'sessionAutoSave', value)}
+                      />
+                      <div className="flex items-center justify-between gap-4 py-4">
+                        <span className="text-sm font-bold text-white/85">Configuration</span>
+                        <div className="flex gap-2">
+                          <button className="h-9 rounded-md border border-white/10 px-3 text-xs font-black text-white/60 transition hover:bg-white/[0.06] hover:text-white">Export</button>
+                          <button className="h-9 rounded-md border border-white/10 px-3 text-xs font-black text-white/60 transition hover:bg-white/[0.06] hover:text-white">Import</button>
                         </div>
-                        <motion.div animate={{ opacity: [0.1, 0.3, 0.1] }} transition={{ repeat: Infinity, duration: 3 }} className="absolute inset-0 bg-google-blue blur-[40px] rounded-full -z-10" />
-                     </div>
-                     <div className="text-center space-y-3">
-                       <h3 className="text-xl font-black text-on-surface">Coffee Milky Pro</h3>
-                       <p className="text-[10px] font-black text-on-surface-variant/20 uppercase tracking-[0.4em]">High Fidelity Adaptive Theme</p>
-                     </div>
+                      </div>
+                    </Section>
+                  </>
+                )}
+
+                {activeTab === 'profile' && (
+                  <div className="space-y-5">
+                    <div className="rounded-lg border border-white/10 bg-white/[0.035] p-6">
+                      <div className="flex items-center gap-5">
+                        <div className="flex h-20 w-20 items-center justify-center rounded-lg border border-[#43F3C5]/25 bg-[#43F3C5]/10 text-2xl font-black text-[#43F3C5]">
+                          {displayName.slice(0, 1).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="truncate text-2xl font-black tracking-tight text-white">{displayName}</h3>
+                          <p className="mt-1 text-sm font-medium text-white/40">
+                            {(localSettings.workflow.experienceMode || 'professional') === 'learner' ? 'Learner workspace' : 'Professional workspace'}
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <span className="rounded-md border border-[#43F3C5]/20 bg-[#43F3C5]/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[#43F3C5]">Verified</span>
+                            <span className="rounded-md border border-[#8DA2FF]/20 bg-[#8DA2FF]/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[#B8C5FF]">Early Access</span>
+                            <span className="rounded-md border border-[#F7C35F]/20 bg-[#F7C35F]/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[#F7C35F]">
+                              Autonomy L{localSettings.workflow.autonomyLevel || 2}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className={fieldShell}>
+                        <div className="mb-2 flex items-center gap-2 text-white/55">
+                          <Database size={16} />
+                          <span className="text-[10px] font-black uppercase tracking-[0.14em]">Memory</span>
+                        </div>
+                        <p className="text-xl font-black text-white">1.2 GB <span className="text-xs font-medium text-white/35">/ 10 GB</span></p>
+                      </div>
+                      <div className={fieldShell}>
+                        <div className="mb-2 flex items-center gap-2 text-white/55">
+                          <Zap size={16} />
+                          <span className="text-[10px] font-black uppercase tracking-[0.14em]">Compute</span>
+                        </div>
+                        <p className="text-xl font-black text-white">Local <span className="text-xs font-medium text-white/35">Docker only</span></p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-4 rounded-lg border border-[#FF6B6B]/15 bg-[#FF6B6B]/[0.035] p-5">
+                      <div>
+                        <h4 className="text-sm font-black text-white">Critical Zone</h4>
+                        <p className="mt-1 text-xs font-medium text-white/40">Permanently clear cached workspace memory</p>
+                      </div>
+                      <button className="h-10 rounded-md border border-[#FF6B6B]/25 px-4 text-xs font-black uppercase tracking-[0.12em] text-[#FF8F8F] transition hover:bg-[#FF6B6B]/10">
+                        Purge
+                      </button>
+                    </div>
                   </div>
                 )}
               </motion.div>
             </AnimatePresence>
           </div>
 
-          {/* Action Footer */}
-          <footer className="h-24 px-12 flex items-center justify-end gap-6 border-t border-black/[0.03] bg-white/50 backdrop-blur-md">
-            <button onClick={onClose} className="text-xs font-black uppercase tracking-[0.3em] text-on-surface-variant/40 hover:text-on-surface transition-colors">
-              Cancel
-            </button>
-            <Button variant="filled" size="lg" onClick={handleSave} className="h-14 px-10 rounded-2xl bg-google-blue shadow-2xl shadow-google-blue/20 border-none font-black uppercase tracking-widest text-xs">
-              Save Configuration
-            </Button>
+          <footer className="flex h-20 shrink-0 items-center justify-between border-t border-white/10 bg-[#0B0E14] px-5">
+            <div className="hidden items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-white/35 sm:flex">
+              <Lock size={14} className="text-[#43F3C5]" />
+              Encrypted local storage
+            </div>
+            <div className="ml-auto flex items-center gap-3">
+              <button
+                onClick={onClose}
+                className="h-10 rounded-md px-4 text-xs font-black uppercase tracking-[0.12em] text-white/45 transition hover:bg-white/[0.05] hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                className="flex h-11 items-center gap-2 rounded-md bg-[#43F3C5] px-5 text-xs font-black uppercase tracking-[0.12em] text-[#07110F] transition hover:bg-[#6FF8D4]"
+              >
+                <Save size={15} />
+                Save Preferences
+              </button>
+            </div>
           </footer>
         </div>
       </motion.div>

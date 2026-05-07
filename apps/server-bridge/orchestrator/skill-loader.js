@@ -123,7 +123,7 @@ export function buildSystemPrompt({ domain, projectTree, packageJson, userMemory
     }
     if (domain === 'debug') addIfBudget(loadSkill('debugging'), 'debugging');
     addIfBudget(loadSkill('planning'), 'planning');
-    addIfBudget(loadSkill('cloud-sandboxing'), 'cloud-sandboxing');
+    addIfBudget(loadSkill('cloud-sandboxing'), 'local-docker-sandboxing');
   }
 
   // Priority 6: Stack-specific skills (only for deep)

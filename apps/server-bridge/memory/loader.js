@@ -2,7 +2,7 @@ import Parser from 'tree-sitter';
 import JavaScript from 'tree-sitter-javascript';
 import fs from 'fs/promises';
 import path from 'path';
-import pool from '../db.js';
+import pool, { insertAgentMemoryItem } from '../db.js';
 import { hashValue, withJsonCache } from '../utils/cache.js';
 
 class SemanticGraphBuilder {
@@ -83,13 +83,13 @@ class SemanticGraphBuilder {
   }
 
   /**
-   * Parses a file and extracts a deterministic map of its dependencies and exports.
-   * @param {string} filePath - Absolute path to the target file.
+   * Parses raw code and extracts semantic graph.
+   * @param {string} code - The raw code content.
+   * @param {string} filename - Filename (used for language detection and caching).
    */
-  async buildSemanticGraph(filePath) {
+  async analyzeCode(code, filename) {
     try {
-      const code = await fs.readFile(filePath, 'utf8');
-      const { key: languageKey, language } = await this.loadLanguage(filePath);
+      const { key: languageKey, language } = await this.loadLanguage(filename);
       const cacheKey = `cache:ast:${languageKey}:${hashValue(code)}`;
 
       const { value } = await withJsonCache(cacheKey, Number.parseInt(process.env.AST_CACHE_TTL_SECONDS || '3600', 10), async () => {
@@ -99,7 +99,7 @@ class SemanticGraphBuilder {
         const { exportsList, importsList, functionsList } = this.collectSymbols({ languageKey, code, tree });
 
         return {
-          file: path.basename(filePath),
+          file: path.basename(filename),
           language: languageKey,
           strict_imports: importsList,
           strict_exports: exportsList,
@@ -110,6 +110,19 @@ class SemanticGraphBuilder {
       });
 
       return value;
+    } catch (error) {
+      throw new Error(`AST Parsing failed for ${filename}: ${error.message}`);
+    }
+  }
+
+  /**
+   * Parses a file and extracts a deterministic map of its dependencies and exports.
+   * @param {string} filePath - Absolute path to the target file.
+   */
+  async buildSemanticGraph(filePath) {
+    try {
+      const code = await fs.readFile(filePath, 'utf8');
+      return await this.analyzeCode(code, filePath);
     } catch (error) {
       throw new Error(`CRITICAL: AST Parsing failed for ${filePath}. Graph broken. ${error.message}`);
     }
@@ -136,6 +149,29 @@ export async function loadMemory(userId, projectName, query = null) {
       recentJournal = (row.brain_journal || []).slice(-10);
     }
 
+    if (query) {
+      const recall = await pool.query(
+        `SELECT kind, content, metadata, created_at
+         FROM agent_memory_items
+         WHERE user_id = $1
+           AND project_name = $2
+           AND content ILIKE $3
+         ORDER BY created_at DESC
+         LIMIT 5`,
+        [userId, projectName, `%${String(query).slice(0, 200)}%`]
+      );
+
+      if (recall.rows.length > 0) {
+        recentJournal = recentJournal.concat(recall.rows.map(row => ({
+          type: row.kind,
+          content: row.content,
+          metadata: row.metadata,
+          timestamp: row.created_at,
+          source: 'agent_memory_items',
+        }))).slice(-10);
+      }
+    }
+
     return { userMemory, brainJournal: recentJournal };
   } catch (err) {
     return { userMemory: null, brainJournal: [] };
@@ -160,6 +196,19 @@ export async function appendBrainJournal(userId, projectName, entry) {
        WHERE user_id = $1 AND project_name = $2`,
       [userId, projectName, JSON.stringify([journalEntry])]
     );
+
+    const content = journalEntry.content || journalEntry.summary || journalEntry.note || JSON.stringify(journalEntry);
+    await insertAgentMemoryItem({
+      userId,
+      projectName,
+      kind: journalEntry.type || journalEntry.kind || 'brain_journal',
+      content: String(content).slice(0, 12000),
+      metadata: {
+        source: 'brain_journal',
+        tags: journalEntry.tags || [],
+        timestamp: journalEntry.timestamp,
+      },
+    }).catch(() => {});
   } catch (err) {
     console.error('Failed to append brain journal:', err);
   }

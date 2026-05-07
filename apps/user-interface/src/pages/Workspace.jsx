@@ -32,9 +32,9 @@ import ChatInterface from '../features/chat/components/ChatInterface';
 import { EditorTabs } from '../features/editor/components/EditorTabs';
 import { FileViewer } from '../features/editor/components/FileViewer';
 import ActivityFeed from '../features/swarm/components/ActivityFeed';
+import TerminalSessionsPanel from '../features/terminal/components/TerminalSessionsPanel';
 
 const DiffViewer = React.lazy(() => import('../features/editor/components/DiffViewer'));
-const Terminal = React.lazy(() => import('../features/editor/components/Terminal'));
 
 const MIN_SIDEBAR_W = 260;
 const MAX_SIDEBAR_W = 400;
@@ -56,6 +56,8 @@ export default function Workspace() {
     activeFileContent,
     activeFilePath,
     openFiles,
+    terminalPanelVisible,
+    toggleTerminalPanel,
   } = useStore();
 
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -66,6 +68,20 @@ export default function Workspace() {
   const { sendPrompt } = useAgent();
 
   const [viewMode, setViewMode] = useState('chat'); // 'chat' or 'editor'
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ctrl+` to toggle terminal panel
+      if (e.ctrlKey && e.key === '`') {
+        e.preventDefault();
+        toggleTerminalPanel();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleTerminalPanel]);
 
   const onSidebarDrag = useCallback((delta) => {
     setSidebarW((w) => Math.max(MIN_SIDEBAR_W, Math.min(MAX_SIDEBAR_W, w + delta)));
@@ -171,24 +187,10 @@ export default function Workspace() {
               </AnimatePresence>
             </div>
 
-            {/* Terminal Panel (Always available at bottom) */}
-            <div className="md:block border-t border-outline-variant bg-surface-container-lowest shrink-0 overflow-hidden">
-               <div className="flex h-9 items-center justify-between border-b border-outline-variant bg-surface-container-low px-4">
-                  <div className="flex items-center gap-2">
-                    <TerminalIcon size={13} className="text-primary" />
-                    <span className="text-xs font-black uppercase tracking-normal text-on-surface-variant">System Terminal</span>
-                  </div>
-                  <div className="hidden items-center gap-3 font-mono text-[10px] font-semibold uppercase tracking-normal text-on-surface-variant/70 sm:flex">
-                    <span className="flex items-center gap-1.5"><Cpu size={10} /> LINK: 0x9F</span>
-                    <span>Status: Isolated</span>
-                  </div>
-                </div>
-                <div className="h-[200px]">
-                  <React.Suspense fallback={<div className="h-full animate-pulse bg-black/10" />}>
-                    <Terminal />
-                  </React.Suspense>
-                </div>
-            </div>
+            {/* Internal Terminal Sessions - Hidden by default, toggle with Ctrl+` */}
+            <AnimatePresence>
+              {terminalPanelVisible && <TerminalSessionsPanel />}
+            </AnimatePresence>
           </main>
 
           {/* Right Sidebar: Connectors */}

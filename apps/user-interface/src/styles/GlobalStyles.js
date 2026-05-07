@@ -1,0 +1,98 @@
+import { createGlobalStyle } from 'styled-components';
+
+const GlobalStyles = createGlobalStyle`
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #0d1117;
+    color: #f0f6fc;
+  }
+
+  code {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  /* Glass morphism utilities */
+  .glass {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  /* Material Design 3 color scheme */
+  :root {
+    --md-sys-color-primary: #6366f1;
+    --md-sys-color-on-primary: #ffffff;
+    --md-sys-color-primary-container: #4f46e5;
+    --md-sys-color-on-primary-container: #e0e7ff;
+    
+    --md-sys-color-secondary: #64748b;
+    --md-sys-color-on-secondary: #ffffff;
+    --md-sys-color-secondary-container: #475569;
+    --md-sys-color-on-secondary-container: #e2e8f0;
+    
+    --md-sys-color-surface: #1e293b;
+    --md-sys-color-on-surface: #f1f5f9;
+    --md-sys-color-surface-variant: #334155;
+    --md-sys-color-on-surface-variant: #cbd5e1;
+    
+    --md-sys-color-background: #0d1117;
+    --md-sys-color-on-background: #f0f6fc;
+    
+    --md-sys-color-error: #ef4444;
+    --md-sys-color-on-error: #ffffff;
+    --md-sys-color-warning: #f59e0b;
+    --md-sys-color-success: #10b981;
+  }
+
+  /* Tailwind custom colors */
+  .bg-slate-950 { background-color: #020617; }
+  .bg-slate-900 { background-color: #0f172a; }
+  .bg-slate-800 { background-color: #1e293b; }
+  .bg-slate-700 { background-color: #334155; }
+  .bg-slate-600 { background-color: #475569; }
+  
+  .text-slate-100 { color: #f1f5f9; }
+  .text-slate-200 { color: #e2e8f0; }
+  .text-slate-300 { color: #cbd5e1; }
+  .text-slate-400 { color: #94a3b8; }
+  .text-slate-500 { color: #64748b; }
+  
+  .border-slate-800 { border-color: #1e293b; }
+  .border-slate-700 { border-color: #334155; }
+  .border-slate-600 { border-color: #475569; }
+  
+  /* Glass effects */
+  .backdrop-blur-sm { backdrop-filter: blur(4px); }
+  .backdrop-blur-md { backdrop-filter: blur(8px); }
+  .backdrop-blur-xl { backdrop-filter: blur(16px); }
+  .backdrop-blur-2xl { backdrop-filter: blur(24px); }
+`;
+
+export default GlobalStyles;

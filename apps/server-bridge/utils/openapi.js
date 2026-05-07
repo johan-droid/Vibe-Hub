@@ -76,6 +76,12 @@ export function buildOpenApiSpec() {
           responses: { 200: { description: 'Skill graph' } },
         },
       },
+      '/runtime/brand': {
+        get: {
+          summary: 'Get Selina brand and architecture metadata',
+          responses: { 200: { description: 'Public brand metadata' } },
+        },
+      },
       '/audit-logs': {
         get: {
           summary: 'List authenticated user audit events',

@@ -1,9 +1,68 @@
 import { createMachine, assign, fromPromise } from 'xstate';
+import crypto from 'crypto';
+import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
 import OrgContextBuilder from '../org_core/context_builder.js';
 import UserContextBuilder from '../user_env/context_builder.js';
 import semanticGraphBuilder from '../memory/loader.js';
 import llmClient from './llm_client.js';
 import { vfs } from '../vfs/container.js';
+import { SandboxExecutor } from '../sandbox/docker_executor.js';
+
+const SANDBOX_TIMEOUT_MS = Number.parseInt(process.env.SELINA_SANDBOX_TIMEOUT_MS || '10000', 10);
+export const EFFORT_RETRY_LIMITS = Object.freeze({
+  quick: 0,
+  standard: 3,
+  deep: 5,
+});
+
+export function normalizeEffortLevel(effortLevel = 'standard') {
+  return Object.prototype.hasOwnProperty.call(EFFORT_RETRY_LIMITS, effortLevel)
+    ? effortLevel
+    : 'standard';
+}
+
+export function retryLimitForEffort(effortLevel = 'standard') {
+  return EFFORT_RETRY_LIMITS[normalizeEffortLevel(effortLevel)];
+}
+
+function chooseCandidateFilename(targetFile) {
+  const ext = path.extname(targetFile || '').toLowerCase();
+  if (['.js', '.mjs', '.cjs'].includes(ext)) return `candidate${ext}`;
+  return 'candidate.js';
+}
+
+async function executeGeneratedCodeInLocalDocker(input) {
+  if (!input.generatedCode || typeof input.generatedCode !== 'string') {
+    return { success: false, error_trace: 'No generated code was produced for sandbox execution.' };
+  }
+
+  const workspacePath = await fs.mkdtemp(path.join(os.tmpdir(), `selina-xstate-${crypto.randomUUID()}-`));
+  const scriptPath = chooseCandidateFilename(input.targetFile);
+
+  try {
+    await fs.writeFile(path.join(workspacePath, scriptPath), input.generatedCode, 'utf-8');
+    const result = await SandboxExecutor.executeLocalDockerSandbox({
+      workspacePath,
+      scriptPath,
+      runtime: 'node',
+      timeoutMs: SANDBOX_TIMEOUT_MS,
+    });
+
+    if (result.success) {
+      return { success: true, sandbox: result.sandbox, stdout: result.stdout };
+    }
+
+    return {
+      success: false,
+      error_trace: result.error || result.stderr || result.stdout || `Sandbox exited with code ${result.exitCode}`,
+      sandbox: result.sandbox,
+    };
+  } finally {
+    await fs.rm(workspacePath, { recursive: true, force: true });
+  }
+}
 
 const agentMachine = createMachine({
   id: 'SaaSCodingAgent',
@@ -13,6 +72,10 @@ const agentMachine = createMachine({
     taskPrompt: null,
     retries: 0,
     maxRetries: 3,
+    rollbacks: 0,
+    maxRollbacks: 1,
+    effortLevel: 'standard',
+    crossFileCoherenceEnabled: false,
     orgContext: null,
     userContext: null,
     astGraph: null,
@@ -35,6 +98,11 @@ const agentMachine = createMachine({
             originalCode: ({ event }) => event.originalCode || '',
             requestId: ({ event }) => event.requestId || null,
             retries: () => 0,
+            maxRetries: ({ event }) => retryLimitForEffort(event.effortLevel),
+            rollbacks: () => 0,
+            maxRollbacks: ({ event }) => normalizeEffortLevel(event.effortLevel) === 'quick' ? 0 : 1,
+            effortLevel: ({ event }) => normalizeEffortLevel(event.effortLevel),
+            crossFileCoherenceEnabled: ({ event }) => normalizeEffortLevel(event.effortLevel) === 'deep',
             sandboxError: () => null,
             stagedFile: () => null
           })
@@ -117,10 +185,8 @@ const agentMachine = createMachine({
 
     sandboxing: {
       invoke: {
-        src: fromPromise(async () => {
-          // Offline simulation: Assume success as per GitHub Actions sandbox strategy
-          return { success: true };
-        }),
+        input: ({ context }) => context,
+        src: fromPromise(async ({ input }) => executeGeneratedCodeInLocalDocker(input)),
         onDone: [
           {
             target: 'success',
@@ -143,6 +209,10 @@ const agentMachine = createMachine({
     evaluating_failure: {
       always: [
         {
+          target: 'fatal_failure',
+          guard: ({ context }) => context.retries >= context.maxRetries && context.rollbacks >= context.maxRollbacks
+        },
+        {
           target: 'rollback',
           guard: ({ context }) => context.retries >= context.maxRetries
         },
@@ -156,6 +226,7 @@ const agentMachine = createMachine({
     rollback: {
       entry: assign({
         retries: 0,
+        rollbacks: ({ context }) => context.rollbacks + 1,
         taskPrompt: ({ context }) => `${context.taskPrompt}\n\nSYSTEM OVERRIDE: Your previous architectural approach failed completely with error: ${context.sandboxError}. Do NOT retry the same logic. Pivot to a completely different design pattern.` 
       }),
       always: 'drafting_code'
@@ -175,7 +246,9 @@ const agentMachine = createMachine({
               retries: context.retries,
               sandboxVerified: true,
               userId: context.userId,
-              requestId: context.requestId
+              requestId: context.requestId,
+              effortLevel: context.effortLevel,
+              crossFileCoherenceEnabled: context.crossFileCoherenceEnabled
             }
           );
           return entry;

@@ -1,8 +1,12 @@
 import { Router } from 'express';
-import crypto from 'crypto';
 import { upsertUser } from '../db.js';
 import { createSession } from './session.js';
 import { setAuthCookies } from './middleware.js';
+import {
+  createOAuthHandoff,
+  createOAuthState,
+  consumeOAuthState,
+} from './oauth-store.js';
 import {
   buildOAuthCallbackUrl,
   clearOAuthReturnOriginCookie,
@@ -10,6 +14,7 @@ import {
   getOAuthReturnOrigin,
   setOAuthReturnOriginCookie,
 } from './oauth-return.js';
+import logger from '../utils/detailed-logger.js';
 
 const router = Router();
 
@@ -40,14 +45,14 @@ const requiredEnvVars = ['GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', 'GITHUB_RED
  * GET /api/auth/github
  * Redirect user to GitHub's consent screen
  */
-router.get('/github', (req, res) => {
+router.get('/github', async (req, res) => {
   const missingVars = requiredEnvVars.filter(v => !process.env[v]);
   if (missingVars.length > 0) {
     return handleOAuthConfigError(req, res);
   }
 
-  const state = crypto.randomBytes(32).toString('hex');
   const returnOrigin = getOAuthRequestOrigin(req);
+  const state = await createOAuthState({ provider: 'github', returnOrigin });
 
   res.cookie('github_oauth_state', state, {
     httpOnly: true,
@@ -77,7 +82,8 @@ router.get('/github/callback', async (req, res) => {
   }
 
   const { code, state } = req.query;
-  const returnOrigin = getOAuthReturnOrigin(req);
+  const stateRecord = await consumeOAuthState({ provider: 'github', state });
+  const returnOrigin = stateRecord?.returnOrigin || getOAuthReturnOrigin(req);
 
   let cookieState = req.cookies?.github_oauth_state;
   if (!cookieState && req.headers.cookie) {
@@ -86,7 +92,7 @@ router.get('/github/callback', async (req, res) => {
   }
 
   if (!code) return redirectWithError(req, res, 'missing_code');
-  if (!state || !cookieState || state !== cookieState) {
+  if (!state || (!stateRecord && (!cookieState || state !== cookieState))) {
     return redirectWithError(req, res, 'invalid_state');
   }
 
@@ -145,12 +151,28 @@ router.get('/github/callback', async (req, res) => {
       sessionToken: session.sessionToken
     });
 
-    // Redirect without bearer tokens; the frontend verifies the cookie session.
+    const userPayload = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      avatarUrl: user.avatar_url,
+      provider: user.provider
+    };
+
+    const handoffCode = await createOAuthHandoff({
+      provider: 'github',
+      session,
+      user: userPayload
+    });
+
+    // Redirect with only an opaque one-time code; the frontend exchanges it
+    // against the API host to set cookies reliably on localhost/127.0.0.1.
     const redirectUrl = new URL('/auth/callback', returnOrigin);
+    redirectUrl.searchParams.set('code', handoffCode);
 
     res.redirect(redirectUrl.toString());
   } catch (err) {
-    console.error('GitHub callback error:', err);
+    logger.error('GitHubAuth', 'Callback error', err);
     if (err.message === 'MAX_SESSIONS_EXCEEDED') {
       return redirectWithError(req, res, 'max_sessions_exceeded');
     }

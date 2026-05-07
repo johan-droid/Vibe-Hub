@@ -1,7 +1,7 @@
 import { SchemaType as Type } from '@google/generative-ai';
 
 /**
- * Tool Definitions for Gemini Agents — Brain v3.0
+ * Tool Definitions for Gemini Agents - Selina Brain v3.0
  * Includes: surgical editing, clarification, planning, memory, and grep.
  */
 export const AGENT_TOOLS = [
@@ -43,29 +43,45 @@ export const AGENT_TOOLS = [
     },
   },
   {
-    name: 'edit_file',
-    description: 'Makes SURGICAL edits to an existing file using search/replace blocks. Each search string must be an exact unique substring of the file. ALWAYS read the file first before using this tool. NOTE: An automatic Git checkpoint will be created before applying changes.',
+    name: 'replace_file_content',
+    description: 'Makes a SINGLE CONTIGUOUS block edit to a file. Use this for reliable line-range replacements instead of string matching.',
     parameters: {
       type: 'OBJECT',
       properties: {
-        path: { type: 'STRING', description: 'Path to the file to edit.' },
-        edits: {
+        TargetFile: { type: 'STRING', description: 'Path to the file to edit.' },
+        StartLine: { type: 'NUMBER', description: '1-indexed start line of the text block to replace.' },
+        EndLine: { type: 'NUMBER', description: '1-indexed end line of the text block to replace.' },
+        TargetContent: { type: 'STRING', description: 'The exact string block to replace (must match the existing file exactly).' },
+        ReplacementContent: { type: 'STRING', description: 'The new content to drop in.' },
+      },
+      required: ['TargetFile', 'StartLine', 'EndLine', 'TargetContent', 'ReplacementContent'],
+    },
+  },
+  {
+    name: 'multi_replace_file_content',
+    description: 'Makes MULTIPLE non-contiguous edits to the same file in one pass.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        TargetFile: { type: 'STRING', description: 'Path to the file to edit.' },
+        ReplacementChunks: {
           type: 'ARRAY',
-          description: 'Array of search/replace operations.',
+          description: 'Array of chunk replacements.',
           items: {
             type: 'OBJECT',
             properties: {
-              search: { type: 'STRING', description: 'Exact text to find in the file. Must be unique.' },
-              replace: { type: 'STRING', description: 'Replacement text.' },
+              StartLine: { type: 'NUMBER', description: '1-indexed start line.' },
+              EndLine: { type: 'NUMBER', description: '1-indexed end line.' },
+              TargetContent: { type: 'STRING', description: 'Exact text to replace.' },
+              ReplacementContent: { type: 'STRING', description: 'New text.' },
             },
-            required: ['search', 'replace'],
+            required: ['StartLine', 'EndLine', 'TargetContent', 'ReplacementContent'],
           },
         },
       },
-      required: ['path', 'edits'],
+      required: ['TargetFile', 'ReplacementChunks'],
     },
-  },
-  
+  },  
   // === SEARCH ===
   {
     name: 'grep_search',
@@ -95,14 +111,88 @@ export const AGENT_TOOLS = [
   // === EXECUTION ===
   {
     name: 'run_command',
-    description: 'Runs a terminal command in the WebContainer. Use for npm install, build, test, etc.',
+    description: 'Runs build, test, and script commands in the local Docker sandbox with --network none.',
     parameters: {
       type: 'OBJECT',
       properties: {
         command: { type: 'STRING', description: 'The command to execute.' },
         args: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Arguments.' },
+        WaitMsBeforeAsync: { type: 'NUMBER', description: 'Ms to wait before sending command to background. If command completes before this, returns output. If it runs longer, returns a CommandId.' }
       },
       required: ['command'],
+    },
+  },
+  {
+    name: 'send_command_input',
+    description: 'Sends stdin input to a background command or terminates it.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        CommandId: { type: 'STRING', description: 'The ID of the background command.' },
+        Input: { type: 'STRING', description: 'Input to send to stdin (include \\n if needed).' },
+        Terminate: { type: 'BOOLEAN', description: 'Whether to terminate the command.' },
+        WaitMs: { type: 'NUMBER', description: 'Ms to wait for output after sending input.' }
+      },
+      required: ['CommandId'],
+    },
+  },
+  {
+    name: 'command_status',
+    description: 'Gets the current status and recent output of a background command.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        CommandId: { type: 'STRING', description: 'The ID of the background command.' },
+      },
+      required: ['CommandId'],
+    },
+  },
+
+  {
+    name: 'check_diagnostics',
+    description: 'Runs TypeScript compilation (tsc --noEmit) to instantly check for type errors, missing imports, or syntax issues in the project. Use this immediately after editing files to ensure your changes are valid.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {},
+      required: [],
+    },
+  },
+
+  // === BROWSER AUTOMATION ===
+  {
+    name: 'browser_goto',
+    description: 'Navigates the headless browser to a specific URL (like the WebContainer preview URL).',
+    parameters: {
+      type: 'OBJECT',
+      properties: { url: { type: 'STRING' } },
+      required: ['url'],
+    },
+  },
+  {
+    name: 'browser_click',
+    description: 'Clicks an element in the headless browser using a CSS selector.',
+    parameters: {
+      type: 'OBJECT',
+      properties: { selector: { type: 'STRING' } },
+      required: ['selector'],
+    },
+  },
+  {
+    name: 'browser_type',
+    description: 'Types text into an input field in the headless browser.',
+    parameters: {
+      type: 'OBJECT',
+      properties: { selector: { type: 'STRING' }, text: { type: 'STRING' } },
+      required: ['selector', 'text'],
+    },
+  },
+  {
+    name: 'browser_screenshot',
+    description: 'Takes a screenshot of the headless browser to verify UI state.',
+    parameters: {
+      type: 'OBJECT',
+      properties: { path: { type: 'STRING', description: 'File path to save the PNG screenshot.' } },
+      required: ['path'],
     },
   },
 
@@ -275,7 +365,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: 'github_create_codespace',
-    description: 'Spawns a GitHub Codespace for heavy builds or integration tests that cannot run in the local Docker sandbox.',
+    description: 'Disabled by Selina V6 local-Docker-only execution policy. Use security_sandbox instead.',
     parameters: {
       type: 'OBJECT',
       properties: {
@@ -340,7 +430,7 @@ DO NOT USE for:
   },
   {
     name: 'github_trigger_workflow',
-    description: 'Triggers a remote GitHub Action workflow.',
+    description: 'Disabled by Selina V6 local-Docker-only execution policy. Use security_sandbox instead.',
     parameters: {
       type: Type.OBJECT,
       properties: {
@@ -396,9 +486,32 @@ DO NOT USE for:
       type: 'OBJECT',
       properties: {
         componentId: { type: 'STRING', description: 'The component to redesign.' },
-        selina: { type: 'STRING', description: 'The desired aesthetic shift (e.g., "more brutalist").' },
+        aesthetic: { type: 'STRING', description: 'The desired aesthetic shift (e.g., "more utilitarian SaaS").' },
       },
-      required: ['componentId', 'selina'],
+      required: ['componentId', 'aesthetic'],
     },
   },
+  // === BROWSER / VISUAL VERIFICATION ===
+  {
+    name: 'get_preview_dom',
+    description: 'Retrieves the current DOM snapshot of the rendered UI preview. Used to visually verify layout and CSS classes.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {},
+      required: [],
+    },
+  },
+
+  // === AST INTELLIGENCE ===
+  {
+    name: 'analyze_ast',
+    description: 'Extracts Compiler-Level Intelligence from a file (functions, imports, exports) using AST parsing.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        path: { type: 'STRING', description: 'Path to the file to analyze.' }
+      },
+      required: ['path'],
+    },
+  }
 ];

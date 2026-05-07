@@ -9,7 +9,6 @@
  */
 
 import { io } from 'socket.io-client';
-import { api } from './api';
 import { setLastJobId, clearLastJobId } from '../utils/localStorage';
 export class SwarmSocket {
   constructor(token) {
@@ -20,12 +19,8 @@ export class SwarmSocket {
   }
 
   connect() {
-    const wsBase = import.meta.env.VITE_WS_BASE || (import.meta.env.PROD
-      ? 'wss://vibe-hub-bridge.onrender.com'
-      : `ws://${window.location.hostname}:3001`);
-    
-    const tokenQuery = this.token ? `?token=${encodeURIComponent(this.token)}` : '';
-    this.ws = new WebSocket(`${wsBase}/ws${tokenQuery}`);
+    const wsBase = import.meta.env.VITE_WS_BASE || `ws://${window.location.hostname}:3001`;
+    this.ws = new WebSocket(`${wsBase}/ws`);
 
     this.ws.onopen = () => {
       this.emit('connected');
@@ -41,6 +36,10 @@ export class SwarmSocket {
 
         case 'tool_request':
           this.handleToolRequest(msg);
+          break;
+
+        case 'tool_call':
+          this.emit('tool_call', msg);
           break;
 
         case 'result':
@@ -66,6 +65,7 @@ export class SwarmSocket {
         // === NEW in v3 ===
         case 'clarification_request':
           this.emit('clarification', {
+            ...msg,
             clarificationId: msg.clarificationId,
             questions: msg.questions,
             context: msg.context,
@@ -74,17 +74,18 @@ export class SwarmSocket {
 
         case 'plan_request':
           this.emit('plan', {
+            ...msg,
             planId: msg.planId,
             steps: msg.steps,
             risks: msg.risks,
           });
           break;
         case 'state_change':
-          this.emit('state_change', { state: msg.state, message: msg.message });
+          this.emit('state_change', msg);
           break;
 
         case 'status':
-          this.emit('state_change', { state: msg.state, message: msg.message });
+          this.emit('state_change', msg);
           break;
 
         case 'terminal_output':
@@ -189,7 +190,6 @@ export class OrchestratorSocket {
     
     this.socket = io(SOCKET_URL, {
       path: '/socket.io',
-      auth: { token: api.getToken() },
       withCredentials: true,
       autoConnect: true,
       reconnection: true,
@@ -199,10 +199,6 @@ export class OrchestratorSocket {
       randomizationFactor: 0.5,
       timeout: 10000,
       transports: ['websocket', 'polling']
-    });
-
-    this.socket.io.on('reconnect_attempt', () => {
-      this.socket.auth = { token: api.getToken() };
     });
 
     this.socket.on('connect', () => {

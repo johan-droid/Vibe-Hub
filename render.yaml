@@ -6,39 +6,186 @@ services:
     region: oregon
     plan: free
     rootDir: apps/server-bridge
-    buildCommand: npm install --legacy-peer-deps
-    startCommand: node index.js
+    buildCommand: npm ci --legacy-peer-deps
+    startCommand: npm start
+    healthCheckPath: /health
     envVars:
+      - key: NODE_VERSION
+        value: 20.19.6
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 8080
       - key: UI_ORIGIN
         value: https://vibe-hub-ui.onrender.com
-      - key: GEMINI_API_KEY
+      - key: UI_ALLOWED_ORIGINS
+        value: https://vibe-hub-ui.onrender.com
+      - key: FRONTEND_ORIGINS
+        value: https://vibe-hub-ui.onrender.com
+      - key: CSRF_SAME_SITE
+        value: none
+
+      # Provider MoE: NIM/Qwen Coder primary, explicit credential-gated fallbacks.
+      - key: SELINA_MODEL_PROVIDER
+        value: nim
+      - key: SELINA_AGENT_PROVIDER
+        value: nim
+      - key: SELINA_MODEL_FALLBACKS
+        value: openai,anthropic,qwen,gemini
+      - key: SELINA_MODEL_TIMEOUT_MS
+        value: 45000
+      - key: SELINA_MODEL_RETRIES
+        value: 2
+      - key: SELINA_MODEL_MAX_RETRY_AFTER_MS
+        value: 8000
+      - key: SELINA_HISTORY_TOKEN_BUDGET
+        value: 24000
+      - key: SELINA_MAX_OUTPUT_TOKENS
+        value: 2048
+      - key: SELINA_EXPERT_CODE_PROVIDER
+        value: nim
+      - key: SELINA_EXPERT_DEBUG_PROVIDER
+        value: nim
+      - key: SELINA_EXPERT_MANAGER_PROVIDER
+        value: nim
+      - key: SELINA_ENABLE_JSONRPC_EVENTS
+        value: true
+      - key: NIM_BASE_URL
+        value: https://integrate.api.nvidia.com/v1
+      - key: NIM_MODEL
+        value: qwen/qwen2.5-coder-32b-instruct
+      - key: OPENAI_API_MODE
+        value: responses
+
+      # Secrets: fill or rotate in Render Dashboard. Never commit values.
+      - key: NIM_API_KEY
         sync: false
       - key: OPENAI_API_KEY
         sync: false
-      - key: JWT_SECRET
+      - key: ANTHROPIC_API_KEY
         sync: false
+      - key: QWEN_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
       - key: CSRF_SECRET
         generateValue: true
-      - key: SESSION_SECRET
+      - key: VIBE_MASTER_KEY
         generateValue: true
+      - key: SELINA_ACTION_GRANT_SECRET
+        generateValue: true
+      - key: SELINA_ACTION_GRANT_TTL_MS
+        value: 120000
+      - key: SELINA_TOOL_APPROVAL_TIMEOUT_MS
+        value: 120000
+      - key: SELINA_MAX_SURGICAL_DELTA_CHARS
+        value: 20000
+
+      # Operational guardrails and local-Docker-only messaging.
       - key: LOG_LEVEL
         value: info
+      - key: AUDIT_LOGS_DISABLED
+        value: false
       - key: TRUST_PROXY_HOPS
         value: 1
+      - key: SELINA_ROLLOUT_DIR
+        value: /tmp/selina-rollouts
+      - key: SELINA_SANDBOX_TIMEOUT_MS
+        value: 10000
+      - key: USE_V6_CONTEXT
+        value: true
+      - key: USE_XSTATE_MACHINE
+        value: true
+
+      # Persistence.
       - key: DATABASE_URL
-        sync: true
+        fromDatabase:
+          name: vibe-hub-db
+          property: connectionString
       - key: DATABASE_SSL_MODE
         value: verify-full
+      - key: DATABASE_SSL_CA
+        sync: false
+      - key: PG_POOL_MAX
+        value: 10
+      - key: PG_POOL_MIN
+        value: 0
+      - key: PG_CONNECTION_TIMEOUT_MS
+        value: 10000
+      - key: PG_IDLE_TIMEOUT_MS
+        value: 30000
+      - key: PG_QUERY_TIMEOUT_MS
+        value: 30000
+      - key: PG_STATEMENT_TIMEOUT_MS
+        value: 30000
       - key: REDIS_URL
         sync: false
+      - key: REDIS_TLS
+        value: false
+      - key: REDIS_KEY_PREFIX
+        value: selina
+      - key: REDIS_MAX_RETRIES
+        value: 3
+      - key: VFS_TTL_SECONDS
+        value: 86400
+
+      # Observability, rate limits, and workers.
       - key: SENTRY_DSN
         sync: false
+      - key: SENTRY_TRACES_SAMPLE_RATE
+        value: 0.1
+      - key: HEALTH_CHECK_TIMEOUT_MS
+        value: 2500
+      - key: RATE_LIMIT_GENERAL
+        value: 1000
+      - key: RATE_LIMIT_API
+        value: 300
+      - key: RATE_LIMIT_ORCHESTRATION
+        value: 60
+      - key: MAX_CONCURRENT_SESSIONS
+        value: 50
+      - key: MAX_CONSECUTIVE_ROLLBACKS
+        value: 3
+      - key: WS_RATE_WINDOW_MS
+        value: 60000
+      - key: WS_MAX_CONNECTIONS_PER_WINDOW
+        value: 300
+      - key: WS_MAX_ACTIVE_PER_IP
+        value: 500
+      - key: WS_MAX_ACTIVE_PER_USER
+        value: 50
+      - key: SOCKET_PING_INTERVAL_MS
+        value: 25000
+      - key: SOCKET_PING_TIMEOUT_MS
+        value: 20000
+      - key: SOCKET_COMPRESSION_THRESHOLD
+        value: 1024
+      - key: HTTP_KEEP_ALIVE_TIMEOUT_MS
+        value: 65000
+      - key: HTTP_HEADERS_TIMEOUT_MS
+        value: 70000
+      - key: IDEMPOTENCY_TTL_SECONDS
+        value: 3600
+      - key: LLM_CACHE_TTL_SECONDS
+        value: 1800
+      - key: AST_CACHE_TTL_SECONDS
+        value: 3600
+      - key: CONTEXT_CACHE_TTL_SECONDS
+        value: 300
+      - key: CODE_QUEUE_NAME
+        value: selina-code
       - key: ORCHESTRATION_WORKER_CONCURRENCY
         value: 2
+      - key: ORCHESTRATION_JOB_ATTEMPTS
+        value: 2
+      - key: ORCHESTRATION_JOB_BACKOFF_MS
+        value: 2000
+      - key: ORCHESTRATION_JOB_LOCK_MS
+        value: 300000
+
+      # GitHub and OAuth.
       - key: GITHUB_TOKEN
         sync: false
       - key: GITHUB_APP_ID
@@ -60,10 +207,12 @@ services:
       - key: GITHUB_REDIRECT_URI
         value: https://vibe-hub-bridge.onrender.com/api/auth/github/callback
 
-  # ===== FRONTEND: React Cockpit (Bento UI) =====
+  # ===== FRONTEND: React Cockpit (Selina SaaS UI) =====
   - type: web
     name: vibe-hub-ui
     runtime: static
+    region: oregon
+    plan: free
     rootDir: apps/user-interface
     buildCommand: npm install --legacy-peer-deps && npm run build
     staticPublishPath: dist
@@ -72,11 +221,29 @@ services:
         value: https://vibe-hub-bridge.onrender.com
       - key: VITE_WS_BASE
         value: wss://vibe-hub-bridge.onrender.com
+      - key: VITE_AGENT_MODEL_LABEL
+        value: Qwen Coder 32B
     headers:
       - path: /*
         name: X-Frame-Options
         value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Permissions-Policy
+        value: camera=(), microphone=(), geolocation=()
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
+
+databases:
+  - name: vibe-hub-db
+    databaseName: vibe_hub
+    user: vibe_hub
+    region: oregon
+    plan: free

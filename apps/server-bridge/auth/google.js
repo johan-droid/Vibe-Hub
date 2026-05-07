@@ -1,9 +1,13 @@
 import { Router } from 'express';
-import crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import { upsertUser } from '../db.js';
 import { createSession } from './session.js';
 import { setAuthCookies } from './middleware.js';
+import {
+  createOAuthHandoff,
+  createOAuthState,
+  consumeOAuthState,
+} from './oauth-store.js';
 import {
   buildOAuthCallbackUrl,
   clearOAuthReturnOriginCookie,
@@ -11,6 +15,7 @@ import {
   getOAuthReturnOrigin,
   setOAuthReturnOriginCookie,
 } from './oauth-return.js';
+import logger from '../utils/detailed-logger.js';
 
 const router = Router();
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -33,7 +38,7 @@ router.get('/config', (req, res) => {
  */
 router.post('/verify-token', async (req, res) => {
   const { credential, access_token } = req.body;
-  console.log('[Google Auth] Verify token request received:', {
+  logger.debug('GoogleAuth', 'Verify token request received', {
     hasCredential: !!credential,
     hasAccessToken: !!access_token
   });
@@ -43,28 +48,27 @@ router.post('/verify-token', async (req, res) => {
 
     if (credential) {
       // Verify ID Token
-      console.log('[Google Auth] Verifying ID token...');
+      logger.debug('GoogleAuth', 'Verifying ID token...');
       const ticket = await client.verifyIdToken({
         idToken: credential,
         audience: process.env.GOOGLE_CLIENT_ID,
       });
       profile = ticket.getPayload();
-      console.log('[Google Auth] ID token verified, profile:', profile?.email);
+      logger.debug('GoogleAuth', 'ID token verified', { email: profile?.email });
     } else if (access_token) {
       // Fetch User Info using Access Token
-      console.log('[Google Auth] Fetching user info with access token...');
       const userRes = await fetch(GOOGLE_USERINFO_URL, {
         headers: { Authorization: `Bearer ${access_token}` },
       });
       profile = await userRes.json();
-      console.log('[Google Auth] User info fetched:', profile?.email);
+      logger.debug('GoogleAuth', 'User info fetched', { email: profile?.email });
       if (profile.error) throw new Error(profile.error_description || profile.error);
     } else {
-      console.log('[Google Auth] No token provided');
+      logger.debug('GoogleAuth', 'No token provided');
       return res.status(400).json({ error: 'missing_token' });
     }
 
-    console.log('[Google Auth] Upserting user:', profile.email);
+    logger.debug('GoogleAuth', 'Upserting user', { email: profile.email });
     const user = await upsertUser({
       email: profile.email,
       name: profile.name,
@@ -72,16 +76,16 @@ router.post('/verify-token', async (req, res) => {
       provider: 'google',
       providerId: profile.sub,
     });
-    console.log('[Google Auth] User upserted:', user.id);
+    logger.debug('GoogleAuth', 'User upserted', { userId: user.id });
 
     // Create SaaS-grade session
-    console.log('[Google Auth] Creating session...');
+    logger.debug('GoogleAuth', 'Creating session...');
     const session = await createSession({
       userId: user.id,
       provider: 'google',
       req
     });
-    console.log('[Google Auth] Session created:', session.sessionId);
+    logger.debug('GoogleAuth', 'Session created', { sessionId: session.sessionId });
 
     // Set secure cookies
     setAuthCookies(res, {
@@ -90,7 +94,7 @@ router.post('/verify-token', async (req, res) => {
       sessionToken: session.sessionToken
     });
 
-    console.log('[Google Auth] Sending success response');
+    logger.debug('GoogleAuth', 'Sending success response');
     res.json({
       success: true,
       sessionId: session.sessionId,
@@ -103,7 +107,7 @@ router.post('/verify-token', async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[Google Auth] Verification failed:', err.message, err.stack);
+    logger.error('GoogleAuth', 'Verification failed', err);
     if (err.message === 'MAX_SESSIONS_EXCEEDED') {
       return res.status(403).json({ error: 'max_sessions_exceeded', message: 'Too many active sessions. Please log out from another device.' });
     }
@@ -128,12 +132,12 @@ function handleOAuthConfigError(req, res) {
   return res.status(500).json({ error: 'oauth_not_configured' });
 }
 
-router.get('/google', (req, res) => {
+router.get('/google', async (req, res) => {
   const missingVars = requiredEnvVars.filter(v => !process.env[v]);
   if (missingVars.length > 0) return handleOAuthConfigError(req, res);
 
-  const state = crypto.randomBytes(32).toString('hex');
   const returnOrigin = getOAuthRequestOrigin(req);
+  const state = await createOAuthState({ provider: 'google', returnOrigin });
 
   res.cookie('google_oauth_state', state, {
     httpOnly: true,
@@ -160,7 +164,8 @@ router.get('/google/callback', async (req, res) => {
   if (missingVars.length > 0) return handleOAuthConfigError(req, res);
 
   const { code, state } = req.query;
-  const returnOrigin = getOAuthReturnOrigin(req);
+  const stateRecord = await consumeOAuthState({ provider: 'google', state });
+  const returnOrigin = stateRecord?.returnOrigin || getOAuthReturnOrigin(req);
   let cookieState = req.cookies?.google_oauth_state;
   if (!cookieState && req.headers.cookie) {
     const match = req.headers.cookie.match(/(?:^|;\s*)google_oauth_state=([^;]*)/);
@@ -168,12 +173,13 @@ router.get('/google/callback', async (req, res) => {
   }
 
   if (!code) return redirectWithError(req, res, 'missing_code');
-  if (!state || !cookieState || state !== cookieState) return redirectWithError(req, res, 'invalid_state');
+  if (!state || (!stateRecord && (!cookieState || state !== cookieState))) return redirectWithError(req, res, 'invalid_state');
 
   res.clearCookie('google_oauth_state');
   clearOAuthReturnOriginCookie(res);
 
   try {
+    console.log('[GoogleAuth] Step 1: Exchanging code for tokens...');
     const tokenRes = await fetch(GOOGLE_TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -186,13 +192,17 @@ router.get('/google/callback', async (req, res) => {
       }),
     });
     const tokens = await tokenRes.json();
+    console.log('[GoogleAuth] Token response:', { hasAccessToken: !!tokens.access_token, hasError: !!tokens.error });
     if (tokens.error) throw new Error(tokens.error_description || tokens.error);
 
+    console.log('[GoogleAuth] Step 2: Fetching user info...');
     const userRes = await fetch(GOOGLE_USERINFO_URL, {
       headers: { Authorization: `Bearer ${tokens.access_token}` },
     });
     const profile = await userRes.json();
+    console.log('[GoogleAuth] User profile:', { email: profile.email, name: profile.name, hasSub: !!profile.sub });
 
+    console.log('[GoogleAuth] Step 3: Upserting user to database...');
     const user = await upsertUser({
       email: profile.email,
       name: profile.name,
@@ -200,30 +210,77 @@ router.get('/google/callback', async (req, res) => {
       provider: 'google',
       providerId: profile.sub,
     });
+    console.log('[GoogleAuth] User upserted:', { userId: user.id });
 
-    // Create SaaS-grade session
+    console.log('[GoogleAuth] Step 4: Creating session...');
     const session = await createSession({
       userId: user.id,
       provider: 'google',
       req
     });
+    console.log('[GoogleAuth] Session created:', { sessionId: session.sessionId });
 
-    // Set secure cookies
+    console.log('[GoogleAuth] Step 5: Setting auth cookies...');
     setAuthCookies(res, {
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
       sessionToken: session.sessionToken
     });
 
-    // Redirect without bearer tokens; the frontend verifies the cookie session.
-    const redirectUrl = new URL('/auth/callback', returnOrigin);
+    const userPayload = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      avatarUrl: user.avatar_url,
+      provider: user.provider
+    };
 
+    console.log('[GoogleAuth] Step 6: Creating OAuth handoff...');
+    const handoffCode = await createOAuthHandoff({
+      provider: 'google',
+      session,
+      user: userPayload
+    });
+    console.log('[GoogleAuth] Handoff created:', { hasCode: !!handoffCode });
+
+    // Redirect with only an opaque one-time code; the frontend exchanges it
+    // against the API host to set cookies reliably on localhost/127.0.0.1.
+    const redirectUrl = new URL('/auth/callback', returnOrigin);
+    redirectUrl.searchParams.set('code', handoffCode);
+
+    console.log('[GoogleAuth] Step 7: Redirecting to:', redirectUrl.toString());
     res.redirect(redirectUrl.toString());
   } catch (err) {
-    console.error('Google callback error:', err);
+    // Detailed error logging to identify exact failure point
+    console.error('[GoogleAuth] ================= CALLBACK ERROR =================');
+    console.error('[GoogleAuth] Error message:', err.message);
+    console.error('[GoogleAuth] Error code:', err.code);
+    console.error('[GoogleAuth] Error stack:', err.stack);
+
+    // Log the specific stage where error occurred based on what was completed
+    logger.error('GoogleAuth', 'Callback error', {
+      error: err.message,
+      code: err.code,
+      stack: err.stack,
+      hasCode: !!code,
+      hasState: !!state,
+      hasStateRecord: !!stateRecord,
+      returnOrigin: returnOrigin
+    });
+
     if (err.message === 'MAX_SESSIONS_EXCEEDED') {
       return redirectWithError(req, res, 'max_sessions_exceeded');
     }
+
+    // Specific error types for better frontend messaging
+    if (err.message?.includes('Connection terminated') || err.code?.includes('08')) {
+      return redirectWithError(req, res, 'database_error');
+    }
+
+    if (err.message?.includes('invalid_grant') || err.message?.includes('redirect_uri_mismatch')) {
+      return redirectWithError(req, res, 'oauth_config_error');
+    }
+
     redirectWithError(req, res, 'provider_failed');
   }
 });

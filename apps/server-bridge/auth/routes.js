@@ -22,10 +22,11 @@ import {
   logoutSession,
   logoutAllSessions,
   getUserActiveSessions,
-  createSession,
   validateSession
 } from './session.js';
+import { consumeOAuthHandoff } from './oauth-store.js';
 import { getUserAuthHistory } from '../db.js';
+import logger from '../utils/detailed-logger.js';
 
 const router = Router();
 
@@ -44,6 +45,43 @@ function authUserPayload(req) {
  * Refresh access token using refresh token
  */
 router.post('/refresh', handleRefreshToken);
+
+/**
+ * POST /api/auth/handoff
+ * Exchange a short-lived OAuth handoff code for HTTP-only session cookies.
+ */
+router.post('/handoff', async (req, res) => {
+  try {
+    const record = await consumeOAuthHandoff(req.body?.code);
+    if (!record) {
+      clearAuthCookies(res);
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid or expired sign-in handoff.',
+        code: 'INVALID_HANDOFF'
+      });
+    }
+
+    setAuthCookies(res, {
+      accessToken: record.session.accessToken,
+      refreshToken: record.session.refreshToken,
+      sessionToken: record.session.sessionToken
+    });
+
+    res.set('Cache-Control', 'no-store');
+    return res.json({
+      success: true,
+      authenticated: true,
+      user: record.user,
+      sessionId: record.session.sessionId,
+      provider: record.provider
+    });
+  } catch (err) {
+    logger.error('AuthRoutes', 'OAuth handoff error', err);
+    clearAuthCookies(res);
+    return res.status(500).json({ success: false, error: 'Failed to complete sign-in' });
+  }
+});
 
 /**
  * GET /api/auth/status
@@ -86,7 +124,7 @@ router.post('/logout', optionalAuth, async (req, res) => {
 
     res.json({ success: true, message: 'Logged out successfully' });
   } catch (err) {
-    console.error('Logout error:', err);
+    logger.error('AuthRoutes', 'Logout error', err);
     res.status(500).json({ error: 'Logout failed' });
   }
 });
@@ -107,7 +145,7 @@ router.post('/logout-all', requireAuth, async (req, res) => {
 
     res.json({ success: true, message: 'Logged out from all devices' });
   } catch (err) {
-    console.error('Logout all error:', err);
+    logger.error('AuthRoutes', 'Logout all error', err);
     res.status(500).json({ error: 'Logout failed' });
   }
 });
@@ -139,7 +177,7 @@ router.get('/sessions', requireAuth, async (req, res) => {
 
     res.json({ success: true, sessions: formattedSessions });
   } catch (err) {
-    console.error('Get sessions error:', err);
+    logger.error('AuthRoutes', 'Get sessions error', err);
     res.status(500).json({ error: 'Failed to get sessions' });
   }
 });
@@ -166,7 +204,7 @@ router.post('/sessions/:id/revoke', requireAuth, async (req, res) => {
 
     res.json({ success: true, message: 'Session revoked successfully' });
   } catch (err) {
-    console.error('Revoke session error:', err);
+    logger.error('AuthRoutes', 'Revoke session error', err);
     res.status(500).json({ error: 'Failed to revoke session' });
   }
 });
@@ -184,7 +222,7 @@ router.get('/history', requireAuth, async (req, res) => {
 
     res.json({ success: true, history });
   } catch (err) {
-    console.error('Get history error:', err);
+    logger.error('AuthRoutes', 'Get history error', err);
     res.status(500).json({ error: 'Failed to get auth history' });
   }
 });
@@ -205,7 +243,7 @@ router.get('/me', optionalAuth, async (req, res) => {
       sessionId: req.sessionId
     });
   } catch (err) {
-    console.error('Get me error:', err);
+    logger.error('AuthRoutes', 'Get me error', err);
     res.status(500).json({ error: 'Failed to get user info' });
   }
 });
@@ -241,7 +279,7 @@ router.post('/validate-session', async (req, res) => {
       expiresAt: session.expiresAt
     });
   } catch (err) {
-    console.error('Validate session error:', err);
+    logger.error('AuthRoutes', 'Validate session error', err);
     res.status(500).json({ error: 'Failed to validate session' });
   }
 });

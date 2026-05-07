@@ -6,7 +6,7 @@ import path from 'path';
 import { loadMemory } from './memory/loader.js';
 
 /**
- * Selina MCP Server — High Performance Implementation
+ * Selina MCP Server - High Performance Implementation
  * 
  * Engineered for Ryzen 5 5500U (6C/12T) environments.
  * Focuses on low memory overhead and intelligent context retrieval.
@@ -137,6 +137,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
+      case 'selina_read_file':
       case 'selina_read_file': {
         // BUG #4 FIX: path.resolve() handles ../ but we must ALSO verify the
         // resolved path is still inside workspaceRoot. Without this check,
@@ -159,12 +160,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return { content: [{ type: 'text', text: content }] };
       }
 
+      case 'selina_search_symbols':
       case 'selina_search_symbols': {
         // Implementation of efficient recursive search
         // On Windows with Ryzen 5, we use a throttled async walk to avoid IO saturation
         return { content: [{ type: 'text', text: `Search capability for "${args.query}" initialized. [Optimized implementation pending file-system indexer integration]` }] };
       }
 
+      case 'selina_get_memory':
       case 'selina_get_memory': {
         const memory = await loadMemory('default_user', args.projectId);
         return {

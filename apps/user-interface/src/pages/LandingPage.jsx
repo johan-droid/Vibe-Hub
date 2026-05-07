@@ -17,7 +17,6 @@ import {
   ShieldCheck,
   Sparkles,
   Terminal,
-  Twitter,
   Zap,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -25,6 +24,7 @@ import { useStore } from '../store/useStore';
 import { api } from '../services/api';
 import { Button } from '../features/shared/components/Button';
 import { VibeLogoCompact } from '../components/VibeLogo';
+import { SELINA_BRAND } from '../brand/selina';
 
 // Animation variants
 const fadeUp = {
@@ -50,7 +50,7 @@ const bentoItem = {
 const features = [
   {
     title: 'Smart Memory',
-    desc: 'Selina remembers how you code and what you like. It gets smarter with every project, just like a real partner.',
+    desc: 'Persist project decisions, debugging notes, and coding preferences as auditable memory instead of fragile chat-only context.',
     icon: Brain,
     image: '/images/smart_memory.png',
     size: 'large',
@@ -58,7 +58,7 @@ const features = [
   },
   {
     title: 'The Universal Link',
-    desc: 'Connect to Claude, Cursor, and your favorite tools in seconds.',
+    desc: 'Route OpenAI, Anthropic, MCP, GitHub, browser, and terminal capabilities through one governed workspace.',
     icon: Layout,
     image: '/images/connected_tools.png',
     size: 'medium',
@@ -66,7 +66,7 @@ const features = [
   },
   {
     title: 'Safe Playground',
-    desc: 'Run and test code in a secure, private space where nothing can go wrong.',
+    desc: 'Run generated code in a local Docker sandbox with explicit approval and environment sanitization.',
     icon: ShieldCheck,
     image: '/images/safe_sandbox.png',
     size: 'medium',
@@ -74,11 +74,80 @@ const features = [
   },
   {
     title: 'Always Protected',
-    desc: 'Industrial-grade security keeps your code and data safe 24/7.',
+    desc: 'Keep provider secrets out of the browser and require grants before write or execution tools run.',
     icon: Lock,
     size: 'small',
     color: 'google-red'
   },
+];
+
+const footerColumns = [
+  {
+    title: 'Platform',
+    links: [
+      { label: 'Orchestrator Workspace', href: '#workspace', detail: 'Editor, terminal, tool graph, and execution log.' },
+      { label: 'Provider MoE', href: '#capabilities', detail: 'Route code, debug, review, and manager experts.' },
+      { label: 'MCP Tooling', href: '#capabilities', detail: 'Schema-validated tools with diagnostics and audit events.' },
+      { label: 'Local Docker Sandbox', href: '#security', detail: 'Generated code execution stays local by policy.' },
+    ],
+  },
+  {
+    title: 'Developers',
+    links: [
+      { label: 'Documentation', href: 'https://github.com/johan-droid/Vibe-Hub', detail: 'Architecture, setup, and release notes.' },
+      { label: 'API Reference', href: 'https://github.com/johan-droid/Vibe-Hub', detail: 'Runtime, MCP, approvals, and run inspection APIs.' },
+      { label: 'GitHub Repository', href: 'https://github.com/johan-droid/Vibe-Hub', detail: 'Source, issues, and contribution workflow.' },
+      { label: 'Diagnostics', href: '#security', detail: 'Runtime health, MCP state, and sandbox readiness.' },
+    ],
+  },
+  {
+    title: 'Company',
+    links: [
+      { label: 'About Selina', href: '#capabilities', detail: 'Secure agentic coding for focused teams.' },
+      { label: 'Contact', href: 'https://github.com/johan-droid/Vibe-Hub/issues/new', detail: 'Open a repository issue for product and support inquiries.' },
+      { label: 'Security Contact', href: 'https://github.com/johan-droid/Vibe-Hub/security', detail: 'Use the repository security channel for responsible disclosure.' },
+      { label: 'Status', href: '#status', detail: 'Local runtime and backend readiness signal.' },
+    ],
+  },
+  {
+    title: 'Legal',
+    links: [
+      { label: 'Terms of Service', href: '/login#terms', detail: 'Usage rules, generated code, and user responsibilities.' },
+      { label: 'Privacy Notice', href: '/login#privacy', detail: 'Cookie auth, session metadata, and audit events.' },
+      { label: 'Security Policy', href: '/login#security-notice', detail: 'Approval gates, local execution, and secret handling.' },
+      { label: 'Cookie Policy', href: '/login#privacy', detail: 'HttpOnly auth cookies and non-secret preferences.' },
+    ],
+  },
+];
+
+const footerCommitments = [
+  {
+    icon: Terminal,
+    title: 'Local execution only',
+    text: 'Generated code runs in the local Docker sandbox with no cloud runner introduced.',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Approval-gated actions',
+    text: 'Write, execution, browser, GitHub, and MCP mutations require explicit grants.',
+  },
+  {
+    icon: Lock,
+    title: 'Zero-key browser UI',
+    text: 'Provider secrets stay server-side; browser auth uses HttpOnly cookies.',
+  },
+  {
+    icon: FileCode2,
+    title: 'Auditable rollouts',
+    text: 'Plans, tool calls, edits, terminal output, and outcomes are captured as run artifacts.',
+  },
+];
+
+const footerSignals = [
+  { icon: CheckCircle2, label: 'JSON-RPC event stream' },
+  { icon: Activity, label: 'Runtime diagnostics' },
+  { icon: Shield, label: 'Sanitized subprocess env' },
+  { icon: Globe, label: 'MCP-ready extension layer' },
 ];
 
 function BrandMark() {
@@ -220,15 +289,21 @@ export default function LandingPage() {
               </motion.h1>
               
               <motion.p variants={fadeUp} className="max-w-xl text-lg font-medium leading-relaxed text-on-surface-variant/80 mb-10">
-                Selina learns your style, connects your tools, and handles the hard parts of building software. It's not just an agent; it's an extension of your mind.
+                Selina brings planning, code review, terminal execution, MCP tools, and approval gates into one local-first agentic coding workspace.
               </motion.p>
               
               <motion.div variants={fadeUp} className="flex flex-col sm:flex-row gap-5">
                 <Button size="lg" variant="filled" trailingIcon={ArrowRight} onClick={() => navigate('/login')} className="rounded-full px-10 h-16 text-lg shadow-xl shadow-primary/30 hover:scale-105 transition-transform duration-300">
                   Start Building Now
                 </Button>
-                <Button size="lg" variant="outlined" leadingIcon={Play} className="rounded-full px-10 h-16 text-lg border-2 hover:bg-surface-container-low transition-colors duration-300">
-                  See it in Action
+                <Button
+                  size="lg"
+                  variant="outlined"
+                  leadingIcon={Play}
+                  onClick={() => document.getElementById('capabilities')?.scrollIntoView({ behavior: 'smooth' })}
+                  className="rounded-full px-10 h-16 text-lg border-2 hover:bg-surface-container-low transition-colors duration-300"
+                >
+                  Explore capabilities
                 </Button>
               </motion.div>
 
@@ -273,8 +348,8 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Stats Section */}
-        <section className="py-24 md:py-32 px-6 md:px-10 border-y border-outline-variant/20 bg-surface-container-lowest/50">
+        {/* Trust Signals Section */}
+        <section id="security" className="py-24 md:py-32 px-6 md:px-10 border-y border-outline-variant/20 bg-surface-container-lowest/50">
           <div className="mx-auto max-w-7xl">
             <motion.div 
               initial="hidden"
@@ -284,10 +359,10 @@ export default function LandingPage() {
               className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12"
             >
               {[
-                { value: '50K+', label: 'Active Developers' },
-                { value: '2M+', label: 'Code Generations' },
-                { value: '99.9%', label: 'Uptime SLA' },
-                { value: '4.9/5', label: 'User Rating' },
+                { value: 'Local', label: 'Docker sandbox policy' },
+                { value: 'Grant', label: 'Risky tool approvals' },
+                { value: 'JSON', label: 'RPC event envelopes' },
+                { value: 'Audit', label: 'Run artifacts and logs' },
               ].map((stat, idx) => (
                 <motion.div 
                   key={idx}
@@ -302,8 +377,8 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Testimonials Section */}
-        <section className="py-24 md:py-40 px-6 md:px-10">
+        {/* Workspace Model Section */}
+        <section id="workspace" className="py-24 md:py-40 px-6 md:px-10">
           <div className="mx-auto max-w-7xl">
             <motion.div 
               initial="hidden"
@@ -312,10 +387,10 @@ export default function LandingPage() {
               variants={staggerContainer}
               className="text-center mb-16 md:mb-24"
             >
-              <motion.p variants={fadeUp} className="label-large text-primary mb-4">Testimonials</motion.p>
+              <motion.p variants={fadeUp} className="label-large text-primary mb-4">Workspace Model</motion.p>
               <motion.h2 variants={fadeUp} className="headline-large mb-6">
-                Loved by developers <br />
-                <span className="text-gradient">worldwide</span>
+                Built around the way <br />
+                <span className="text-gradient">production agents work</span>
               </motion.h2>
             </motion.div>
 
@@ -328,44 +403,39 @@ export default function LandingPage() {
             >
               {[
                 {
-                  quote: "Selina has completely transformed how I build software. It's like having a senior developer pair programming with me 24/7.",
-                  author: 'Sarah Chen',
-                  role: 'Lead Engineer at TechCorp',
-                  avatar: 'SC'
+                  icon: Brain,
+                  title: 'Plan before edits',
+                  description: 'Selina records plans, implementation notes, and status artifacts so a run can be inspected or resumed without relying on hidden chat state.',
                 },
                 {
-                  quote: "The memory feature is game-changing. Selina remembers my preferences and coding style across all my projects.",
-                  author: 'Marcus Johnson',
-                  role: 'Indie Developer',
-                  avatar: 'MJ'
+                  icon: Terminal,
+                  title: 'Verify locally',
+                  description: 'Builds, tests, and generated code execute through the local sandbox boundary with sanitized subprocess environments.',
                 },
                 {
-                  quote: "Best AI coding assistant I've used. The integration with my existing workflow was seamless and immediate.",
-                  author: 'Elena Rodriguez',
-                  role: 'CTO at StartupXYZ',
-                  avatar: 'ER'
+                  icon: ShieldCheck,
+                  title: 'Pause for risk',
+                  description: 'Write, browser, GitHub, execution, and unknown MCP mutations require approval grants before they can cross the execution boundary.',
                 },
-              ].map((testimonial, idx) => (
+              ].map((workflow, idx) => (
                 <motion.div
                   key={idx}
                   variants={bentoItem}
                   className="panel p-8 flex flex-col"
                 >
-                  <div className="flex gap-1 mb-6">
-                    {[...Array(5)].map((_, i) => (
-                      <Sparkles key={i} size={16} className="text-google-yellow fill-google-yellow" />
-                    ))}
+                  <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <workflow.icon size={22} />
                   </div>
                   <p className="text-base font-medium text-on-surface leading-relaxed mb-8 flex-grow">
-                    "{testimonial.quote}"
+                    {workflow.description}
                   </p>
                   <div className="flex items-center gap-4">
                     <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                      <span className="text-sm font-black text-primary">{testimonial.avatar}</span>
+                      <span className="text-sm font-black text-primary">{String(idx + 1).padStart(2, '0')}</span>
                     </div>
                     <div>
-                      <p className="text-sm font-black text-on-surface">{testimonial.author}</p>
-                      <p className="text-xs font-medium text-on-surface-variant">{testimonial.role}</p>
+                      <p className="text-sm font-black text-on-surface">{workflow.title}</p>
+                      <p className="text-xs font-medium text-on-surface-variant">Selina operating loop</p>
                     </div>
                   </div>
                 </motion.div>
@@ -396,8 +466,7 @@ export default function LandingPage() {
                   <span className="text-gradient-google">next wave of coding?</span>
                 </h2>
                 <p className="mb-10 text-lg font-medium leading-relaxed text-on-surface-variant/80">
-                  Join thousands of developers who are already building faster, <br className="hidden md:block" /> 
-                  smarter, and with more vibe using Selina.
+                  Start a governed local workspace for planning, editing, verifying, and reviewing agentic code changes.
                 </p>
                 <div className="flex flex-col items-center justify-center gap-6 sm:flex-row">
                   <Button 
@@ -409,7 +478,7 @@ export default function LandingPage() {
                   >
                     Get Started for Free
                   </Button>
-                  <a href="https://github.com/vibe-platform/vibe-hub" target="_blank" rel="noreferrer" className="flex items-center gap-2.5 text-sm font-black uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors duration-300">
+                  <a href="https://github.com/johan-droid/Vibe-Hub" target="_blank" rel="noreferrer" className="flex items-center gap-2.5 text-sm font-black uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors duration-300">
                     <Github size={20} />
                     View on GitHub
                   </a>
@@ -420,193 +489,134 @@ export default function LandingPage() {
         </section>
       </main>
 
-      {/* SaaS-Grade Professional Footer */}
-      <footer className="border-t border-outline-variant/30 bg-surface-container-lowest">
-        {/* Newsletter Section */}
-        <div className="px-6 md:px-10 py-16 md:py-20 border-b border-outline-variant/20">
-          <div className="mx-auto max-w-7xl">
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="flex flex-col lg:flex-row items-center justify-between gap-10"
-            >
-              <div className="text-center lg:text-left">
-                <h3 className="text-2xl md:text-3xl font-black tracking-tight text-on-surface mb-3">
-                  Stay ahead of the curve
-                </h3>
-                <p className="text-base font-medium text-on-surface-variant max-w-md">
-                  Get weekly insights on AI development, productivity tips, and product updates.
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/50" size={20} />
-                  <input 
-                    type="email" 
-                    placeholder="Enter your email"
-                    className="h-14 w-full sm:w-80 rounded-2xl bg-surface-container-low border border-outline-variant/50 pl-12 pr-4 text-base font-medium text-on-surface placeholder:text-on-surface-variant/50 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                  />
+      <footer id="status" className="border-t border-outline-variant/30 bg-surface-container-lowest">
+        <div className="px-6 py-14 md:px-10 md:py-20 border-b border-outline-variant/20">
+          <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
+            <div>
+              <p className="label-large mb-4 text-primary">Production Posture</p>
+              <h2 className="max-w-3xl text-3xl font-black tracking-tight text-on-surface md:text-5xl">
+                Agentic coding with the controls teams expect.
+              </h2>
+              <p className="mt-5 max-w-2xl text-base font-medium leading-relaxed text-on-surface-variant">
+                Selina combines a Monaco workspace, local Docker execution, MCP diagnostics, approval gates, and run-level audit artifacts so the product feels fast without becoming opaque.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              {footerSignals.map((signal) => (
+                <div key={signal.label} className="flex items-center gap-3 rounded-2xl border border-outline-variant/40 bg-surface-container-low px-4 py-3">
+                  <signal.icon size={18} className="text-primary" />
+                  <span className="text-sm font-black text-on-surface">{signal.label}</span>
                 </div>
-                <Button 
-                  variant="filled" 
-                  size="lg" 
-                  className="h-14 px-8 rounded-2xl font-black whitespace-nowrap"
-                >
-                  Subscribe
-                </Button>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-
-        {/* Main Footer Content */}
-        <div className="px-6 md:px-10 py-16 md:py-24">
-          <div className="mx-auto max-w-7xl">
-            <div className="grid gap-12 md:gap-8 lg:grid-cols-12">
-              {/* Brand Column */}
-              <div className="lg:col-span-4">
-                <div className="flex items-center gap-3 mb-6">
-                  <BrandMark />
-                  <span className="text-2xl font-black tracking-tight text-on-surface">Selina</span>
-                </div>
-                <p className="text-base font-medium text-on-surface-variant leading-relaxed mb-6 max-w-sm">
-                  The agentic workspace that learns your style, connects your tools, and helps you ship faster with AI-powered intelligence.
-                </p>
-                
-                {/* Social Links */}
-                <div className="flex gap-3 mb-8">
-                  {[
-                    { icon: Github, href: 'https://github.com/vibe-platform/vibe-hub', label: 'GitHub' },
-                    { icon: Twitter, href: '#', label: 'Twitter' },
-                    { icon: Globe, href: '#', label: 'Website' },
-                  ].map((social) => (
-                    <a 
-                      key={social.label}
-                      href={social.href}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="h-10 w-10 rounded-xl bg-surface-container-low border border-outline-variant/30 flex items-center justify-center text-on-surface-variant hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all duration-300"
-                      aria-label={social.label}
-                    >
-                      <social.icon size={18} />
-                    </a>
-                  ))}
-                </div>
-
-                {/* Trust Badges */}
-                <div className="flex flex-wrap gap-3">
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-google-green/10 border border-google-green/20">
-                    <Shield size={14} className="text-google-green" />
-                    <span className="text-xs font-bold text-google-green">SOC 2 Compliant</span>
-                  </div>
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-google-blue/10 border border-google-blue/20">
-                    <Lock size={14} className="text-google-blue" />
-                    <span className="text-xs font-bold text-google-blue">GDPR Ready</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Links Columns */}
-              <div className="lg:col-span-8">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-                  {/* Product */}
-                  <div>
-                    <h4 className="text-sm font-black uppercase tracking-widest text-on-surface mb-5">Product</h4>
-                    <ul className="space-y-3">
-                      {['Features', 'Pricing', 'Changelog', 'Roadmap', 'Integrations'].map((item) => (
-                        <li key={item}>
-                          <a 
-                            href={item === 'Features' ? '#capabilities' : '#'} 
-                            className="text-sm font-medium text-on-surface-variant hover:text-primary transition-colors duration-200"
-                          >
-                            {item}
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Resources */}
-                  <div>
-                    <h4 className="text-sm font-black uppercase tracking-widest text-on-surface mb-5">Resources</h4>
-                    <ul className="space-y-3">
-                      {['Documentation', 'API Reference', 'Community', 'Blog', 'Guides'].map((item) => (
-                        <li key={item}>
-                          <a 
-                            href="#" 
-                            className="text-sm font-medium text-on-surface-variant hover:text-primary transition-colors duration-200"
-                          >
-                            {item}
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Company */}
-                  <div>
-                    <h4 className="text-sm font-black uppercase tracking-widest text-on-surface mb-5">Company</h4>
-                    <ul className="space-y-3">
-                      {['About', 'Careers', 'Contact', 'Partners', 'Press Kit'].map((item) => (
-                        <li key={item}>
-                          <a 
-                            href="#" 
-                            className="text-sm font-medium text-on-surface-variant hover:text-primary transition-colors duration-200"
-                          >
-                            {item}
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Legal */}
-                  <div>
-                    <h4 className="text-sm font-black uppercase tracking-widest text-on-surface mb-5">Legal</h4>
-                    <ul className="space-y-3">
-                      {['Privacy Policy', 'Terms of Service', 'Cookie Policy', 'Security', 'Status'].map((item) => (
-                        <li key={item}>
-                          <a 
-                            href="#" 
-                            className="text-sm font-medium text-on-surface-variant hover:text-primary transition-colors duration-200"
-                          >
-                            {item}
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         </div>
 
-        {/* Bottom Bar */}
-        <div className="border-t border-outline-variant/20 bg-surface-container-low/50">
-          <div className="mx-auto max-w-7xl px-6 md:px-10 py-6">
-            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 text-sm font-medium text-on-surface-variant/60">
-                <span>© {new Date().getFullYear()} Selina Intelligence Labs</span>
-                <span className="hidden sm:inline">•</span>
-                <span>All rights reserved</span>
-              </div>
+        <div className="px-6 py-16 md:px-10 md:py-24">
+          <div className="mx-auto max-w-7xl">
+            <div className="grid gap-12 lg:grid-cols-12">
+              <div className="lg:col-span-4">
+                <div className="mb-6 flex items-center gap-3">
+                  <BrandMark />
+                  <div>
+                    <span className="block text-2xl font-black tracking-tight text-on-surface">{SELINA_BRAND.productName}</span>
+                    <span className="text-xs font-black uppercase tracking-[0.18em] text-on-surface-variant">{SELINA_BRAND.tagline}</span>
+                  </div>
+                </div>
 
-              <div className="flex items-center gap-6">
-                {/* System Status */}
-                <div className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-surface-container-low border border-outline-variant/30">
-                  <span className={`h-2 w-2 rounded-full ${isOnline ? 'animate-pulse bg-google-green' : 'bg-google-red'}`} />
-                  <span className={`text-xs font-bold ${isOnline ? 'text-google-green' : 'text-google-red'}`}>
-                    {isOnline ? 'All Systems Operational' : 'Degraded Performance'}
+                <p className="mb-6 max-w-sm text-base font-medium leading-relaxed text-on-surface-variant">
+                  {SELINA_BRAND.shortDescription} Built for local-first teams that need visibility into every agent decision.
+                </p>
+
+                <div className="mb-8 flex flex-wrap gap-3">
+                  {[
+                    { icon: Github, href: 'https://github.com/johan-droid/Vibe-Hub', label: 'GitHub' },
+                    { icon: Mail, href: 'https://github.com/johan-droid/Vibe-Hub/issues/new', label: 'Contact' },
+                    { icon: Globe, href: '#capabilities', label: 'Product overview' },
+                  ].map((social) => {
+                    const external = social.href.startsWith('http');
+                    return (
+                      <a
+                        key={social.label}
+                        href={social.href}
+                        target={external ? '_blank' : undefined}
+                        rel={external ? 'noreferrer' : undefined}
+                        className="flex h-10 w-10 items-center justify-center rounded-xl border border-outline-variant/40 bg-surface-container-low text-on-surface-variant transition-all duration-300 hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+                        aria-label={social.label}
+                      >
+                        <social.icon size={18} />
+                      </a>
+                    );
+                  })}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-outline-variant/40 bg-surface-container-low px-3 py-1.5">
+                    <span className={`h-2 w-2 rounded-full ${isOnline ? 'bg-google-green' : 'bg-google-red'}`} />
+                    <span className="text-xs font-black text-on-surface-variant">
+                      {isOnline ? 'Backend ready' : 'Backend degraded'}
+                    </span>
+                  </div>
+                  <span className="rounded-full border border-outline-variant/40 bg-surface-container-low px-3 py-1.5 text-xs font-black text-on-surface-variant">
+                    {SELINA_BRAND.versionLabel}
                   </span>
                 </div>
-                
-                {/* Version */}
-                <span className="text-xs font-medium text-on-surface-variant/40">
-                  v2.0.0-beta
-                </span>
               </div>
+
+              <div className="lg:col-span-8">
+                <div className="grid gap-8 sm:grid-cols-2 xl:grid-cols-4">
+                  {footerColumns.map((column) => (
+                    <div key={column.title}>
+                      <h4 className="mb-5 text-sm font-black uppercase tracking-widest text-on-surface">{column.title}</h4>
+                      <ul className="space-y-4">
+                        {column.links.map((link) => {
+                          const external = link.href.startsWith('http');
+                          return (
+                            <li key={link.label}>
+                              <a
+                                href={link.href}
+                                target={external ? '_blank' : undefined}
+                                rel={external ? 'noreferrer' : undefined}
+                                className="group block"
+                              >
+                                <span className="block text-sm font-black text-on-surface-variant transition-colors group-hover:text-primary">{link.label}</span>
+                                <span className="mt-1 block text-xs font-medium leading-relaxed text-on-surface-variant/60">{link.detail}</span>
+                              </a>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-14 grid gap-4 border-t border-outline-variant/20 pt-10 md:grid-cols-2 xl:grid-cols-4">
+              {footerCommitments.map((item) => (
+                <div key={item.title} className="rounded-2xl border border-outline-variant/40 bg-surface-container-low p-5">
+                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <item.icon size={19} />
+                  </div>
+                  <h5 className="text-sm font-black text-on-surface">{item.title}</h5>
+                  <p className="mt-2 text-xs font-medium leading-relaxed text-on-surface-variant">{item.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-outline-variant/20 bg-surface-container-low/50">
+          <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-6 py-6 text-center md:flex-row md:px-10 md:text-left">
+            <div className="text-sm font-medium text-on-surface-variant/70">
+              © {new Date().getFullYear()} {SELINA_BRAND.companyName}. All rights reserved.
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-black uppercase tracking-[0.14em] text-on-surface-variant/60">
+              <a href="/login#terms" className="transition-colors hover:text-primary">Terms</a>
+              <a href="/login#privacy" className="transition-colors hover:text-primary">Privacy</a>
+              <a href="/login#security-notice" className="transition-colors hover:text-primary">Security</a>
+              <span>Local Docker only</span>
             </div>
           </div>
         </div>

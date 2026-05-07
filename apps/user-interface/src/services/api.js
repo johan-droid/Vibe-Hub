@@ -1,13 +1,28 @@
 import { useStore } from '../store/useStore';
 
-const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.PROD
-  ? 'https://vibe-hub-bridge.onrender.com'
-  : `http://${window.location.hostname}:3001`);
+function isLoopbackHost(hostname) {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1';
+}
 
-// Token storage keys
-const ACCESS_TOKEN_KEY = 'selina_access_token';
-const REFRESH_TOKEN_KEY = 'selina_refresh_token';
-const SESSION_TOKEN_KEY = 'selina_session_token';
+function resolveApiBase() {
+  const configured = import.meta.env.VITE_API_BASE;
+  if (import.meta.env.PROD) return configured || `http://${window.location.hostname}:3001`;
+
+  if (!configured) return `http://${window.location.hostname}:3001`;
+
+  try {
+    const configuredUrl = new URL(configured);
+    if (isLoopbackHost(configuredUrl.hostname) && isLoopbackHost(window.location.hostname)) {
+      configuredUrl.hostname = window.location.hostname;
+      return configuredUrl.origin;
+    }
+    return configuredUrl.origin;
+  } catch {
+    return `http://${window.location.hostname}:3001`;
+  }
+}
+
+const API_BASE = resolveApiBase();
 
 class ApiError extends Error {
   constructor(message, status) {
@@ -32,27 +47,14 @@ async function readError(res) {
 class ApiClient {
   constructor() {
     this.accessToken = null;
-    this.refreshToken = null;
-    this.sessionToken = null;
     this.csrfToken = null;
     this.csrfPromise = null;
     this.refreshPromise = null;
     this.googleConfigPromise = null;
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-    localStorage.removeItem(SESSION_TOKEN_KEY);
   }
 
   getToken() {
-    // Legacy support
-    const legacy = localStorage.getItem('selina_token');
-    if (legacy) {
-      this.accessToken = legacy;
-      localStorage.removeItem('selina_token');
-      localStorage.removeItem(ACCESS_TOKEN_KEY);
-    }
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-    return this.accessToken;
+    return null;
   }
 
   hasToken() {
@@ -64,23 +66,16 @@ class ApiClient {
     this.setAccessToken(token);
   }
 
-  setAccessToken(token, { persist = false } = {}) {
-    this.accessToken = token;
-    if (token && persist) {
-      localStorage.setItem(ACCESS_TOKEN_KEY, token);
-    } else {
-      localStorage.removeItem(ACCESS_TOKEN_KEY);
-    }
+  setAccessToken(token, { persist = true } = {}) {
+    this.accessToken = persist ? null : token || null;
   }
 
   setRefreshToken(token) {
-    this.refreshToken = token;
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
+    this.refreshToken = null;
   }
 
   setSessionToken(token) {
-    this.sessionToken = token;
-    localStorage.removeItem(SESSION_TOKEN_KEY);
+    this.sessionToken = null;
   }
 
   setAuthTokens({ accessToken, refreshToken, sessionToken }) {
@@ -97,17 +92,14 @@ class ApiClient {
     this.accessToken = null;
     this.refreshToken = null;
     this.sessionToken = null;
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-    localStorage.removeItem(SESSION_TOKEN_KEY);
-    localStorage.removeItem('selina_token'); // legacy
+    localStorage.removeItem('selina_access_token');
+    localStorage.removeItem('selina_refresh_token');
+    localStorage.removeItem('selina_session_token');
+    localStorage.removeItem('selina_token');
   }
 
   get baseHeaders() {
-    const h = { 'Content-Type': 'application/json' };
-    const token = this.getToken() || this.accessToken;
-    if (token) h.Authorization = `Bearer ${token}`;
-    return h;
+    return { 'Content-Type': 'application/json' };
   }
 
   /**
@@ -122,7 +114,7 @@ class ApiClient {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ refreshToken: this.refreshToken }),
+          body: JSON.stringify({}),
         });
 
         if (!res.ok) {
@@ -131,10 +123,7 @@ class ApiClient {
 
         const data = await res.json();
         if (data.success) {
-          if (data.accessToken) {
-            this.setAccessToken(data.accessToken);
-          }
-          return data.accessToken || null;
+          return true;
         }
         throw new Error('Invalid refresh response');
       } catch (err) {
@@ -188,7 +177,7 @@ class ApiClient {
       });
 
       // Handle token expiration with auto-refresh
-      if (res.status === 401 && !options.skipRefresh && this.refreshToken) {
+      if (res.status === 401 && !options.skipRefresh) {
         await this.refreshAccessToken();
         // Retry with new token
         const retryRes = await fetch(`${API_BASE}${path}`, {
@@ -230,7 +219,7 @@ class ApiClient {
       });
 
       // Handle token expiration with auto-refresh
-      if (res.status === 401 && !options.skipRefresh && this.refreshToken) {
+      if (res.status === 401 && !options.skipRefresh) {
         await this.refreshAccessToken();
         // Retry with new token
         const retryHeaders = await this.requestHeaders({ csrf: !options.skipCsrf });
@@ -282,6 +271,11 @@ class ApiClient {
     return this.get('/api/runtime/skills');
   }
 
+  /** Get public Selina runtime brand metadata */
+  async runtimeBrand() {
+    return this.get('/api/runtime/brand');
+  }
+
   /** Get current user profile */
   async me() {
     return this.get('/api/me');
@@ -290,6 +284,11 @@ class ApiClient {
   /** Probe current auth state without causing an expected 401 on app startup */
   async authStatus() {
     return this.get('/api/auth/status', { skipRefresh: true });
+  }
+
+  /** Exchange opaque OAuth callback code for HTTP-only cookies on the API host */
+  async exchangeOAuthHandoff(code) {
+    return this.post('/api/auth/handoff', { code }, { skipCsrf: true, skipRefresh: true });
   }
 
   /** Get Google OAuth URL */
@@ -337,8 +336,32 @@ class ApiClient {
     return this.get('/api/v6/mcp/servers');
   }
 
+  async mcpDiagnostics() {
+    return this.get('/api/v6/mcp/diagnostics');
+  }
+
   async callMcpTool(toolId, args) {
     return this.post('/api/v6/mcp/call', { toolId, arguments: args });
+  }
+
+  async runtimeExperts() {
+    return this.get('/api/v6/runtime/experts');
+  }
+
+  async getRun(runId) {
+    return this.get(`/api/v6/orchestrator/runs/${encodeURIComponent(runId)}`);
+  }
+
+  async getRunEvents(runId) {
+    return this.get(`/api/v6/orchestrator/runs/${encodeURIComponent(runId)}/events`);
+  }
+
+  async getRunArtifacts(runId) {
+    return this.get(`/api/v6/orchestrator/runs/${encodeURIComponent(runId)}/artifacts`);
+  }
+
+  async createApprovalGrant({ runId, toolName, paramsHash, decision, reason }) {
+    return this.post('/api/v6/approvals/grants', { runId, toolName, paramsHash, decision, reason });
   }
 
   // --- CHAT HISTORY (V6) ---
@@ -356,6 +379,19 @@ class ApiClient {
 
   async addChatMessage(sessionId, role, content, thoughts = []) {
     return this.post(`/api/v6/chat/sessions/${sessionId}/messages`, { role, content, thoughts });
+  }
+
+  // --- USER PREFERENCES (V6) ---
+  async getPreferences() {
+    return this.get('/api/v6/preferences');
+  }
+
+  async updatePreference(preferenceType, content) {
+    return this.post('/api/v6/preferences', { preferenceType, content });
+  }
+
+  async bulkUpdatePreferences(preferences) {
+    return this.post('/api/v6/preferences/bulk', { preferences });
   }
 
   /** Get GitHub OAuth URL */

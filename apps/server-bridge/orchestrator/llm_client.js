@@ -2,16 +2,14 @@ import CircuitBreaker from 'opossum';
 import { PromptOrchestrator } from './context.js';
 import { recordLlmCost, recordLlmDuration } from '../utils/metrics.js';
 import { hashValue, withJsonCache } from '../utils/cache.js';
+import { agentAuthManager, authToken, callWithAuthRetry } from '../auth/agent-auth.js';
 
 class LLMClient {
   constructor() {
-    // Inject via environment variables in a production setup
-    this.apiKey = process.env.GEMINI_API_KEY || process.env.LLM_API_KEY; 
+    this.authManager = agentAuthManager;
     this.endpoint = process.env.LLM_API_ENDPOINT || 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
     this.model = process.env.LLM_MODEL || 'gemini-2.0-flash';
-    this.openaiApiKey = process.env.OPENAI_API_KEY;
     this.openaiModel = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-    this.anthropicApiKey = process.env.ANTHROPIC_API_KEY;
     this.anthropicModel = process.env.ANTHROPIC_MODEL || 'claude-3-5-haiku-latest';
     this.breakers = new Map([
       ['gemini', this.createBreaker('gemini', (payload) => this.callGemini(payload))],
@@ -34,7 +32,7 @@ class LLMClient {
    * Executes the API call using the strictly formatted prompts.
    */
   async generateCode(orgContext, userContext, taskPrompt, astGraph, sandboxError = null) {
-    if (!this.apiKey && !this.openaiApiKey && !this.anthropicApiKey) {
+    if (!this.authManager.hasAnyProvider(['gemini', 'openai', 'anthropic'])) {
       throw new Error("CRITICAL: LLM API key is missing. Cannot generate code.");
     }
 
@@ -61,9 +59,9 @@ class LLMClient {
 
   async generateWithFallback(payload) {
     const providers = [
-      this.apiKey && ['gemini', { ...payload, apiKey: this.apiKey, endpoint: this.endpoint, model: this.model }],
-      this.openaiApiKey && ['openai', { ...payload, apiKey: this.openaiApiKey, model: this.openaiModel }],
-      this.anthropicApiKey && ['anthropic', { ...payload, apiKey: this.anthropicApiKey, model: this.anthropicModel }],
+      this.authManager.hasProvider('gemini') && ['gemini', { ...payload, endpoint: this.endpoint, model: this.model }],
+      this.authManager.hasProvider('openai') && ['openai', { ...payload, model: this.openaiModel }],
+      this.authManager.hasProvider('anthropic') && ['anthropic', { ...payload, model: this.anthropicModel }],
     ].filter(Boolean);
 
     let lastError = null;
@@ -82,11 +80,13 @@ class LLMClient {
     throw new Error(`Failed to communicate with all LLM providers: ${lastError?.message || 'no provider configured'}`);
   }
 
-  async callGemini({ systemInstruction, userInstruction, apiKey, endpoint, model }) {
+  async callGemini({ systemInstruction, userInstruction, endpoint, model }) {
     try {
+      const auth = await this.authManager.auth('gemini');
+      const apiKey = authToken(auth);
       // 2. Execute the network request
       // Using Gemini API format (adjust if using OpenAI/Anthropic)
-      const response = await fetch(`${endpoint}?key=${apiKey}`, {
+      const response = await callWithAuthRetry(this.authManager, 'gemini', () => fetch(`${endpoint}?key=${apiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -103,7 +103,7 @@ class LLMClient {
             maxOutputTokens: 8192
           }
         })
-      });
+      }));
 
       if (!response.ok) {
         const errorData = await response.text();
@@ -137,12 +137,12 @@ class LLMClient {
     }
   }
 
-  async callOpenAI({ systemInstruction, userInstruction, apiKey, model }) {
-    const response = await fetch(`${process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'}/chat/completions`, {
+  async callOpenAI({ systemInstruction, userInstruction, model }) {
+    const response = await callWithAuthRetry(this.authManager, 'openai', auth => fetch(`${process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${authToken(auth)}`,
       },
       body: JSON.stringify({
         model,
@@ -152,7 +152,7 @@ class LLMClient {
           { role: 'user', content: userInstruction },
         ],
       }),
-    });
+    }));
 
     if (!response.ok) {
       throw new Error(`OpenAI API returned status ${response.status}: ${await response.text()}`);
@@ -162,12 +162,12 @@ class LLMClient {
     return data.choices?.[0]?.message?.content?.trim() || '';
   }
 
-  async callAnthropic({ systemInstruction, userInstruction, apiKey, model }) {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+  async callAnthropic({ systemInstruction, userInstruction, model }) {
+    const response = await callWithAuthRetry(this.authManager, 'anthropic', auth => fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
+        'x-api-key': authToken(auth),
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
@@ -177,7 +177,7 @@ class LLMClient {
         system: systemInstruction,
         messages: [{ role: 'user', content: userInstruction }],
       }),
-    });
+    }));
 
     if (!response.ok) {
       throw new Error(`Anthropic API returned status ${response.status}: ${await response.text()}`);

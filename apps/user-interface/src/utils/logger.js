@@ -9,7 +9,8 @@
  * - Export logs for debugging
  */
 
-const LOG_KEY = 'vibe_hub_logs';
+const LOG_KEY = 'selina_logs';
+const LEGACY_LOG_KEY = 'vibe_hub_logs';
 const MAX_LOGS = 500;
 
 // Log levels
@@ -23,7 +24,8 @@ export const LogLevel = {
 
 // Get test mode from environment
 const isTestMode = () => {
-  return localStorage.getItem('vibe_hub_test_mode') === 'true' || 
+  return localStorage.getItem('selina_test_mode') === 'true' ||
+         localStorage.getItem('vibe_hub_test_mode') === 'true' ||
          import.meta.env.VITE_TEST_MODE === 'true' ||
          import.meta.env.DEV;
 };
@@ -78,10 +80,10 @@ function getCircularReplacer() {
  * Get or create session ID
  */
 function getSessionId() {
-  let sessionId = sessionStorage.getItem('vibe_hub_session_id');
+  let sessionId = sessionStorage.getItem('selina_session_id') || sessionStorage.getItem('vibe_hub_session_id');
   if (!sessionId) {
     sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    sessionStorage.setItem('vibe_hub_session_id', sessionId);
+    sessionStorage.setItem('selina_session_id', sessionId);
   }
   return sessionId;
 }
@@ -162,19 +164,21 @@ export const logger = {
   
   // Enable/disable test mode
   setTestMode: (enabled) => {
-    localStorage.setItem('vibe_hub_test_mode', enabled ? 'true' : 'false');
+    localStorage.setItem('selina_test_mode', enabled ? 'true' : 'false');
+    localStorage.removeItem('vibe_hub_test_mode');
     currentLogLevel = enabled ? LogLevel.DEBUG : LogLevel.INFO;
     logger.info('Logger', `Test mode ${enabled ? 'enabled' : 'disabled'}`);
   },
   
   // Get all persisted logs
   getLogs: () => {
-    return JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+    return JSON.parse(localStorage.getItem(LOG_KEY) || localStorage.getItem(LEGACY_LOG_KEY) || '[]');
   },
   
   // Clear logs
   clearLogs: () => {
     localStorage.removeItem(LOG_KEY);
+    localStorage.removeItem(LEGACY_LOG_KEY);
     logger.info('Logger', 'Logs cleared');
   },
   
@@ -185,7 +189,7 @@ export const logger = {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `vibe-hub-logs-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `selina-logs-${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

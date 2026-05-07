@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { AnimatedVibeLogo, VibeLogo } from './VibeLogo';
+import { SELINA_BRAND } from '../brand/selina';
 
 /**
  * Selina Loading System
  * 
  * Features:
- * - Pure black loading surface
- * - Transparent logo mark with alpha-safe animation
+ * - Brand-grade loading surface
+ * - Vector logo mark with alpha-safe animation
  * - Rebranded to Selina
  */
 
-function LoadingText({ text = 'Selina', subtitle = 'Initializing workspace...' }) {
+function LoadingText({ text = SELINA_BRAND.productName, subtitle = 'Initializing workspace...' }) {
   const [dots, setDots] = useState('');
 
   useEffect(() => {
@@ -31,14 +32,13 @@ function LoadingText({ text = 'Selina', subtitle = 'Initializing workspace...' }
       <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white">
         {text}
       </h1>
-      <p className="text-sm tracking-widest uppercase text-slate-500">
+      <p className="text-sm font-semibold tracking-[0.22em] uppercase text-white/45">
         {subtitle}{dots}
       </p>
       
-      {/* Progress line */}
-      <div className="w-48 h-0.5 bg-slate-900 mt-2 overflow-hidden rounded-full">
+      <div className="w-48 h-0.5 bg-white/10 mt-2 overflow-hidden rounded-full">
         <motion.div
-          className="h-full bg-purple-500"
+          className="h-full bg-gradient-to-r from-[#43F3C5] via-[#F7C35F] to-[#8DA2FF]"
           initial={{ width: '0%' }}
           animate={{ width: '100%' }}
           transition={{ delay: 1, duration: 2.5, ease: "easeInOut" }}
@@ -51,11 +51,11 @@ function LoadingText({ text = 'Selina', subtitle = 'Initializing workspace...' }
 export function LogoLoader({
   size = 140,
   showText = true,
-  text = 'Selina',
+  text = SELINA_BRAND.productName,
   subtitle = 'Initializing workspace...',
 }) {
   return (
-    <div className="flex h-full min-h-full w-full flex-col items-center justify-center gap-12 bg-black">
+    <div className="flex h-full min-h-full w-full flex-col items-center justify-center gap-12 bg-[#080A0F]">
       <div className="relative">
         <AnimatedVibeLogo size={size} showStringAnim={true} />
       </div>
@@ -78,12 +78,12 @@ export function LogoSpinner({ size = 48, className = '' }) {
 }
 
 export function FullPageLoader({
-  text = 'Selina',
+  text = SELINA_BRAND.productName,
   subtitle = 'Preparing your creative workspace...',
 }) {
   return (
     <motion.div
-      className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black"
+      className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#080A0F]"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -93,12 +93,12 @@ export function FullPageLoader({
       
       {/* Footer watermark */}
       <motion.div
-        className="absolute bottom-8 text-[10px] font-mono tracking-[0.4em] text-slate-800"
+        className="absolute bottom-8 text-[10px] font-mono tracking-[0.4em] text-white/15"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 2 }}
       >
-        SELINA CORE v6
+        Selina CORE v6
       </motion.div>
     </motion.div>
   );

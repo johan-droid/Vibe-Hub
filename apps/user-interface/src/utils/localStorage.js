@@ -3,10 +3,10 @@
  * 
  * Tier 1 - Fully Persistent (Survives Logout): User preferences, job history
  * Tier 2 - Session-Resilient (Selective Clear): lastJobId, panel states
- * Tier 3 - Ephemeral (Cleared on Logout): Auth tokens, temporary agent state
+ * Tier 3 - Ephemeral (Cleared on Logout): legacy auth cleanup keys, temporary agent state
  */
 
-const PREFIX = 'vibe_hub_';
+const PREFIX = 'selina_';
 
 // Tier 1 Keys - Survives logout/offline, cleared only on explicit user action
 const TIER_1_KEYS = [
@@ -28,9 +28,9 @@ const TIER_2_KEYS = [
 // Tier 3 Keys - Ephemeral, cleared immediately on logout
 const TIER_3_KEYS = [
   'selina_token',           // Legacy auth token
-  'selina_access_token',    // JWT access token
-  'selina_refresh_token',   // Refresh token
-  'selina_session_token',   // Session identifier
+  'selina_access_token',    // Legacy cleanup only; auth now lives in HttpOnly cookies
+  'selina_refresh_token',   // Legacy cleanup only; auth now lives in HttpOnly cookies
+  'selina_session_token',   // Legacy cleanup only; auth now lives in HttpOnly cookies
   'csrf_token',             // CSRF protection token
   'agent_state',            // Live agent status (in-memory only)
   'streaming_buffer',       // Unfinished streaming content

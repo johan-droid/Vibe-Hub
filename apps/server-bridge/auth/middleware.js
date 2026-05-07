@@ -6,6 +6,11 @@ import {
 } from './session.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'test' || process.env.VITEST ? 'test-secret' : undefined);
+const AUTH_COOKIES = {
+  access: 'selina_access_token',
+  session: 'selina_session',
+  refresh: 'selina_refresh',
+};
 
 function isSecureCookie() {
   return process.env.NODE_ENV === 'production' && String(process.env.UI_ORIGIN).startsWith('https://');
@@ -58,7 +63,8 @@ function readBearerToken(header) {
  * Read refresh token from HTTP-only cookie
  */
 function readRefreshToken(req) {
-  return parseCookies(req.headers.cookie).selina_refresh;
+  const cookies = parseCookies(req.headers.cookie);
+  return cookies[AUTH_COOKIES.refresh];
 }
 
 function normalizeUser(session) {
@@ -66,7 +72,7 @@ function normalizeUser(session) {
     id: session.userId,
     email: session.email,
     name: session.name,
-    avatar_url: session.avatarUrl,
+    avatarUrl: session.avatarUrl,
     provider: session.provider
   };
 }
@@ -76,7 +82,7 @@ export async function authenticateFromHeaders(headers = {}, explicitAccessToken 
   const accessToken =
     explicitAccessToken ||
     readBearerToken(headers.authorization) ||
-    cookies.selina_access_token;
+    cookies[AUTH_COOKIES.access];
 
   if (accessToken) {
     const session = await validateAccessTokenSession(accessToken);
@@ -88,8 +94,9 @@ export async function authenticateFromHeaders(headers = {}, explicitAccessToken 
     }
   }
 
-  if (cookies.selina_session) {
-    const session = await validateSession(cookies.selina_session);
+  const sessionToken = cookies[AUTH_COOKIES.session];
+  if (sessionToken) {
+    const session = await validateSession(sessionToken);
     if (session) {
       return {
         user: normalizeUser(session),
@@ -109,7 +116,7 @@ export function setAuthCookies(res, { accessToken, refreshToken, sessionToken })
   const sameSite = secure ? 'none' : 'lax';
 
   // Access token (short-lived, sent automatically with API calls)
-  res.cookie('selina_access_token', accessToken, {
+  res.cookie(AUTH_COOKIES.access, accessToken, {
     httpOnly: true,
     secure,
     sameSite,
@@ -119,7 +126,7 @@ export function setAuthCookies(res, { accessToken, refreshToken, sessionToken })
 
   // Session token (HTTP-only, for session validation)
   if (sessionToken) {
-    res.cookie('selina_session', sessionToken, {
+    res.cookie(AUTH_COOKIES.session, sessionToken, {
       httpOnly: true,
       secure,
       sameSite,
@@ -130,7 +137,7 @@ export function setAuthCookies(res, { accessToken, refreshToken, sessionToken })
 
   // Refresh token (HTTP-only, for token rotation)
   if (refreshToken) {
-    res.cookie('selina_refresh', refreshToken, {
+    res.cookie(AUTH_COOKIES.refresh, refreshToken, {
       httpOnly: true,
       secure,
       sameSite,
@@ -147,9 +154,9 @@ export function clearAuthCookies(res) {
   const secure = isSecureCookie();
   const sameSite = secure ? 'none' : 'lax';
 
-  res.clearCookie('selina_access_token', { path: '/', secure, sameSite });
-  res.clearCookie('selina_session', { path: '/', secure, sameSite });
-  res.clearCookie('selina_refresh', { path: '/api/auth/refresh', secure, sameSite });
+  res.clearCookie(AUTH_COOKIES.access, { path: '/', secure, sameSite });
+  res.clearCookie(AUTH_COOKIES.session, { path: '/', secure, sameSite });
+  res.clearCookie(AUTH_COOKIES.refresh, { path: '/api/auth/refresh', secure, sameSite });
 }
 
 /**

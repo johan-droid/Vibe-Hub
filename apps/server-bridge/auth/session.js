@@ -25,6 +25,7 @@ import {
   revokeRefreshToken,
   revokeRefreshTokenFamily,
   markRefreshTokenUsed,
+  revokeOldestUserSession,
   logAuthEvent
 } from '../db.js';
 
@@ -114,7 +115,20 @@ export async function createSession({ userId, provider, req, deviceFingerprint =
   // Check concurrent session limit
   const activeSessions = await countActiveUserSessions(userId);
   if (activeSessions >= MAX_CONCURRENT_SESSIONS) {
-    throw new Error('MAX_SESSIONS_EXCEEDED');
+    const deviceInfo = extractDeviceInfo(req);
+    const ipAddress = getClientIp(req);
+    
+    console.warn('[Session] MAX_SESSIONS_EXCEEDED for user:', userId, {
+      activeCount: activeSessions,
+      limit: MAX_CONCURRENT_SESSIONS,
+      ip: ipAddress,
+      device: deviceInfo.browser + ' on ' + deviceInfo.os
+    });
+
+    // In dev/prod, instead of blocking the user, we prune the oldest session
+    // This is safer for UX than hard-locking the account.
+    console.info('[Session] Auto-pruning oldest session for user:', userId);
+    await revokeOldestUserSession(userId, 'limit_reached_auto_prune');
   }
   
   const sessionToken = generateSecureToken(32);
@@ -134,6 +148,7 @@ export async function createSession({ userId, provider, req, deviceFingerprint =
   const session = await createUserSession({
     userId,
     sessionToken: sessionTokenHash,
+    provider,
     deviceFingerprint: fingerprint,
     deviceInfo,
     ipAddress,

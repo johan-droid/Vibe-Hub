@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import logger from './detailed-logger.js';
 
 const optionalUrl = z.string().url().or(z.literal('')).optional();
 
@@ -12,31 +13,63 @@ const envSchema = z.object({
   UI_ORIGIN: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
+  OPENAI_API_MODE: z.enum(['responses', 'chat']).optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
+  QWEN_API_KEY: z.string().optional(),
+  NIM_API_KEY: z.string().optional(),
+  NVIDIA_API_KEY: z.string().optional(),
+  NVIDIA_NIM_API_KEY: z.string().optional(),
+  SELINA_MODEL_PROVIDER: z.enum(['gemini', 'openai', 'qwen', 'nim', 'anthropic']).optional(),
+  SELINA_AGENT_PROVIDER: z.enum(['gemini', 'openai', 'qwen', 'nim', 'anthropic']).optional(),
   SENTRY_DSN: optionalUrl,
 });
 
+const PROVIDER_ENV_KEYS = {
+  gemini: 'GEMINI_API_KEY',
+  openai: 'OPENAI_API_KEY',
+  qwen: 'QWEN_API_KEY',
+  nim: 'NIM_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+};
+
+const PROVIDER_ENV_ALIASES = {
+  nim: ['NIM_API_KEY', 'NVIDIA_API_KEY', 'NVIDIA_NIM_API_KEY'],
+};
+
 export function validateEnvironment(env = process.env) {
-  const effectiveEnv = {
-    ...env,
-    CSRF_SECRET: env.CSRF_SECRET || env.JWT_SECRET,
-  };
+  const effectiveEnv = { ...env };
 
   const parsed = envSchema.safeParse(effectiveEnv);
   if (!parsed.success) {
-    throw new Error(`Invalid environment configuration: ${parsed.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ')}`);
+    const errorMsg = `Invalid environment configuration: ${parsed.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ')}`;
+    logger.error('Env', errorMsg);
+    throw new Error(errorMsg);
   }
 
+  logger.info('Env', 'Environment validation passed', {
+    nodeEnv: env.NODE_ENV || 'development',
+    hasDatabaseUrl: !!env.DATABASE_URL,
+    hasJwtSecret: !!env.JWT_SECRET,
+    hasUiOrigin: !!env.UI_ORIGIN,
+    hasGeminiKey: !!env.GEMINI_API_KEY,
+    hasNimKey: !!(env.NIM_API_KEY || env.NVIDIA_API_KEY || env.NVIDIA_NIM_API_KEY),
+  });
+
   if (env.NODE_ENV === 'production') {
-    const missing = ['DATABASE_URL', 'JWT_SECRET', 'UI_ORIGIN']
-      .filter(key => !env[key]);
-    if (missing.length > 0) {
-      throw new Error(`Missing required production environment variables: ${missing.join(', ')}`);
+    const activeProvider = (env.SELINA_MODEL_PROVIDER || env.SELINA_AGENT_PROVIDER || 'nim').toLowerCase();
+    const providerKey = PROVIDER_ENV_KEYS[activeProvider];
+    const required = ['DATABASE_URL', 'JWT_SECRET', 'CSRF_SECRET', 'UI_ORIGIN'];
+
+    const missing = required.filter(key => !env[key]);
+    const providerAliases = PROVIDER_ENV_ALIASES[activeProvider] || [providerKey].filter(Boolean);
+    if (providerAliases.length > 0 && !providerAliases.some(key => env[key])) {
+      missing.push(providerAliases.join('|'));
     }
 
-    if (!env.CSRF_SECRET && env.JWT_SECRET) {
-      env.CSRF_SECRET = env.JWT_SECRET;
-      console.warn('CSRF_SECRET is not set; falling back to JWT_SECRET. Configure a dedicated CSRF_SECRET for stronger secret isolation.');
+    if (missing.length > 0) {
+      const errorMsg = `Missing required production environment variables: ${missing.join(', ')}`;
+      logger.error('Env', errorMsg);
+      throw new Error(errorMsg);
     }
   }
 

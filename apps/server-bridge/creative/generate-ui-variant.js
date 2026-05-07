@@ -1,4 +1,5 @@
 import { v4 as uuid } from 'uuid';
+import { agentAuthManager, authToken, callWithAuthRetry } from '../auth/agent-auth.js';
 
 /**
  * UIVariantService — Phase 5
@@ -9,12 +10,12 @@ import { v4 as uuid } from 'uuid';
 class UIVariantService {
   constructor() {
     this.baseUrl = process.env.UI_VARIANT_API_URL || 'https://api.openai.com/v1/chat/completions';
-    this.apiKey = process.env.UI_VARIANT_API_KEY || process.env.OPENAI_API_KEY;
+    this.authManager = agentAuthManager;
   }
 
   async generateVariants({ componentType, description, designTokens, count = 3 }) {
-    if (!this.apiKey) {
-      return this.getMockVariants(componentType, count);
+    if (!this.authManager.hasProvider('ui_variant')) {
+      return this.getUnavailableVariants(componentType, 'UI variant provider is not configured.');
     }
 
     const systemPrompt = `You are a world-class UI designer. Given a component type, a description, and a design system, create ${count} alternative visual design solutions. Each variant should be distinct in layout, hierarchy, or style but still respect the design tokens where possible. Output must be a JSON array.`;
@@ -33,11 +34,11 @@ Please generate ${count} variants. For each variant, provide:
 Return only the JSON array.`;
 
     try {
-      const response = await fetch(this.baseUrl, {
+      const response = await callWithAuthRetry(this.authManager, 'ui_variant', auth => fetch(this.baseUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`
+          'Authorization': `Bearer ${authToken(auth)}`
         },
         body: JSON.stringify({
           model: 'gpt-4o', // Preferred model for design reasoning
@@ -48,7 +49,7 @@ Return only the JSON array.`;
           temperature: 0.9,
           response_format: { type: 'json_object' }
         })
-      });
+      }));
 
       const data = await response.json();
       const content = data.choices[0].message.content;
@@ -58,22 +59,20 @@ Return only the JSON array.`;
       const variants = Array.isArray(parsed) ? parsed : (parsed.variants || [parsed]);
       return variants.slice(0, count);
     } catch (e) {
-      return this.getMockVariants(componentType, count);
+      return this.getUnavailableVariants(componentType, e.message);
     }
   }
 
-  getMockVariants(componentType, count) {
-    const variants = [];
-    for (let i = 0; i < count; i++) {
-      variants.push({
-        name: `Variant ${String.fromCharCode(65 + i)}`,
-        layoutDescription: `A specialized ${componentType} layout with a focus on visual rhythm.`,
-        cssSnippet: `.v-${i} { display: flex; padding: 2rem; }`,
-        componentStructure: { type: 'div', children: [] },
-        notes: "Optimized for readability and modern aesthetics."
-      });
-    }
-    return variants;
+  getUnavailableVariants(componentType, reason) {
+    return [{
+      name: 'Variant generation unavailable',
+      unavailable: true,
+      componentType,
+      layoutDescription: '',
+      cssSnippet: '',
+      componentStructure: null,
+      notes: reason || 'Configure UI_VARIANT_API_KEY or OPENAI_API_KEY to generate production UI variants.',
+    }];
   }
 }
 

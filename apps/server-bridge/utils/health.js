@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import pool from '../db.js';
+import { SELINA_BRAND } from '../config/brand.js';
 
 const execFileAsync = promisify(execFile);
 const HEALTH_TIMEOUT_MS = Number.parseInt(process.env.HEALTH_CHECK_TIMEOUT_MS || '2500', 10);
@@ -54,7 +55,8 @@ export async function getReadiness() {
   return {
     status: ready ? 'active' : 'degraded',
     ready,
-    version: '4.1.0',
+    brand: SELINA_BRAND,
+    version: SELINA_BRAND.version,
     uptime: process.uptime(),
     memory: process.memoryUsage().heapUsed,
     checks: { database, docker, ...extras },

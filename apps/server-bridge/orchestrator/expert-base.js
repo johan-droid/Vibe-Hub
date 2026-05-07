@@ -1,5 +1,6 @@
 import { AGENT_TOOLS } from './tools.js';
 import { modelService } from './models.js';
+import { validateToolCallArguments } from './tool_schema.js';
 
 function textFromHistoryPart(turn) {
   return (turn.parts || []).map(part => part.text || '').join('\n');
@@ -26,6 +27,7 @@ export class EmployeeBase {
     this.domainInstruction = '';
     this.effortLevel = 'standard';
     this._summarizing = false;
+    this.providerOverride = null;
   }
 
   async execute(prompt, systemPrompt, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, additionalTools = []) {
@@ -34,6 +36,8 @@ export class EmployeeBase {
       if (emitState) emitState('thinking', 'Compressing neural context...');
       try {
         await this.summarizeHistory(systemPrompt);
+      } catch (error) {
+        if (emitState) emitState('warning', `Context compression skipped: ${error.message}`);
       } finally {
         this._summarizing = false;
       }
@@ -44,11 +48,43 @@ export class EmployeeBase {
       modelName: this.modelName,
       effortLevel: this.effortLevel || 'standard',
       domain,
+      provider: this.providerOverride,
     });
     const fullSystemPrompt = `${systemPrompt}\n\n---\n\n${this.domainInstruction}`;
+    const profiles = [profile, ...modelService.selectFallbackProfiles(profile)];
+    let lastError = null;
 
-    if (emitState) emitState('thinking', `Routing through ${profile.provider}:${profile.model}...`);
+    for (let index = 0; index < profiles.length; index++) {
+      const candidate = profiles[index];
+      if (emitState) emitState('thinking', `Routing through ${candidate.provider}:${candidate.model}...`);
+      try {
+        return await this.executeWithProfile(prompt, fullSystemPrompt, candidate, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, additionalTools);
+      } catch (error) {
+        lastError = error;
+        const hasNext = index < profiles.length - 1;
+        const canFallback = hasNext && modelService.shouldFallback(error);
+        modelService.recordAudit({
+          kind: canFallback ? 'provider_fallback' : 'provider_failure',
+          fromProvider: candidate.provider,
+          fromModel: candidate.model,
+          toProvider: canFallback ? profiles[index + 1].provider : null,
+          code: modelService.providerFailureMessage(error, candidate),
+        });
 
+        if (!canFallback) {
+          throw new Error(modelService.providerFailureMessage(error, candidate));
+        }
+
+        if (emitState) {
+          emitState('warning', `${modelService.providerFailureMessage(error, candidate)} Falling back to ${profiles[index + 1].provider}:${profiles[index + 1].model}.`);
+        }
+      }
+    }
+
+    throw lastError;
+  }
+
+  async executeWithProfile(prompt, fullSystemPrompt, profile, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, additionalTools = []) {
     if (modelService.providerKind(profile) === 'gemini') {
       return this.executeGemini(prompt, fullSystemPrompt, profile, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, additionalTools);
     }
@@ -91,7 +127,7 @@ export class EmployeeBase {
       const toolResponses = [];
 
       for (const call of calls) {
-        const observation = await this.executeToolCall(call, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState);
+        const observation = await this.executeToolCall(call, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, combinedTools);
         toolResponses.push({
           functionResponse: {
             name: call.name,
@@ -126,6 +162,10 @@ export class EmployeeBase {
   }
 
   async executeOpenAILoop(prompt, fullSystemPrompt, profile, recentHistory, allToolCalls, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, combinedTools = []) {
+    if (profile.provider === 'openai' && profile.apiMode === 'responses') {
+      return this.executeOpenAIResponsesLoop(prompt, fullSystemPrompt, profile, recentHistory, allToolCalls, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, combinedTools);
+    }
+
     const messages = [
       { role: 'system', content: fullSystemPrompt },
       ...recentHistory,
@@ -148,7 +188,7 @@ export class EmployeeBase {
       messages.push(result.rawMessage);
       for (const call of result.toolCalls) {
         allToolCalls.push({ name: call.name, args: call.args });
-        const observation = await this.executeToolCall(call, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState);
+        const observation = await this.executeToolCall(call, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, combinedTools);
         messages.push({
           role: 'tool',
           tool_call_id: call.id,
@@ -159,6 +199,45 @@ export class EmployeeBase {
 
     this.commitHistory(prompt, finalText || '[Provider stopped after maximum tool iterations.]');
     return { content: finalText || '[Provider stopped after maximum tool iterations.]', toolCalls: allToolCalls };
+  }
+
+  async executeOpenAIResponsesLoop(prompt, fullSystemPrompt, profile, recentHistory, allToolCalls, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, combinedTools = []) {
+    const input = [
+      ...recentHistory,
+      { role: 'user', content: prompt },
+    ];
+    let finalText = '';
+    const maxIterations = 16;
+
+    for (let iteration = 0; iteration < maxIterations; iteration++) {
+      const result = await modelService.openAIResponses({
+        profile,
+        instructions: fullSystemPrompt,
+        input,
+        tools: combinedTools,
+      });
+      finalText = result.content || '';
+
+      if (!result.toolCalls.length) {
+        if (finalText && onStream) onStream(finalText);
+        this.commitHistory(prompt, finalText);
+        return { content: finalText, toolCalls: allToolCalls };
+      }
+
+      input.push(...result.rawItems);
+      for (const call of result.toolCalls) {
+        allToolCalls.push({ name: call.name, args: call.args });
+        const observation = await this.executeToolCall(call, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, combinedTools);
+        input.push({
+          type: 'function_call_output',
+          call_id: call.callId,
+          output: stringifyObservation(observation),
+        });
+      }
+    }
+
+    this.commitHistory(prompt, finalText || '[Provider stopped after maximum Responses tool iterations.]');
+    return { content: finalText || '[Provider stopped after maximum Responses tool iterations.]', toolCalls: allToolCalls };
   }
 
   async executeAnthropicLoop(prompt, fullSystemPrompt, profile, recentHistory, allToolCalls, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, combinedTools = []) {
@@ -180,7 +259,7 @@ export class EmployeeBase {
       const toolResults = [];
       for (const call of result.toolCalls) {
         allToolCalls.push({ name: call.name, args: call.args });
-        const observation = await this.executeToolCall(call, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState);
+        const observation = await this.executeToolCall(call, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, combinedTools);
         toolResults.push({
           type: 'tool_result',
           tool_use_id: call.id,
@@ -194,7 +273,9 @@ export class EmployeeBase {
     return { content: finalText || '[Provider stopped after maximum tool iterations.]', toolCalls: allToolCalls };
   }
 
-  async executeToolCall(call, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState) {
+  async executeToolCall(call, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, availableTools = AGENT_TOOLS) {
+    validateToolCallArguments(call.name, call.args || {}, availableTools, { strict: true });
+
     if (call.name === 'read_file' || call.name === 'list_files') {
       if (emitState) emitState('reading', `Analyzing ${call.args.path || 'project structure'}...`);
     } else if (['edit_file', 'write_file', 'create_file'].includes(call.name)) {
@@ -229,12 +310,6 @@ export class EmployeeBase {
   }
 
   async summarizeHistory(systemPrompt) {
-    const profile = modelService.selectProfile({ modelName: 'gemini-1.5-flash', effortLevel: 'quick', domain: 'summarizer' });
-    const summarizer = modelService.getGeminiGenerativeModel({
-      model: profile.provider === 'gemini' ? profile.model : 'gemini-1.5-flash',
-      maxOutputTokens: 1024,
-    });
-
     const messagesToSummarize = this.history.slice(0, -4);
     const summaryPrompt = `
       You are a context manager for a coding agent.
@@ -248,8 +323,14 @@ export class EmployeeBase {
       ${JSON.stringify(messagesToSummarize)}
     `;
 
-    const result = await summarizer.generateContent(summaryPrompt);
-    const snapshot = result.response.text();
+    const result = await modelService.completeText({
+      prompt: summaryPrompt,
+      provider: this.providerOverride || process.env.SELINA_EXPERT_MANAGER_PROVIDER || process.env.SELINA_MODEL_PROVIDER,
+      effortLevel: 'quick',
+      domain: 'summarizer',
+      meta: { phase: 'history_summary' },
+    });
+    const snapshot = result.content;
 
     this.history = [
       { role: 'user', parts: [{ text: `Neural Context Snapshot:\n${snapshot}` }] },

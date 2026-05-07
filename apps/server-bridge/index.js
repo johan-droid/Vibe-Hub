@@ -1,5 +1,5 @@
 /**
- * server-bridge/index.js — Selina-Hub Central Nervous System v4.1
+ * server-bridge/index.js - Selina server bridge v4.1
  */
 
 import './load-env.js';
@@ -15,20 +15,28 @@ import { v4 as uuid }     from 'uuid';
 import { logger, requestContext, logError } from './utils/logger.js';
 import { logger as detailedLogger, requestLogger } from './utils/detailed-logger.js';
 import { codeRequestSchema, vfsCommitSchema, validateRequest } from './utils/validation.js';
-import { handleCodeJobStatus, handleCodeRequest, handleCommitRequest, handleGetPendingFiles, handleGetVfsStats, handleLinkRepo, handleListRepos, handleListTools, handleListServers, handleCallTool, handleRegisterServer, router } from './orchestrator/router.js';
+import { handleCodeJobStatus, handleCodeRequest, handleCommitRequest, handleGetPendingFiles, handleGetVfsStats, handleLinkRepo, handleListRepos, handleListTools, handleListServers, handleMcpDiagnostics, handleCallTool, handleRegisterServer, router } from './orchestrator/router.js';
 
 
 import { csrfProtection, csrfTokenHandler } from './utils/csrf.js';
 import { getReadiness, registerReadinessCheck, requireReadiness } from './utils/health.js';
-import { metricsMiddleware, renderMetrics, setActiveWebsocketConnections } from './utils/metrics.js';
+import {
+  metricsMiddleware,
+  recordAgentToolCallMetric,
+  recordApprovalDecisionMetric,
+  renderMetrics,
+  setActiveWebsocketConnections,
+} from './utils/metrics.js';
 import { idempotencyMiddleware } from './utils/idempotency.js';
 import { captureException, initSentry, sentryErrorHandler } from './utils/sentry.js';
 import { apiDocsHtml, buildOpenApiSpec } from './utils/openapi.js';
 import { closeRedisClients, configureSocketRedisAdapter, createRedisClients } from './utils/redis.js';
 import { listAuditLogs } from './utils/audit.js';
 import { configureCache } from './utils/cache.js';
+import semanticGraphBuilder from './memory/loader.js';
 import { createCodeQueue } from './orchestrator/job-queue.js';
 import { validateEnvironment } from './utils/env.js';
+import { SELINA_BRAND } from './config/brand.js';
 
 import { initDB }                from './db.js';
 import { authenticateFromHeaders, requireAuth } from './auth/middleware.js';
@@ -44,7 +52,19 @@ import { uiVariantService }      from './creative/generate-ui-variant.js';
 import { modelService }          from './orchestrator/models.js';
 import { listSkillGraph }        from './orchestrator/skill-graph.js';
 import { vfs }                   from './vfs/container.js';
-
+import { browserAutomator }      from './vfs/browser_automator.js';
+import { SandboxExecutor }        from './sandbox/docker_executor.js';
+import { approvalEngine }         from './auth/approval-engine.js';
+import { authorizeToolCall, ToolAuthError } from './orchestrator/tool_auth_guard.js';
+import { AGENT_TOOLS } from './orchestrator/tools.js';
+import { mcpManager } from './mcp/MCPManager.js';
+import { ToolSchemaError, validateToolCallArguments } from './orchestrator/tool_schema.js';
+import { buildExpertDiagnostics } from './orchestrator/expert-routing.js';
+import { attachJsonRpcEnvelope } from './orchestrator/jsonrpc.js';
+import { createChildRunIdentity, createRootRunIdentity } from './orchestrator/run_identity.js';
+import { fetchRunEventsForUser, fetchRunForUser, persistRun, persistRunEvent } from './orchestrator/run_store.js';
+import { createActionGrant, hashToolParams, verifyActionGrant } from './auth/action-grants.js';
+import { insertAgentActionGrant } from './db.js';
 // ─── Express + HTTP server ────────────────────────────────────────────────────
 
 validateEnvironment();
@@ -59,6 +79,28 @@ const parseLimit = (value, fallback) => {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
+
+const SECRET_FIELD_PATTERN = /(api[_-]?key|secret|token|password|credential|authorization|cookie|session)/i;
+
+function redactToolPayload(value, depth = 0) {
+  if (depth > 4) return '[truncated]';
+  if (Array.isArray(value)) return value.slice(0, 20).map(item => redactToolPayload(item, depth + 1));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).slice(0, 50).map(([key, item]) => [
+      key,
+      SECRET_FIELD_PATTERN.test(key) ? '[redacted]' : redactToolPayload(item, depth + 1),
+    ]));
+  }
+  if (typeof value === 'string' && value.length > 500) return `${value.slice(0, 500)}...`;
+  return value;
+}
+
+function inferToolSource(toolName) {
+  if (toolName.includes('__')) return 'mcp';
+  if (toolName.startsWith('github_')) return 'github';
+  if (toolName.startsWith('browser_')) return 'browser';
+  return 'builtin';
+}
 
 configureCache({ redis: redisClients?.command || null });
 
@@ -233,7 +275,9 @@ app.use(cookieParser());
 // ── API documentation + metrics ───────────────────────────────────────────────
 app.get('/', (_req, res) => {
   res.json({
-    service: 'server-bridge',
+    service: SELINA_BRAND.serviceName,
+    product: SELINA_BRAND.productName,
+    agent: SELINA_BRAND.agentName,
     status: 'ok',
     health: '/health',
     readiness: '/ready',
@@ -244,50 +288,8 @@ app.get('/swagger.json', (_req, res) => res.json(buildOpenApiSpec()));
 app.get('/api-docs', (_req, res) => res.type('html').send(apiDocsHtml()));
 app.get('/metrics', async (_req, res) => res.type('text/plain; version=0.0.4').send(await renderMetrics()));
 
-// ── Test Mode Logging Endpoints ───────────────────────────────────────────────
-// These endpoints provide detailed logging control and log access for testing
-
-// Get current logger configuration
-app.get('/api/debug/log-config', (_req, res) => {
-  res.json({
-    testMode: process.env.TEST_MODE === 'true' || process.env.NODE_ENV === 'development',
-    environment: process.env.NODE_ENV || 'development',
-    logLevel: detailedLogger.getConfig ? detailedLogger.getConfig() : 'unknown'
-  });
-});
-
-// Get recent request history (test mode only)
-app.get('/api/debug/request-history', (req, res) => {
-  const history = detailedLogger.getRequestHistory();
-  res.json({
-    count: history.length,
-    requests: history.slice(-100) // Last 100 requests
-  });
-});
-
-// Get specific request details
-app.get('/api/debug/request/:requestId', (req, res) => {
-  const details = detailedLogger.getRequestDetails(req.params.requestId);
-  if (!details) {
-    return res.status(404).json({ error: 'Request not found' });
-  }
-  res.json(details);
-});
-
-// Clear request history
-app.post('/api/debug/clear-history', (_req, res) => {
-  detailedLogger.clearRequestHistory();
-  res.json({ success: true, message: 'Request history cleared' });
-});
-
-// Trigger test log messages
-app.post('/api/debug/test-logs', (req, res) => {
-  const { level = 'info', message = 'Test log message' } = req.body || {};
-  
-  detailedLogger[level]('Test', message, { test: true, timestamp: Date.now() });
-  
-  res.json({ success: true, level, message });
-});
+// Debug request-history endpoints are intentionally not mounted. Request and
+// logger diagnostics must go through authenticated operational channels only.
 
 // ── Auth routes ───────────────────────────────────────────────────────────────
 app.use('/api/auth', googleAuth);
@@ -327,10 +329,24 @@ function handleRuntimeDiagnostics(_req, res) {
   res.json(modelService.diagnostics());
 }
 
+function handleRuntimeExperts(_req, res) {
+  res.json({
+    success: true,
+    diagnostics: buildExpertDiagnostics(modelService),
+  });
+}
+
 function handleRuntimeSkills(_req, res) {
   res.json({
     mode: 'mixture-of-experts',
     graph: listSkillGraph(),
+  });
+}
+
+function handleRuntimeBrand(_req, res) {
+  res.json({
+    success: true,
+    brand: SELINA_BRAND,
   });
 }
 
@@ -349,8 +365,11 @@ async function handleAuditLogs(req, res, next) {
 
 app.get('/api/runtime/diagnostics', requireAuth, handleRuntimeDiagnostics);
 app.get('/api/v6/runtime/diagnostics', requireAuth, handleRuntimeDiagnostics);
+app.get('/api/v6/runtime/experts', requireAuth, handleRuntimeExperts);
 app.get('/api/runtime/skills', requireAuth, handleRuntimeSkills);
 app.get('/api/v6/runtime/skills', requireAuth, handleRuntimeSkills);
+app.get('/api/runtime/brand', handleRuntimeBrand);
+app.get('/api/v6/runtime/brand', handleRuntimeBrand);
 app.get('/api/audit-logs', requireAuth, handleAuditLogs);
 app.get('/api/v6/audit-logs', requireAuth, handleAuditLogs);
 
@@ -454,12 +473,93 @@ app.get('/api/v6/repos/list', requireAuth, handleListRepos);
 // ── MCP Orchestration (V6) ────────────────────────────────────────────────────
 app.get('/api/v6/mcp/tools', requireAuth, handleListTools);
 app.get('/api/v6/mcp/servers', requireAuth, handleListServers);
+app.get('/api/v6/mcp/diagnostics', requireAuth, handleMcpDiagnostics);
 
 app.post('/api/v6/mcp/call', requireAuth, handleCallTool);
 
 // ── Chat History (V6) ─────────────────────────────────────────────────────────
 import { chatRouter } from './orchestrator/chat_routes.js';
 app.use('/api/v6/chat', requireAuth, chatRouter);
+
+// ── User Preferences (V6) ─────────────────────────────────────────────────────
+import { preferencesRouter } from './orchestrator/preferences_routes.js';
+app.use('/api/v6/preferences', requireAuth, preferencesRouter);
+
+async function handleGetRun(req, res, next) {
+  try {
+    const run = await fetchRunForUser(req.params.runId, req.user.id);
+    if (!run) return res.status(404).json({ success: false, error: 'Run not found' });
+    return res.json({ success: true, run });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function handleGetRunEvents(req, res, next) {
+  try {
+    const events = await fetchRunEventsForUser(req.params.runId, req.user.id);
+    return res.json({ success: true, events });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function handleGetRunArtifacts(req, res, next) {
+  try {
+    const run = await fetchRunForUser(req.params.runId, req.user.id);
+    if (!run) return res.status(404).json({ success: false, error: 'Run not found' });
+    return res.json({
+      success: true,
+      artifacts: run.metadata?.artifacts || [],
+      rolloutPaths: run.metadata?.rolloutPaths || null,
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function handleCreateApprovalGrant(req, res, next) {
+  try {
+    const { runId, toolName, decision, reason = '', params, paramsHash: providedParamsHash } = req.body || {};
+    if (!runId || !toolName || !decision) {
+      return res.status(400).json({
+        success: false,
+        error: 'runId, toolName, and decision are required',
+      });
+    }
+
+    const run = await fetchRunForUser(runId, req.user.id);
+    if (!run) return res.status(404).json({ success: false, error: 'Run not found' });
+
+    const paramsHash = providedParamsHash || hashToolParams(params || {});
+    const grant = createActionGrant({
+      userId: req.user.id,
+      runId,
+      toolName,
+      paramsHash,
+      decision,
+      reason,
+      approvalSource: 'api',
+    });
+    await insertAgentActionGrant(grant);
+    return res.json({
+      success: true,
+      grant: {
+        grantId: grant.grantId,
+        token: decision === 'approve' ? grant.token : null,
+        expiresAt: grant.expiresAt,
+        paramsHash,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+app.get('/api/v6/orchestrator/runs/:runId', requireAuth, handleGetRun);
+app.get('/api/v6/orchestrator/runs/:runId/events', requireAuth, handleGetRunEvents);
+app.get('/api/v6/orchestrator/runs/:runId/artifacts', requireAuth, handleGetRunArtifacts);
+app.post('/api/v6/approvals/grants', requireAuth, csrfProtection, handleCreateApprovalGrant);
 
 
 // ── GitHub Copilot Extension endpoint ─────────────────────────────────────────
@@ -542,6 +642,7 @@ const codeQueue = createCodeQueue({
       io,
       data.socketId,
       data.requestId,
+      data.effortLevel || 'standard',
     );
     if (io && data.socketId) {
       io.to(data.socketId).emit('agent_status', {
@@ -723,6 +824,7 @@ wss.on('connection', async (ws, req) => {
     ws,
     orchestrator,
     user:                auth.user,
+    currentRunIdentity:  null,
     pendingToolCalls:    new Map(),
     pendingClarifications: new Map(),
     pendingPlans:        new Map(),
@@ -741,7 +843,14 @@ wss.on('connection', async (ws, req) => {
   // ── Helpers: safe send ────────────────────────────────────────────────
   const send = (payload) => {
     if (ws.readyState === ws.OPEN) {
-      ws.send(JSON.stringify(payload));
+      const runIdentity = session.currentRunIdentity;
+      const outgoing = process.env.SELINA_ENABLE_JSONRPC_EVENTS === 'false'
+        ? payload
+        : attachJsonRpcEnvelope(payload, runIdentity || {});
+      if (outgoing.jsonrpcEvent && runIdentity?.runId) {
+        persistRunEvent(outgoing.jsonrpcEvent, runIdentity);
+      }
+      ws.send(JSON.stringify(outgoing));
     }
   };
 
@@ -758,7 +867,129 @@ wss.on('connection', async (ws, req) => {
    *   1. Server-side handlers (GitHub, sandbox, creative)
    *   2. Client-side VFS/WebContainer (forwarded over WS, awaited via Promise)
    */
-  const onToolCall = async (name, args) => {
+  const onToolCall = async (name, args = {}) => {
+    const toolCallId = uuid();
+    const startedAt = Date.now();
+    const toolSource = inferToolSource(name);
+    const allTools = [...AGENT_TOOLS, ...mcpManager.getToolsForLLM()];
+    const toolDefinition = allTools.find(tool => tool.name === name || tool.uniqueId === name);
+    let actionGrant = null;
+    const emitToolCall = (payload) => {
+      if (payload.status) recordAgentToolCallMetric(name, toolSource, payload.status);
+      send({
+        type: 'tool_call',
+        id: toolCallId,
+        tool: name,
+        timestamp: new Date().toISOString(),
+        ...payload,
+      });
+    };
+
+    try {
+      validateToolCallArguments(name, args || {}, allTools, { strict: true });
+    } catch (error) {
+      if (error instanceof ToolSchemaError) {
+        emitToolCall({
+          status: 'failed',
+          error: error.message,
+          metadata: {
+            code: 'TOOL_SCHEMA_INVALID',
+            source: toolSource,
+            args: redactToolPayload(args),
+            details: error.details || [],
+          },
+        });
+        send({ type: 'error', message: error.message });
+        return JSON.stringify({
+          success: false,
+          code: 'TOOL_SCHEMA_INVALID',
+          error: error.message,
+          details: error.details || [],
+        });
+      }
+      throw error;
+    }
+
+    try {
+      const authorization = await authorizeToolCall(name, args, {
+        authSnapshot: auth?.user
+          ? { type: 'user-session', userId: auth.user.id, expiresAt: null }
+          : null,
+        toolDefinition,
+        paramsHash: hashToolParams(args || {}),
+        approvalFn: (reason, approvalContext) => approvalEngine.request(
+          reason,
+          approvalContext,
+          async (promptText) => {
+            const approved = await onPlan(
+              [{
+                file: approvalContext.toolName,
+                action: promptText,
+                reason: 'This tool can mutate files, state, network resources, browser state, or local execution.',
+              }],
+              ['Write and execution tools fail closed when approval times out or is rejected.']
+            );
+            recordApprovalDecisionMetric(approvalContext.toolName, approved ? 'approve' : 'deny');
+            return approved ? 'approve' : 'deny';
+          }
+        ),
+      });
+      if (authorization.policy?.type === 'write') {
+        const paramsHash = hashToolParams(args || {});
+        actionGrant = createActionGrant({
+          userId: auth.user.id,
+          runId: session.currentRunIdentity?.runId || toolCallId,
+          toolName: name,
+          paramsHash,
+          decision: 'approve',
+          reason: `Approved ${name} through agent approval gate.`,
+          approvalSource: authorization.approved ? 'agent_approval_gate' : 'policy',
+        });
+        const verified = verifyActionGrant(actionGrant.token, {
+          userId: auth.user.id,
+          runId: actionGrant.runId,
+          toolName: name,
+          paramsHash,
+        });
+        if (!verified.ok) {
+          throw new ToolAuthError(verified.error);
+        }
+        await insertAgentActionGrant(actionGrant).catch(() => null);
+      }
+    } catch (error) {
+      if (error instanceof ToolAuthError) {
+        emitToolCall({
+          status: 'failed',
+          error: error.message,
+          metadata: {
+            code: 'TOOL_AUTH_DENIED',
+            source: toolSource,
+            args: redactToolPayload(args),
+          },
+        });
+        send({ type: 'error', message: error.message });
+        return JSON.stringify({ success: false, code: 'TOOL_AUTH_DENIED', error: error.message });
+      }
+      throw error;
+    }
+
+    emitToolCall({
+      status: 'started',
+      metadata: {
+        source: toolSource,
+        args: redactToolPayload(args),
+        risk: toolDefinition?.risk || toolDefinition?.metadata?.risk || null,
+        actionGrantId: actionGrant?.grantId || null,
+      },
+    });
+
+    let toolFailed = false;
+    try {
+    if (name.includes('__')) {
+      const tool = mcpManager.findToolByLLMName(name);
+      if (!tool) throw new Error(`MCP tool not registered: ${name}`);
+      return JSON.stringify(await mcpManager.callTool(tool.uniqueId, args));
+    }
 
     // ── 1. GitHub Tools ───────────────────────────────────────────────
     if (name.startsWith('github_')) {
@@ -798,10 +1029,18 @@ wss.on('connection', async (ws, req) => {
           return JSON.stringify(await githubService.createCheckRun({ ...args, installationId, token }));
 
         case 'github_create_codespace':
-          return JSON.stringify(await githubService.createCodespace({ ...args, installationId, token }));
+          return JSON.stringify({
+            success: false,
+            code: 'LOCAL_DOCKER_ONLY',
+            error: 'Cloud execution is disabled by Selina V6 architecture. Use security_sandbox for local Docker execution.',
+          });
 
         case 'github_trigger_workflow':
-          return JSON.stringify(await githubService.triggerWorkflow({ ...args, installationId, token }));
+          return JSON.stringify({
+            success: false,
+            code: 'LOCAL_DOCKER_ONLY',
+            error: 'GitHub Actions execution is disabled by Selina V6 architecture. Use security_sandbox for local Docker execution.',
+          });
 
         case 'github_get_codeql_alerts':
           return JSON.stringify(await githubService.getCodeQLAlerts({ ...args, installationId, token }));
@@ -814,25 +1053,24 @@ wss.on('connection', async (ws, req) => {
     // ── 2. Security Sandbox ───────────────────────────────────────────
     if (name === 'security_sandbox') {
       const { workspacePath, scriptPath, runtime, timeoutMs } = args;
-          try {
-        await githubService.octokit.rest.actions.createWorkflowDispatch({
-          owner: process.env.GITHUB_OWNER,
-          repo: process.env.GITHUB_REPO,
-          workflow_id: 'ai-sandbox.yml',
-          ref: 'main' // In a real app, infer the current branch
+      try {
+        send({
+          type: 'state_change',
+          state: 'sandboxing',
+          message: 'Running in local Docker sandbox with network disabled.',
         });
 
-        // Let the agent know it needs to wait
-        send({ type: 'state_change', state: 'waitingForGitHub', message: 'Triggered GitHub Action run.' });
-
-        return JSON.stringify({
-          success: true,
-          message: 'Execution offloaded to GitHub Actions. Listening for webhook completion.'
-        });
+        return JSON.stringify(await SandboxExecutor.executeLocalDockerSandbox({
+          workspacePath,
+          scriptPath,
+          runtime,
+          timeoutMs,
+        }));
       } catch (err) {
         return JSON.stringify({
           success: false,
-          error: `GitHub API error: ${err.message}`
+          code: 'LOCAL_DOCKER_SANDBOX_FAILED',
+          error: err.message,
         });
       }
     }
@@ -845,27 +1083,41 @@ wss.on('connection', async (ws, req) => {
       return JSON.stringify(await creativeService.generateAsset(args.prompt, args.style));
     }
     if (name === 'generate_ui_variant') {
-      return JSON.stringify(await uiVariantService.generateVariants(args));
+      return JSON.stringify(await uiVariantService.generateVariants({
+        componentType: args.componentType || args.componentId,
+        description: args.description || args.aesthetic || args.selina,
+        designTokens: args.designTokens,
+        count: args.count,
+      }));
     }
 
     // ── 4. Delegation (sub-agent recursion) ──────────────────────────
     if (name === 'delegate_task') {
       onThought(`Delegating to ${args.expert}Expert: ${args.task}`);
+      const parentRun = session.currentRunIdentity || createRootRunIdentity({ expert: 'manager' });
+      const childRun = createChildRunIdentity(parentRun, { expert: args.expert || 'code' });
+      const previousRun = session.currentRunIdentity;
+      session.currentRunIdentity = childRun;
       // Recursive call — creates a nested ReAct loop on the same session.
       // The sub-agent inherits the same tool dispatcher so it can also use
       // VFS, sandbox, GitHub, etc.
-      const subResult = await orchestrator.handlePrompt(
-        `${args.task}\n\nContext: ${args.context ?? 'none'}`,
-        'standard',
-        onToolCall,
-        (t) => onThought(`[${args.expert}] ${t}`),
-        onClarification,
-        onPlan,
-        undefined,
-        (state, msg) => send({ type: 'status', state, message: msg }),
-        (delta) => send({ type: 'stream_chunk', delta }),
-      );
-      return typeof subResult === 'string' ? subResult : subResult?.content ?? '';
+      try {
+        const subResult = await orchestrator.handlePrompt(
+          `${args.task}\n\nContext: ${args.context ?? 'none'}`,
+          'standard',
+          onToolCall,
+          (t) => onThought(`[${args.expert}] ${t}`),
+          onClarification,
+          onPlan,
+          undefined,
+          (state, msg) => send({ type: 'status', state, message: msg }),
+          (delta) => send({ type: 'stream_chunk', delta }),
+          childRun,
+        );
+        return typeof subResult === 'string' ? subResult : subResult?.content ?? '';
+      } finally {
+        session.currentRunIdentity = previousRun;
+      }
     }
 
     // ── 5. Auto-Sandbox for run_command ─────────────────────────────
@@ -876,27 +1128,67 @@ wss.on('connection', async (ws, req) => {
       
       if (isScript) {
         try {
-          await githubService.octokit.rest.actions.createWorkflowDispatch({
-            owner: process.env.GITHUB_OWNER,
-            repo: process.env.GITHUB_REPO,
-            workflow_id: 'ai-sandbox.yml',
-            ref: 'main'
+          send({
+            type: 'state_change',
+            state: 'sandboxing',
+            message: 'Running command in local Docker sandbox with network disabled.',
           });
-          send({ type: 'state_change', state: 'waitingForGitHub', message: 'Triggered GitHub Action run.' });
-          return JSON.stringify({
-            success: true,
-            message: 'Execution offloaded to GitHub Actions. Listening for webhook completion.'
-          });
+
+          return JSON.stringify(await SandboxExecutor.executeLocalDockerCommand({
+            workspacePath: args.workspacePath,
+            command: args.command,
+            args: args.args,
+            timeoutMs: args.timeoutMs || args.WaitMsBeforeAsync,
+          }));
         } catch (err) {
-          send({ type: 'error', message: 'Sandbox dispatch failed.' });
+          send({ type: 'error', message: `Local Docker sandbox failed: ${err.message}` });
+          return JSON.stringify({
+            success: false,
+            code: 'LOCAL_DOCKER_SANDBOX_FAILED',
+            error: err.message,
+          });
         }
+      }
+    }
+
+    // ── 6. Backend Analysis Tools ─────────────────────────────────────
+    if (name === 'analyze_ast') {
+      try {
+        const content = await onToolCall('read_file', { path: args.path });
+        if (!content || (typeof content === 'string' && content.startsWith('Error:'))) {
+          return JSON.stringify({ error: `Could not read file for AST analysis: ${args.path}` });
+        }
+        const graph = await semanticGraphBuilder.analyzeCode(content, args.path);
+        return JSON.stringify(graph);
+      } catch (err) {
+        return JSON.stringify({ error: `AST analysis failed: ${err.message}` });
+      }
+    }
+
+    // ── 7. Browser Automation Tools ───────────────────────────────────
+    if (name.startsWith('browser_')) {
+      try {
+        switch (name) {
+          case 'browser_goto':
+            return JSON.stringify(await browserAutomator.goto(args.url));
+          case 'browser_click':
+            return JSON.stringify(await browserAutomator.click(args.selector));
+          case 'browser_type':
+            return JSON.stringify(await browserAutomator.type(args.selector, args.text));
+          case 'browser_screenshot':
+            return JSON.stringify(await browserAutomator.screenshot(args.path));
+          default:
+            return JSON.stringify({ error: `Unknown browser tool: ${name}` });
+        }
+      } catch (err) {
+        return JSON.stringify({ error: `Browser automation failed: ${err.message}` });
       }
     }
 
     // ── 7. Client-Side VFS / WebContainer ────────────────────────────
     // These tools run inside the browser sandbox (WebContainer API).
     // We forward the call over the WebSocket and await the browser's response.
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       const callId = uuid();
 
       // Self-cleaning timeout: releases the Promise if the client takes > 60 s
@@ -910,6 +1202,28 @@ wss.on('connection', async (ws, req) => {
       session.pendingToolCalls.set(callId, { resolve, reject, timeout });
       send({ type: 'tool_request', callId, name, args });
     });
+    } catch (error) {
+      toolFailed = true;
+      emitToolCall({
+        status: 'failed',
+        error: error.message,
+        metadata: {
+          source: toolSource,
+          duration_ms: Date.now() - startedAt,
+        },
+      });
+      throw error;
+    } finally {
+      if (!toolFailed) {
+        emitToolCall({
+          status: 'completed',
+          metadata: {
+            source: toolSource,
+            duration_ms: Date.now() - startedAt,
+          },
+        });
+      }
+    }
   };
 
   /**
@@ -974,6 +1288,22 @@ wss.on('connection', async (ws, req) => {
         session.promptHistory.push(now);
 
         const { prompt, effortLevel = 'standard' } = msg;
+        const previousRunIdentity = session.currentRunIdentity;
+        const rootRunIdentity = createRootRunIdentity({ expert: 'manager' });
+        session.currentRunIdentity = rootRunIdentity;
+        await persistRun(rootRunIdentity, {
+          userId: auth.user.id,
+          projectName: 'default',
+          prompt,
+          status: 'running',
+          metadata: { effortLevel, transport: 'websocket' },
+        });
+        send({
+          type: 'state_change',
+          state: 'run_started',
+          message: 'Selina orchestration run started.',
+          metadata: { run: rootRunIdentity },
+        });
         send({ type: 'thinking', value: true });
 
         try {
@@ -992,6 +1322,7 @@ wss.on('connection', async (ws, req) => {
             undefined, // onMemoryUpdate (handled internally by orchestrator)
             emitState,
             (delta) => send({ type: 'stream_chunk', delta }),
+            rootRunIdentity,
           );
 
           // handlePrompt returns the expert's final result object.
@@ -1006,6 +1337,7 @@ wss.on('connection', async (ws, req) => {
           send({ type: 'error', message: err.message });
         } finally {
           send({ type: 'thinking', value: false });
+          session.currentRunIdentity = previousRunIdentity;
         }
         break;
       }
@@ -1170,10 +1502,20 @@ wss.on('connection', async (ws, req) => {
 
 async function start() {
   // ── Database ────────────────────────────────────────────────────────────
+  let dbHealthy = false;
   try {
+    console.log('[Startup] Initializing database...');
     await initDB();
+
+    // Verify database is actually working with a test query
+    const { pool } = await import('./db.js');
+    const testResult = await pool.query('SELECT NOW() as current_time');
+    console.log('[Startup] Database connected successfully at:', testResult.rows[0].current_time);
+    dbHealthy = true;
   } catch (err) {
-    // Non-fatal: memory and skill systems still work without DB.
+    console.error('[Startup] Database initialization failed:', err.message);
+    console.error('[Startup] Auth features will not work without database connection.');
+    // Auth requires DB - log warning but still start server for non-auth features
   }
 
   // ── Global Error Handling ────────────────────────────────────────────────
@@ -1209,14 +1551,14 @@ async function start() {
     res.status(err.status || 500).json({
       success: false,
       error: isDevelopment ? err.message : 'Internal server error',
-      requestId: req.id,
+      requestId: req.requestId,
       ...(isDevelopment && { stack: err.stack })
     });
   });
 
   // ── HTTP + WS ───────────────────────────────────────────────────────────
   server.listen(port, () => {
-    logger.info('Server started', { port, environment: process.env.NODE_ENV });
+    detailedLogger.info('Server', 'Selina server bridge online', { port, environment: process.env.NODE_ENV, instanceId });
   });
 
   // ── Graceful shutdown ────────────────────────────────────────────────────

@@ -9,13 +9,14 @@
 > *"I don't just write code. I **architect** with intention, **evolve** with aesthetics, and **execute** with surgical precision."*
 > — **Selina**, Principal Systems Architect
 
-[![Version](https://img.shields.io/badge/VERSION-4.2__MATERIAL-bf00ff?style=for-the-badge&logo=ghost&logoColor=white)](CHANGELOG.md)
-[![Node](https://img.shields.io/badge/NODE-22_Alpine-00d4aa?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
-[![Gemini](https://img.shields.io/badge/BRAIN-Gemini_2.0_Flash-4285f4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev)
-[![React](https://img.shields.io/badge/COCKPIT-Material_3__Bento-61dafb?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
+[![Version](https://img.shields.io/badge/VERSION-6.0__V6_ARCHITECTURE-6366f1?style=for-the-badge&logo=ghost&logoColor=white)](CHANGELOG.md)
+[![Node](https://img.shields.io/badge/NODE-18+_LTS-00d4aa?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
+[![Gemini](https://img.shields.io/badge/BRAIN-Gemini_API-4285f4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev)
+[![React](https://img.shields.io/badge/COCKPIT-React_18__Glass_UI-61dafb?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
 [![Docker](https://img.shields.io/badge/SANDBOX-Docker_Alpine-2496ed?style=for-the-badge&logo=docker&logoColor=white)](https://docker.com)
-[![Deploy](https://img.shields.io/badge/DEPLOY-Render-46e3b7?style=for-the-badge&logo=render&logoColor=white)](https://render.com)
+[![PostgreSQL](https://img.shields.io/badge/DATABASE-PostgreSQL_14+-336791?style=for-the-badge&logo=postgresql&logoColor=white)](https://postgresql.org)
 [![License](https://img.shields.io/badge/LICENSE-MIT-ffffff?style=for-the-badge)](LICENSE)
+[![Docs](https://img.shields.io/badge/DOCS-COMPLETE-10b981?style=for-the-badge&logo=gitbook&logoColor=white)](docs/README.md)
 
 </div>
 
@@ -42,123 +43,112 @@ Time: 94 seconds.  Human input required: 0.
 
 ---
 
-## 🏛️ Architecture: The Distributed Neural Brain
+## 🏛️ V6 Architecture: Deterministic State Machine System
 
 ```mermaid
 graph TD
-    User((👤 You)) --> Cockpit["🖥️ Cockpit\nReact 19 + Vite IDE"]
+    User((👤 You)) --> Dashboard["🖥️ Glass Dashboard\nReact 18 + Material 3"]
 
-    Cockpit -- "Bidirectional WSS\nToken Streaming" --> Bridge["🧠 Server Bridge\nNode.js 22 + Express"]
+    Dashboard -- "WebSocket/HTTP" --> Bridge["🧠 Server Bridge\nNode.js 18 + XState"]
 
-    subgraph "Selina Neural Swarm v4.1"
-        Bridge --> Router{"⚡ L1/L2 Router\nHeuristic + Gemini"}
-        Router --> Manager["📋 ManagerExpert\nGoal Decomposition"]
-        Router --> Code["💻 CodeExpert\nSurgical Edits"]
-        Router --> UI["🎨 UIExpert\nReact + Tailwind"]
-        Router --> Debug["🔍 DebuggerExpert\nRoot Cause Analysis"]
-        Router --> Git["🌿 GitExpert\nRepo Lifecycle"]
-        Router --> Security["🔐 SecurityAuditor\nRed Team Probing"]
-        Router --> Creative["✨ CreativeDirector\nDesign Systems"]
-        Router --> Reviewer["⚖️ ReviewerExpert\nAdversarial Audit"]
-
-        Bridge --> Memory["🗃️ Neural Memory\nPostgreSQL + Brain Journal"]
-        Bridge --> Skills["📚 Skills Engine\nToken-Budgeted Prompts"]
-        Bridge --> MCP["🔌 MCP Server\nStdio Tool Protocol"]
+    subgraph "V6 State Machine Orchestration"
+        Bridge --> StateMachine["⚡ XState Machine\n7 States with Rollback"]
+        StateMachine --> Context["� Context Builder\norg_core + user_env"]
+        StateMachine --> AST["🔍 AST Parser\ntree-sitter deterministic"]
+        StateMachine --> LLM["🧠 LLM Client\nGemini API"]
+        StateMachine --> VFS["📁 Virtual File System\nStaging + Audit"]
+        StateMachine --> Sandbox["� Docker Sandbox\nAlpine isolation"]
     end
 
-    subgraph "Execution Layer"
-        Bridge --> Sandbox["🐳 Security Sandbox\nAlpine Docker — One-Shot"]
-        Bridge --> GitHub["🐙 GitHub API\nOctokit — Conflict-Safe"]
+    subgraph "Data Layer"
+        Bridge --> PostgreSQL["�️ PostgreSQL\nPrimary + pgvector"]
+        Bridge --> Redis["⚡ Redis\nCache + Sessions"]
     end
 
-    Cockpit --> VFS["📁 Virtual FS\nWebContainer API"]
+    Dashboard --> Components["🎛️ Glass Components\nDiffViewer + Terminal"]
 ```
 
 ---
 
-## ⚔️ Feature Arsenal
+## ⚔️ V6 Features: Deterministic & Secure
 
-### 🧠 Gemini-Native Neural Router
-Selina's brain uses a **two-pass routing system** to assign every request to the right expert in under 2ms:
+### 🎯 XState Deterministic Orchestration
+The V6 architecture uses **XState state machines** for predictable, rollback-capable agent execution:
 
-- **L1 — Heuristic Pass (0ms):** Regex-based intent triggers mapped to expert domains. Zero LLM cost.
-- **L2 — Gemini Classifier:** Zero-shot intent classification for ambiguous requests. Falls back instantly if the LLM fails.
-- **Token-Budgeted System Prompts:** `quick` (400 tokens), `standard` (1500), `deep` (3000). Protects your API quota and your host's RAM.
+- **7-State Flow**: `idle → loading_contexts → parsing_ast → drafting_code → sandboxing → evaluating_failure → rollback/success`
+- **Deterministic Execution**: Same input always produces same output (temperature 0.2)
+- **Rollback Mechanism**: After 3 failures, inject SYSTEM OVERRIDE and pivot approach
+- **Real-time Streaming**: WebSocket updates for every state transition
 
-### 💎 Material 3 & Bento Design System
-Vibe Hub is built on a custom implementation of the **Material 3 (M3)** design system, optimized for agentic workflows:
-- **Tonal Palettes:** Dynamic primary, secondary, and tertiary tonal palettes that shift with the project context.
-- **Bento Modularity:** A flexible grid system that organizes telemetry, code, and agent thoughts into cohesive, elevated surfaces.
-- **Motion Orchestration:** Expressive transitions using `framer-motion` and M3-standard easing (`emphasized`, `standard`).
+### 🔍 AST-First Code Analysis
+**tree-sitter** provides deterministic code parsing, eliminating hallucinations:
 
-### 🤖 Mixture-of-Experts Swarm (9 Specialists)
+- **Exact Dependencies**: No fuzzy matching - extracts precise imports/exports
+- **Function Signatures**: Identifies internal functions and their signatures
+- **Structure Mapping**: Builds semantic graphs for accurate code understanding
+- **Language Support**: JavaScript, TypeScript, Python, Go with more planned
 
-| Expert | Domain | Superpower |
-|:-------|:-------|:-----------|
-| **ManagerExpert** | Planning | Decomposes any goal into a dependency graph of sub-tasks |
-| **CodeExpert** | Implementation | Surgical search/replace edits — never rewrites what it doesn't need to |
-| **UIExpert** | React / CSS | Builds component trees, applies design systems, writes animations |
-| **CreativeDirector** | Design | Generates design tokens, moodboards, UI variants, and motion specs |
-| **DebuggerExpert** | Root Cause | Reads stack traces, reproduces bugs, applies targeted fixes |
-| **GitExpert** | Repository | Branches, commits, rebases — always on a `vibe/<timestamp>/<slug>` branch |
-| **SecurityAuditor** | Red Team | Probes for OWASP vulnerabilities, path traversal, injection points |
-| **ReviewerExpert** | Adversarial Audit | Reviews every change before it hits the VFS. Returns `REVIEW_FAILED` + critique |
-| **AssetGenerator** | Visuals | Orchestrates high-fidelity asset generation and image synthesis |
-
-### 🔁 Self-Correcting ReAct Loop
-
-Selina doesn't give up after one try. The **Neural Loop** runs up to 25 tool iterations per task with full self-correction:
+### 🛡️ Docker Sandbox Security
+Every code execution runs in **isolated Alpine containers** with strict security:
 
 ```
-Iteration 1: CodeExpert writes auth middleware
-          ↓  ReviewerExpert → REVIEW_FAILED: missing token expiry check
-Iteration 2: CodeExpert revises with expiry + rotation logic
-          ↓  ReviewerExpert → REVIEW_PASSED
-          ↓  npm run build → exit 0
-          ✅ Done.
+Base:       node:18-alpine    (~50MB base image)
+Memory:     512MB hard cap    (no swap, prevents OOM)
+CPU:        1 core max       (resource limits)
+Network:    --network none   (no external calls)
+Filesystem: read-only root   (noexec, nosuid)
+User:       non-root UID     (no capabilities)
+Timeout:    10s enforced    (SIGKILL on timeout)
+Auto-cleanup: --rm          (ephemeral containers)
 ```
 
-### 🛡️ Hardened One-Shot Docker Sandbox
+### 📁 Virtual File System (VFS)
+**Staging area with user approval gates** prevents unwanted disk writes:
 
-Every LLM-generated script runs in a **hermetically sealed, disposable container** that self-destructs after execution:
+- **In-Memory Staging**: Code changes held in memory until approval
+- **Diff Visualization**: Side-by-side comparison with syntax highlighting
+- **Audit Trail**: Complete history of all changes and decisions
+- **Approval Gates**: User must explicitly approve before any disk write
+- **Rollback Support**: Can reject changes without touching filesystem
+
+### 🏗️ Strict Context Isolation
+**V6 enforces architectural boundaries** between organizational and user contexts:
 
 ```
-Base:       node:22-alpine3.19    (~120 MB vs Ubuntu's 1.4 GB)
-Memory:     256 MB hard cap  (swap disabled — no OOM hiding)
-CPU:        0.5 cores        (leaves ≥5.5 cores for your IDE)
-PIDs:       32               (fork-bomb prevention)
-Network:    NONE             (zero exfiltration surface)
-Filesystem: read-only root + /tmp tmpfs (noexec, nosuid)
-User:       sandbox UID 10001 (non-root, no capabilities)
-Timeout:    10s default, SIGKILL enforced (no SIGTERM grace)
+apps/server-bridge/
+├── org_core/          ← Global, non-negotiable rules
+│   ├── context_builder.js      # CI/CD, deployment targets
+│   ├── ci_cd_templates/        # Standardized workflows
+│   └── global_linting/         # Enforced code standards
+│
+├── user_env/          ← Flexible user preferences
+│   ├── context_builder.js      # Language, aesthetics, UI themes
+│   └── locales/                # en, hi, or only
+│
+└── orchestrator/      ← Only place allowed to import from both
+    ├── state_machine.js        # XState DAG with rollback
+    └── router.js               # API endpoints
 ```
 
-**Output pipeline:** Docker multiplexed stream → 8-byte frame demultiplexer → live WebSocket chunks → `Terminal.jsx` with ANSI color parsing.
+### 🌐 Real-time Glass-Morphism UI
+**Modern glass-morphism dashboard** with three-panel layout:
 
-### 🌿 Collaborative GitHub Integration
+- **Agent Status Bar**: LED indicators, session info, control buttons
+- **Intent Chat Panel**: Natural language interaction with Collab-style UI
+- **Code Canvas**: Diff viewer with file tabs and approval controls
+- **Activity Feed**: Chronological agent activity with expandable details
+- **Peek Terminal**: Bottom strip showing recent command output
+- **Agent Action Overlay**: Non-blocking overlay for long-running tasks
 
-Selina is a **safe team player**. She will never silently break your main branch:
+### 🔐 Enterprise Security
+**Multi-layered security architecture** for production deployment:
 
-- **Agent Branch Convention:** `vibe/<unix-timestamp>/<task-slug>` — namespaced, auto-sortable, cleanup-friendly
-- **Conflict Detection:** Uses GitHub's Compare API to detect upstream divergence *before* opening a PR. If files overlap, she halts and asks you to resolve.
-- **Conflict-Gated PRs:** A PR is physically blocked from being opened if `behindBy > 0` AND overlapping files exist.
-- **GitHub Check Runs:** Posts sandbox test results as a CI badge directly on the PR timeline.
-- **Webhook Verification:** Every incoming webhook is validated with HMAC-SHA256 + `timingSafeEqual` — no spoofed payloads.
-
-### 🔌 Model Context Protocol (MCP) Server
-
-Selina speaks **MCP** — the universal AI tool protocol. Connect any MCP-compatible assistant (Claude Desktop, Cursor, Continue.dev) to Selina's workspace tools:
-
-- `vibe_read_file` — Smart chunked file reader with ReDoS-safe query filtering
-- `vibe_search_symbols` — Grep-based symbol search across the entire workspace
-- `vibe_get_memory` — Retrieve project-specific brain journal entries
-
-### 🗃️ Persistent Neural Memory
-
-Selina remembers across sessions via a **two-tier memory system**:
-
-- **User Memory** (`memory.md`) — You write it once. Selina reads it on every task. Your coding standards, preferences, and architecture decisions.
-- **Brain Journal** — Auto-learned entries written by Selina herself after breakthroughs. Stored in PostgreSQL. Compacted at 100 entries via a JSONB timestamp sort. Keyword-smart retrieval prevents context bloat.
+- **JWT Authentication**: Secure token-based auth with refresh mechanism
+- **Rate Limiting**: Configurable limits per endpoint and user
+- **Input Validation**: Zod schemas for all API inputs
+- **SQL Injection Prevention**: Parameterized queries and validation
+- **XSS Protection**: Content Security Policy and input sanitization
+- **Audit Logging**: Structured logs with request ID tracing
 
 ---
 
@@ -232,43 +222,79 @@ vibe-hub/
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 22+
-- Docker Desktop (WSL2 backend on Windows)
-- PostgreSQL database (Neon recommended)
-- Google AI API key (Gemini 2.0 Flash)
+- **Node.js** 18+ LTS
+- **PostgreSQL** 14+ with pgvector extension
+- **Redis** 6+ (for sessions and caching)
+- **Docker** Desktop (for sandbox execution)
+- **Google AI API key** (Gemini API)
 
-### 1. Clone & Install
+### 📚 Documentation
+- **📖 [Complete Documentation](docs/README.md)** - Comprehensive guides
+- **⚙️ [Development Setup](docs/DEVELOPMENT_SETUP.md)** - Detailed setup instructions
+- **🏗️ [Technical Architecture](docs/TECHNICAL_ARCHITECTURE.md)** - System design
+- **🔌 [API Specification](docs/API_SPECIFICATION.md)** - REST API & WebSocket docs
+
+### 1. One-Command Setup
 
 ```bash
-git clone https://github.com/vibe-platform/vibe-hub.git
+# Clone and setup automatically
+curl -sSL https://raw.githubusercontent.com/your-org/vibe-hub/main/scripts/setup.sh | bash
+
+# Or manually:
+git clone https://github.com/your-org/vibe-hub.git
 cd vibe-hub
-npm install
+npm run setup
 ```
 
-### 2. Environment Setup
+### 2. Environment Configuration
 
 ```bash
-cp .env.example apps/server-bridge/.env
-# Fill in: GEMINI_API_KEY, DATABASE_URL, JWT_SECRET, GITHUB_APP_ID, GITHUB_PRIVATE_KEY
+# Copy environment template
+cp .env.example .env.local
+
+# Edit with your configuration
+# Required: GEMINI_API_KEY, DATABASE_URL, JWT_SECRET
+# Optional: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET for OAuth
 ```
 
-### 3. Build the Sandbox Image
+### 3. Database Setup
 
 ```bash
-docker build -t vibe-hub-sandbox:latest -f Dockerfile.security .
+# Create database and enable extensions
+createdb vibehub_dev
+psql vibehub_dev -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+# Run migrations
+npm run db:migrate
+
+# Seed development data
+npm run db:seed
 ```
 
-### 4. Start the Swarm
+### 4. Start Development
 
 ```bash
-# Terminal 1 — Backend
-cd apps/server-bridge && npm run dev
+# Start all services (recommended)
+npm run dev
 
-# Terminal 2 — Frontend
-cd apps/user-interface && npm run dev
+# Access the application
+# Frontend: http://localhost:5173
+# Backend API: http://localhost:3001/health
+# Documentation: http://localhost:3001/docs
 ```
 
-Navigate to `http://localhost:5173`. Selina is online.
+### 5. Verify Installation
+
+```bash
+# Check all services
+npm run health-check
+
+# Run tests
+npm run test
+
+# Verify API
+curl http://localhost:3001/health
+```
 
 ---
 
