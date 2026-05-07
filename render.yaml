@@ -53,7 +53,15 @@ services:
       - key: NIM_BASE_URL
         value: https://integrate.api.nvidia.com/v1
       - key: NIM_MODEL
-        value: qwen/qwen2.5-coder-32b-instruct
+        value: meta/llama-4-maverick-17b-128e-instruct
+      - key: NIM_TEMPERATURE
+        value: 1.0
+      - key: NIM_TOP_P
+        value: 1.0
+      - key: NIM_FREQUENCY_PENALTY
+        value: 0.0
+      - key: NIM_PRESENCE_PENALTY
+        value: 0.0
       - key: OPENAI_API_MODE
         value: responses
 
@@ -224,7 +232,7 @@ services:
       - key: VITE_WS_BASE
         value: wss://vibe-hub-bridge.onrender.com
       - key: VITE_AGENT_MODEL_LABEL
-        value: Qwen Coder 32B
+        value: Llama 4 Maverick 17B
     headers:
       - path: /*
         name: X-Frame-Options

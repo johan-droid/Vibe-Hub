@@ -4,7 +4,7 @@ import { AgentAuthManager, agentAuthManager, authToken, callWithAuthRetry } from
 const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 const DEFAULT_QWEN_MODEL = 'qwen/qwen2.5-coder-32b-instruct';
-const DEFAULT_NIM_MODEL = 'qwen/qwen2.5-coder-32b-instruct';
+const DEFAULT_NIM_MODEL = 'meta/llama-4-maverick-17b-128e-instruct';
 const DEFAULT_NIM_BASE_URL = 'https://integrate.api.nvidia.com/v1';
 const DEFAULT_ANTHROPIC_MODEL = 'claude-3-5-haiku-latest';
 const DEFAULT_TIMEOUT_MS = 45_000;
@@ -14,6 +14,24 @@ const DEFAULT_HISTORY_BUDGET = 24_000;
 const AUDIT_LIMIT = 250;
 const SUPPORTED_PROVIDERS = Object.freeze(['gemini', 'openai', 'qwen', 'nim', 'anthropic']);
 
+function configuredProviderFromEnv(env = {}) {
+  if (env.NIM_API_KEY || env.NVIDIA_API_KEY || env.NVIDIA_NIM_API_KEY) return 'nim';
+  if (env.OPENAI_API_KEY) return 'openai';
+  if (env.QWEN_API_KEY) return 'qwen';
+  if (env.ANTHROPIC_API_KEY) return 'anthropic';
+  if (env.GEMINI_API_KEY || env.LLM_API_KEY) return 'gemini';
+  return 'nim';
+}
+
+function resolveProvider(env = {}, providerOverride = null) {
+  return String(
+    providerOverride ||
+    env.SELINA_MODEL_PROVIDER ||
+    env.SELINA_AGENT_PROVIDER ||
+    configuredProviderFromEnv(env)
+  ).toLowerCase();
+}
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -21,6 +39,11 @@ function sleep(ms) {
 function asInt(value, fallback) {
   const n = Number.parseInt(value, 10);
   return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function asFloat(value, fallback) {
+  const n = Number.parseFloat(value);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 function redact(value) {
@@ -207,12 +230,7 @@ export class ModelService {
   }
 
   selectProfile({ modelName = DEFAULT_GEMINI_MODEL, effortLevel = 'standard', domain = 'code', provider: providerOverride = null } = {}) {
-    const provider = (
-      providerOverride ||
-      this.env.SELINA_MODEL_PROVIDER ||
-      this.env.SELINA_AGENT_PROVIDER ||
-      'nim'
-    ).toLowerCase();
+    const provider = resolveProvider(this.env, providerOverride);
     const providerModel = {
       gemini: this.env.GEMINI_MODEL || this.env.SELINA_MODEL || modelName || DEFAULT_GEMINI_MODEL,
       openai: this.env.OPENAI_MODEL || this.env.SELINA_MODEL || DEFAULT_OPENAI_MODEL,
@@ -277,12 +295,9 @@ export class ModelService {
   }
 
   providerStatus() {
+    const activeProvider = resolveProvider(this.env);
     return {
-      activeProvider: (
-        this.env.SELINA_MODEL_PROVIDER ||
-        this.env.SELINA_AGENT_PROVIDER ||
-        'nim'
-      ).toLowerCase(),
+      activeProvider,
       gemini: { configured: this.authManager.hasProvider('gemini'), model: this.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL },
       openai: {
         configured: this.authManager.hasProvider('openai'),
@@ -547,14 +562,24 @@ export class ModelService {
   }
 
   buildOpenAIRequest({ profile, messages, tools }) {
-    return {
+    const body = {
       model: profile.model,
       messages,
       tools: tools?.length ? toOpenAITools(tools) : undefined,
       tool_choice: tools?.length ? 'auto' : undefined,
       max_tokens: profile.maxOutputTokens,
-      temperature: 0.2,
+      temperature: asFloat(this.env.SELINA_MODEL_TEMPERATURE, 0.2),
     };
+
+    if (profile.provider === 'nim') {
+      body.stream = false;
+      body.temperature = asFloat(this.env.NIM_TEMPERATURE || this.env.SELINA_MODEL_TEMPERATURE, 1.0);
+      body.top_p = asFloat(this.env.NIM_TOP_P, 1.0);
+      body.frequency_penalty = asFloat(this.env.NIM_FREQUENCY_PENALTY, 0.0);
+      body.presence_penalty = asFloat(this.env.NIM_PRESENCE_PENALTY, 0.0);
+    }
+
+    return body;
   }
 
   buildOpenAIResponsesRequest({ profile, instructions, input, tools }) {
@@ -584,6 +609,7 @@ export class ModelService {
       nim: {
         baseUrl: this.env.NIM_BASE_URL || this.env.NVIDIA_NIM_BASE_URL || DEFAULT_NIM_BASE_URL,
         headerName: 'Authorization',
+        accept: 'application/json',
       },
     }[profile.provider];
 
@@ -601,6 +627,7 @@ export class ModelService {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Accept: providerConfig.accept || 'application/json',
         [providerConfig.headerName]: `Bearer ${authToken(auth)}`,
       },
       body: JSON.stringify(body),

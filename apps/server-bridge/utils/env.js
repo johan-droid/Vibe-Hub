@@ -2,6 +2,7 @@ import { z } from 'zod';
 import logger from './detailed-logger.js';
 
 const optionalUrl = z.string().url().or(z.literal('')).optional();
+const optionalProvider = z.enum(['gemini', 'openai', 'qwen', 'nim', 'anthropic']).or(z.literal('')).optional();
 
 const envSchema = z.object({
   NODE_ENV: z.string().optional(),
@@ -20,8 +21,8 @@ const envSchema = z.object({
   NIM_API_KEY: z.string().optional(),
   NVIDIA_API_KEY: z.string().optional(),
   NVIDIA_NIM_API_KEY: z.string().optional(),
-  SELINA_MODEL_PROVIDER: z.enum(['gemini', 'openai', 'qwen', 'nim', 'anthropic']).optional(),
-  SELINA_AGENT_PROVIDER: z.enum(['gemini', 'openai', 'qwen', 'nim', 'anthropic']).optional(),
+  SELINA_MODEL_PROVIDER: optionalProvider,
+  SELINA_AGENT_PROVIDER: optionalProvider,
   SENTRY_DSN: optionalUrl,
 });
 
@@ -36,6 +37,15 @@ const PROVIDER_ENV_KEYS = {
 const PROVIDER_ENV_ALIASES = {
   nim: ['NIM_API_KEY', 'NVIDIA_API_KEY', 'NVIDIA_NIM_API_KEY'],
 };
+
+function configuredProviderFromEnv(env = {}) {
+  if (env.NIM_API_KEY || env.NVIDIA_API_KEY || env.NVIDIA_NIM_API_KEY) return 'nim';
+  if (env.OPENAI_API_KEY) return 'openai';
+  if (env.QWEN_API_KEY) return 'qwen';
+  if (env.ANTHROPIC_API_KEY) return 'anthropic';
+  if (env.GEMINI_API_KEY || env.LLM_API_KEY) return 'gemini';
+  return 'nim';
+}
 
 export function validateEnvironment(env = process.env) {
   const effectiveEnv = { ...env };
@@ -57,7 +67,11 @@ export function validateEnvironment(env = process.env) {
   });
 
   if (env.NODE_ENV === 'production') {
-    const activeProvider = (env.SELINA_MODEL_PROVIDER || env.SELINA_AGENT_PROVIDER || 'nim').toLowerCase();
+    const activeProvider = (
+      env.SELINA_MODEL_PROVIDER ||
+      env.SELINA_AGENT_PROVIDER ||
+      configuredProviderFromEnv(env)
+    ).toLowerCase();
     const providerKey = PROVIDER_ENV_KEYS[activeProvider];
     const required = ['DATABASE_URL', 'JWT_SECRET', 'CSRF_SECRET', 'VIBE_MASTER_KEY', 'UI_ORIGIN'];
 

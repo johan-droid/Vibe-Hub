@@ -49,7 +49,7 @@ describe('ModelService gateway', () => {
     expect(JSON.stringify(diagnostics)).not.toContain('sk-secret-value');
   });
 
-  it('selects a NIM Qwen Coder profile without exposing secrets', () => {
+  it('selects a NIM Llama 4 Maverick profile without exposing secrets', () => {
     const service = new ModelService({
       SELINA_MODEL_PROVIDER: 'nim',
       NIM_API_KEY: 'nvapi-secret-value',
@@ -59,16 +59,29 @@ describe('ModelService gateway', () => {
     const profile = service.selectProfile({ effortLevel: 'standard', domain: 'code' });
     expect(profile.provider).toBe('nim');
     expect(profile.apiMode).toBe('chat');
-    expect(profile.model).toBe('qwen/qwen2.5-coder-32b-instruct');
+    expect(profile.model).toBe('meta/llama-4-maverick-17b-128e-instruct');
     expect(service.providerKind(profile)).toBe('openai-compatible');
 
     const diagnostics = service.diagnostics();
     expect(diagnostics.providerStatus.nim).toMatchObject({
       configured: true,
-      model: 'qwen/qwen2.5-coder-32b-instruct',
+      model: 'meta/llama-4-maverick-17b-128e-instruct',
       baseUrl: 'https://integrate.api.nvidia.com/v1',
     });
     expect(JSON.stringify(diagnostics)).not.toContain('nvapi-secret-value');
+  });
+
+  it('infers Gemini when no provider is explicit and only Gemini is configured', () => {
+    const service = new ModelService({
+      GEMINI_API_KEY: 'gemini-secret-value',
+    });
+
+    const profile = service.selectProfile({ effortLevel: 'quick', domain: 'classifier' });
+
+    expect(profile.provider).toBe('gemini');
+    expect(profile.model).toBe('gemini-2.0-flash');
+    expect(service.providerStatus().activeProvider).toBe('gemini');
+    expect(JSON.stringify(service.diagnostics())).not.toContain('gemini-secret-value');
   });
 
   it('builds Responses API function tools for OpenAI agents', () => {
@@ -102,6 +115,75 @@ describe('ModelService gateway', () => {
       strict: false,
     });
     expect(request.tools[0].parameters.properties.path.type).toBe('string');
+  });
+
+  it('builds NVIDIA NIM chat payloads with the expected sampling fields', () => {
+    const service = new ModelService({
+      SELINA_MODEL_PROVIDER: 'nim',
+      NIM_API_KEY: 'nvapi-secret-value',
+      NIM_TEMPERATURE: '0.75',
+      NIM_TOP_P: '0.9',
+      NIM_FREQUENCY_PENALTY: '0.1',
+      NIM_PRESENCE_PENALTY: '0.2',
+    });
+    const profile = service.selectProfile({ effortLevel: 'quick', domain: 'code' });
+
+    const request = service.buildOpenAIRequest({
+      profile,
+      messages: [{ role: 'user', content: 'Hello' }],
+      tools: [],
+    });
+
+    expect(request).toMatchObject({
+      model: 'meta/llama-4-maverick-17b-128e-instruct',
+      messages: [{ role: 'user', content: 'Hello' }],
+      max_tokens: 1024,
+      temperature: 0.75,
+      top_p: 0.9,
+      frequency_penalty: 0.1,
+      presence_penalty: 0.2,
+      stream: false,
+    });
+  });
+
+  it('sends NIM chat requests to NVIDIA with JSON accept headers', async () => {
+    const service = new ModelService({
+      SELINA_MODEL_PROVIDER: 'nim',
+      NIM_API_KEY: 'nvapi-secret-value',
+    });
+    const profile = service.selectProfile({ effortLevel: 'quick', domain: 'code' });
+    let captured = null;
+
+    service.fetchJsonWithAuth = async (provider, url, buildOptions) => {
+      captured = {
+        provider,
+        url,
+        options: buildOptions({ type: 'api-key', value: 'nvapi-redacted', expiresAt: null }),
+      };
+      return {
+        choices: [{ message: { content: 'ok' } }],
+        usage: { total_tokens: 3 },
+      };
+    };
+
+    const result = await service.openAICompatibleChat({
+      profile,
+      messages: [{ role: 'user', content: 'Ping' }],
+      tools: [],
+    });
+
+    expect(result.content).toBe('ok');
+    expect(captured.provider).toBe('nim');
+    expect(captured.url).toBe('https://integrate.api.nvidia.com/v1/chat/completions');
+    expect(captured.options.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: 'Bearer nvapi-redacted',
+    });
+    expect(JSON.parse(captured.options.body)).toMatchObject({
+      model: 'meta/llama-4-maverick-17b-128e-instruct',
+      stream: false,
+    });
   });
 
   it('normalizes Responses API message and function-call output', async () => {
@@ -210,7 +292,7 @@ describe('ModelService gateway', () => {
     const env = {
       SELINA_MODEL_PROVIDER: 'nim',
       NIM_API_KEY: 'nvapi-primary',
-      NIM_MODEL: 'qwen/qwen2.5-coder-32b-instruct',
+      NIM_MODEL: 'meta/llama-4-maverick-17b-128e-instruct',
       OPENAI_API_KEY: 'sk-openai',
       OPENAI_MODEL: 'gpt-fallback',
       SELINA_MODEL_FALLBACKS: 'openai',

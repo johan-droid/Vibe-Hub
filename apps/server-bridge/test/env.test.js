@@ -22,6 +22,19 @@ describe('Environment validation', () => {
     expect(parsed.NIM_API_KEY).toBe(productionBaseEnv.NIM_API_KEY);
   });
 
+  it('infers Gemini for legacy production envs that only have Gemini configured', () => {
+    const env = {
+      ...productionBaseEnv,
+      SELINA_MODEL_PROVIDER: '',
+      NIM_API_KEY: '',
+      GEMINI_API_KEY: 'gemini-key-for-tests',
+    };
+
+    const parsed = validateEnvironment(env);
+
+    expect(parsed.GEMINI_API_KEY).toBe('gemini-key-for-tests');
+  });
+
   it('still requires JWT_SECRET in production', () => {
     const env = { ...productionBaseEnv, JWT_SECRET: '' };
 
