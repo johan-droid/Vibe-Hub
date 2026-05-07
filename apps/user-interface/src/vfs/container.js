@@ -7,6 +7,13 @@ import { getAgentLoop } from '../services/AgentLoop.js';
 const IGNORED_PATHS_REGEX = /(?:^|\/)(node_modules|\.git|dist|\.next|out|build)(?:\/|$)/;
 const MAX_SURGICAL_DELTA_CHARS = Number.parseInt(import.meta.env.VITE_SELINA_MAX_SURGICAL_DELTA_CHARS || '20000', 10);
 
+function assertCrossOriginIsolated() {
+  if (globalThis.crossOriginIsolated) return;
+  throw new Error(
+    'Workspace boot requires cross-origin isolation. Configure Cross-Origin-Opener-Policy: same-origin and Cross-Origin-Embedder-Policy: require-corp on the frontend host.'
+  );
+}
+
 async function sha256Hex(text) {
   const bytes = new TextEncoder().encode(text || '');
   const digest = await crypto.subtle.digest('SHA-256', bytes);
@@ -81,6 +88,8 @@ export class VFSContainer {
       this.agentLoop = getAgentLoop(this);
       return;
     }
+
+    assertCrossOriginIsolated();
 
     // Create boot promise to prevent double-booting
     globalBootPromise = WebContainer.boot();
