@@ -28,7 +28,7 @@ function redirectWithError(req, res, error) {
 }
 
 function isSecureCookie() {
-  return process.env.NODE_ENV === 'production' && String(process.env.UI_ORIGIN).startsWith('https://');
+  return process.env.NODE_ENV === 'production';
 }
 
 function handleOAuthConfigError(req, res) {
@@ -57,7 +57,7 @@ router.get('/github', async (req, res) => {
   res.cookie('github_oauth_state', state, {
     httpOnly: true,
     secure: isSecureCookie(),
-    sameSite: 'lax',
+    sameSite: 'strict',
     maxAge: 15 * 60 * 1000,
   });
   setOAuthReturnOriginCookie(res, returnOrigin);

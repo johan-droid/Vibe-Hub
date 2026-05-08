@@ -116,7 +116,7 @@ router.post('/verify-token', async (req, res) => {
 });
 
 function isSecureCookie() {
-  return process.env.NODE_ENV === 'production' && String(process.env.UI_ORIGIN).startsWith('https://');
+  return process.env.NODE_ENV === 'production';
 }
 
 function redirectWithError(req, res, error) {
@@ -142,7 +142,7 @@ router.get('/google', async (req, res) => {
   res.cookie('google_oauth_state', state, {
     httpOnly: true,
     secure: isSecureCookie(),
-    sameSite: 'lax',
+    sameSite: 'strict',
     maxAge: 15 * 60 * 1000,
   });
   setOAuthReturnOriginCookie(res, returnOrigin);
@@ -179,7 +179,7 @@ router.get('/google/callback', async (req, res) => {
   clearOAuthReturnOriginCookie(res);
 
   try {
-    console.log('[GoogleAuth] Step 1: Exchanging code for tokens...');
+    logger.info('GoogleAuth', 'Step 1: Exchanging code for tokens...');
     const tokenRes = await fetch(GOOGLE_TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -192,17 +192,17 @@ router.get('/google/callback', async (req, res) => {
       }),
     });
     const tokens = await tokenRes.json();
-    console.log('[GoogleAuth] Token response:', { hasAccessToken: !!tokens.access_token, hasError: !!tokens.error });
+    logger.info('GoogleAuth', 'Token response:', { hasAccessToken: !!tokens.access_token, hasError: !!tokens.error });
     if (tokens.error) throw new Error(tokens.error_description || tokens.error);
 
-    console.log('[GoogleAuth] Step 2: Fetching user info...');
+    logger.info('GoogleAuth', 'Step 2: Fetching user info...');
     const userRes = await fetch(GOOGLE_USERINFO_URL, {
       headers: { Authorization: `Bearer ${tokens.access_token}` },
     });
     const profile = await userRes.json();
-    console.log('[GoogleAuth] User profile:', { email: profile.email, name: profile.name, hasSub: !!profile.sub });
+    logger.info('GoogleAuth', 'User profile:', { email: profile.email, name: profile.name, hasSub: !!profile.sub });
 
-    console.log('[GoogleAuth] Step 3: Upserting user to database...');
+    logger.info('GoogleAuth', 'Step 3: Upserting user to database...');
     const user = await upsertUser({
       email: profile.email,
       name: profile.name,
@@ -210,17 +210,17 @@ router.get('/google/callback', async (req, res) => {
       provider: 'google',
       providerId: profile.sub,
     });
-    console.log('[GoogleAuth] User upserted:', { userId: user.id });
+    logger.info('GoogleAuth', 'User upserted:', { userId: user.id });
 
-    console.log('[GoogleAuth] Step 4: Creating session...');
+    logger.info('GoogleAuth', 'Step 4: Creating session...');
     const session = await createSession({
       userId: user.id,
       provider: 'google',
       req
     });
-    console.log('[GoogleAuth] Session created:', { sessionId: session.sessionId });
+    logger.info('GoogleAuth', 'Session created:', { sessionId: session.sessionId });
 
-    console.log('[GoogleAuth] Step 5: Setting auth cookies...');
+    logger.info('GoogleAuth', 'Step 5: Setting auth cookies...');
     setAuthCookies(res, {
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
@@ -235,27 +235,23 @@ router.get('/google/callback', async (req, res) => {
       provider: user.provider
     };
 
-    console.log('[GoogleAuth] Step 6: Creating OAuth handoff...');
+    logger.info('GoogleAuth', 'Step 6: Creating OAuth handoff...');
     const handoffCode = await createOAuthHandoff({
       provider: 'google',
       session,
       user: userPayload
     });
-    console.log('[GoogleAuth] Handoff created:', { hasCode: !!handoffCode });
+    logger.info('GoogleAuth', 'Handoff created:', { hasCode: !!handoffCode });
 
     // Redirect with only an opaque one-time code; the frontend exchanges it
     // against the API host to set cookies reliably on localhost/127.0.0.1.
     const redirectUrl = new URL('/auth/callback', returnOrigin);
     redirectUrl.searchParams.set('code', handoffCode);
 
-    console.log('[GoogleAuth] Step 7: Redirecting to:', redirectUrl.toString());
+    logger.info('GoogleAuth', 'Step 7: Redirecting to:', { redirect: redirectUrl.toString() });
     res.redirect(redirectUrl.toString());
   } catch (err) {
     // Detailed error logging to identify exact failure point
-    console.error('[GoogleAuth] ================= CALLBACK ERROR =================');
-    console.error('[GoogleAuth] Error message:', err.message);
-    console.error('[GoogleAuth] Error code:', err.code);
-    console.error('[GoogleAuth] Error stack:', err.stack);
 
     // Log the specific stage where error occurred based on what was completed
     logger.error('GoogleAuth', 'Callback error', {

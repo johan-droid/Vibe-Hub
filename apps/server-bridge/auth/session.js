@@ -1,3 +1,4 @@
+import logger from '../utils/detailed-logger.js';
 /**
  * SAAS-GRADE: Session Management Service
  * 
@@ -35,7 +36,7 @@ const REFRESH_TOKEN_EXPIRY_DAYS = parseInt(process.env.REFRESH_TOKEN_EXPIRY_DAYS
 const MAX_CONCURRENT_SESSIONS = parseInt(process.env.MAX_CONCURRENT_SESSIONS || '10', 10);
 
 if (!JWT_SECRET) {
-  console.error('FATAL: JWT_SECRET environment variable is not set.');
+  logger.error('Auth', 'FATAL: JWT_SECRET environment variable is not set.');
   process.exit(1);
 }
 

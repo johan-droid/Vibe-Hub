@@ -1,4 +1,5 @@
-import React, { useMemo, useEffect } from 'react';
+import DOMPurify from 'dompurify';
+import React, { memo, useMemo, useEffect } from 'react';
 import { Eye, Code, FileCode, GitPullRequest, ChevronRight, X, Check, Github, Terminal, Zap, Sparkles } from 'lucide-react';
 import ReactDiffViewer from 'react-diff-viewer-continued';
 import { useStore } from '../../../store/useStore';
@@ -9,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
  * DiffViewer — Neural OS Surgical Projection
  * Optimized for professional code orchestration and industrial clarity.
  */
-export default function DiffViewer({ onApply, onDiscard }) {
+const DiffViewer = memo(function DiffViewer({ onApply, onDiscard }) {
   const { diffData, isThinking } = useStore();
   const { 
     activeDiff, 
@@ -155,8 +156,8 @@ export default function DiffViewer({ onApply, onDiscard }) {
                 
                 <div className="p-2 md:p-4">
                   <ReactDiffViewer
-                    oldValue={diffChunk.old}
-                    newValue={diffChunk.new}
+                    oldValue={DOMPurify.sanitize(diffChunk.old)}
+                    newValue={DOMPurify.sanitize(diffChunk.new)}
                     splitView={true}
                     useDarkTheme={true}
                     styles={{
@@ -259,4 +260,6 @@ export default function DiffViewer({ onApply, onDiscard }) {
       </AnimatePresence>
     </div>
   );
-}
+});
+
+export default DiffViewer;
