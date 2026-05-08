@@ -81,7 +81,7 @@ const ActivityFeed = memo(function ActivityFeed() {
                 />
               </div>
               <h3 className="label-large uppercase tracking-[0.2em] opacity-30">Waiting for Link</h3>
-              <p className="mt-2 label-small text-on-surface-variant/30 leading-relaxed max-w-[200px]">
+              <p className="mt-2 label-small text-on-surface-variant/50 leading-relaxed max-w-[200px]">
                 Initialize workspace communication to begin data ingestion.
               </p>
             </div>
