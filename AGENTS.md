@@ -1,14 +1,66 @@
-# Codex Instructions for Vibe-Hub
+# AI Agent Development Guide for Vibe-Hub
 
-This document provides guidance for Codex when working with the Vibe-Hub codebase.
+This document provides comprehensive guidance for AI agents when working with the Vibe-Hub codebase. It is specifically designed to enable effective vibecoding sessions without requiring full codebase uploads.
+
+## Quick Reference for AI Agents
+
+**Essential Commands:**
+```bash
+# Start development
+npm run dev
+
+# Run tests
+npm run test
+
+# Check syntax
+node --check <file>
+
+# Lint code
+npm run lint
+```
+
+**Critical Architecture Rules:**
+- ✅ Always use ES modules (`import`/`export`)
+- ✅ Include `.js` extensions in relative imports
+- ❌ NEVER import between `org_core/` and `user_env/`
+- ✅ Use Docker sandbox for all code execution
+- ✅ Enforce language lock (en/hi/or only)
+
+**Key File Locations:**
+- Frontend: `apps/user-interface/src/`
+- Backend: `apps/server-bridge/src/`
+- State Machine: `apps/server-bridge/src/orchestrator/state_machine.js`
+- VFS: `apps/server-bridge/src/vfs/container.js`
+- API Routes: `apps/server-bridge/src/orchestrator/router.js`
 
 ## Project Overview
 
-Vibe-Hub is an agentic coding platform with a strict architectural isolation design. It consists of:
+Vibe-Hub is an agentic coding platform with a strict V6 architectural isolation design. It consists of:
 
 - **Frontend**: React-based UI with Material 3 design (`apps/user-interface/`)
 - **Backend**: Node.js server-bridge with XState orchestration (`apps/server-bridge/`)
 - **Database**: PostgreSQL with pgvector for semantic memory
+
+## AI Agent Context & Capabilities
+
+### What AI Agents Should Know
+1. **This is a V6 Architecture**: Strict separation between org_core and user_env
+2. **State-Driven**: All orchestration uses XState with deterministic transitions
+3. **Security-First**: Multiple layers including Docker sandboxing and VFS approval gates
+4. **AI-Native**: Built specifically for AI agent development workflows
+
+### AI Agent Superpowers in This Codebase
+- **Multi-file edits**: Use `multi_edit` for coordinated changes across files
+- **Pattern recognition**: Identify architectural patterns and suggest improvements
+- **Syntax validation**: Always verify with `node --check` after edits
+- **Import resolution**: Automatically handles ES module imports with `.js` extensions
+- **Architecture enforcement**: Maintains strict org_core/user_env isolation
+- **XState machine design**: Validates state transitions and rollback logic
+- **Security review**: Checks for credential exposure, path traversal, unsafe execution
+- **Performance analysis**: Identifies blocking operations, suggests async patterns
+- **Semantic search**: Uses `grep_search` to find relevant code patterns
+- **File tree navigation**: `find_by_name` and `list_dir` for project exploration
+- **Memory persistence**: Stores important context across sessions
 
 ## V6 Architecture Philosophy
 
@@ -127,7 +179,7 @@ const result = await SandboxExecutor.executeLocalDockerSandbox(codeToTest);
 - Syntax check: `node --check <file>`
 - All code must pass linter rules defined in `org_core/global_linting/rules.json`
 
-## Common Tasks
+## Common Tasks for AI Agents
 
 ### Adding a New API Endpoint
 
@@ -163,6 +215,32 @@ Agent Status: transitioned to [drafting_code]
 ```
 
 Monitor these to trace execution flow.
+
+### File Navigation Patterns
+
+```bash
+# Find all JavaScript files in a directory
+find_by_name SearchDirectory="apps/server-bridge/src" Pattern="**/*.js"
+
+# Search for specific patterns in code
+grep_search SearchPath="apps/server-bridge/src" Query="import.*from.*org_core"
+
+# List directory structure
+list_dir DirectoryPath="apps/server-bridge/src/orchestrator"
+```
+
+### Code Quality Checks
+
+```bash
+# Always run after making changes
+node --check apps/server-bridge/src/orchestrator/state_machine.js
+
+# Run linting
+npm run lint
+
+# Run tests
+npm run test
+```
 
 ## Environment Variables
 
@@ -233,13 +311,16 @@ When working with Codex on this codebase, leverage these specific capabilities:
 - **Package management** — Installs dependencies, audits for vulnerabilities
 - **Render deployment** — Monitors build logs, identifies deployment failures
 
-### Key Reminders for Codex
+## Key Reminders for AI Agents
 - Always use **ES modules** (`import`/`export`) — never CommonJS in this codebase
 - Always include **`.js` extension** in relative imports
 - Never **cross-import** between `org_core/` and `user_env/`
 - Always **enforce language lock** (en/hi/or only)
 - Always **use Docker sandbox** for code execution
 - **WebSocket streaming** via Socket.io for XState transitions
+- **VFS approval gates** before committing any files to disk
+- **State machine determinism** - all transitions must be predictable
+- **Security-first approach** - validate all inputs and sanitize paths
 
 ## Architecture Decisions
 
@@ -253,3 +334,23 @@ When working with Codex on this codebase, leverage these specific capabilities:
 - Repository: https://github.com/johan-droid/Vibe-Hub
 - Render deployment: Check dashboard for live logs
 - Database: PostgreSQL via connection string in env
+
+## AI Agent Best Practices
+
+### Before Making Changes
+1. **Read existing code** - Use `read_file` to understand current implementation
+2. **Check architecture** - Verify V6 isolation rules are followed
+3. **Search patterns** - Use `grep_search` to find similar implementations
+4. **Validate syntax** - Run `node --check` before committing
+
+### During Development
+1. **Use multi_edit** - Make coordinated changes across multiple files
+2. **Test incrementally** - Run `npm test` after significant changes
+3. **Monitor state machine** - Watch XState transitions in logs
+4. **Security review** - Check for credential exposure, path traversal
+
+### After Changes
+1. **Syntax validation** - `node --check` all modified files
+2. **Lint checking** - `npm run lint` to ensure code quality
+3. **Test suite** - `npm run test` to verify functionality
+4. **Documentation** - Update relevant markdown files if needed

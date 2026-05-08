@@ -3,7 +3,32 @@
 **Vibe-Hub: Agentic Coding Platform**  
 **Version:** 6.0.0 (V6 Architecture)  
 **Date:** 2026-05-07  
-**Status:** Production Ready
+**Status:** Production Ready  
+**AI Agent Focus:** Enhanced for AI agent development workflows
+
+---
+
+## AI Agent Quick Reference
+
+**Essential File Locations:**
+- State Machine: `apps/server-bridge/src/orchestrator/state_machine.js`
+- VFS Container: `apps/server-bridge/src/vfs/container.js`
+- API Router: `apps/server-bridge/src/orchestrator/router.js`
+- LLM Client: `apps/server-bridge/src/orchestrator/llm_client.js`
+- Docker Sandbox: `apps/server-bridge/src/sandbox/docker_executor.js`
+
+**Critical Architecture Rules for AI Agents:**
+- ❌ NEVER import between `org_core/` and `user_env/`
+- ✅ Always use ES modules with `.js` extensions
+- ✅ Use Docker sandbox for all code execution
+- ✅ Follow XState deterministic patterns
+- ✅ Maintain VFS approval gates
+
+**AI Agent Development Tools:**
+- `multi_edit` for coordinated file changes
+- `grep_search` for pattern finding
+- `find_by_name` for file discovery
+- `node --check` for syntax validation
 
 ---
 
@@ -178,41 +203,37 @@ src/
 
 ### 3.2 Backend Architecture
 
-#### 3.2.1 Module Structure
+#### 3.2.1 Module Structure for AI Agents
 ```
 apps/server-bridge/
-├── org_core/                    # Immutable constraints
+├── orchestrator/                # AI agent orchestration layer
+│   ├── state_machine.js         # XState machine (7 states)
+│   ├── router.js                # API endpoints
+│   ├── llm_client.js           # LLM abstraction (Gemini/OpenAI)
+│   └── websocket.js             # Socket.io handlers
+│
+├── vfs/                         # Virtual File System
+│   ├── container.js             # VFS main class - STAGING AREA
+│   ├── diff_engine.js           # Change tracking
+│   └── audit_logger.js          # Decision tracking
+│
+├── sandbox/                     # Code execution
+│   ├── docker_executor.js       # Container management
+│   └── github_actions.js        # CI/CD integration
+│
+├── memory/                      # Data access
+│   ├── loader.js                # Semantic graph builder (AST)
+│   ├── database.js              # PostgreSQL client
+│   └── vector_store.js          # pgvector operations
+│
+├── org_core/                    # Immutable constraints (READ-ONLY)
 │   ├── context_builder.js       # CI/CD, deployment rules
 │   ├── ci_cd_templates/         # Workflow templates
 │   └── global_linting/          # Code standards
 │
-├── user_env/                    # User preferences
+├── user_env/                    # User preferences (FLEXIBLE)
 │   ├── context_builder.js       # Language, themes
 │   └── locales/                 # en, hi, or translations
-│
-├── orchestrator/                # Integration layer
-│   ├── state_machine.js         # XState orchestration
-│   ├── router.js                # API endpoints
-│   └── websocket.js             # Socket.io handlers
-│
-├── memory/                      # Data access
-│   ├── loader.js                # Semantic graph builder
-│   ├── database.js              # PostgreSQL client
-│   └── vector_store.js          # pgvector operations
-│
-├── sandbox/                     # Code execution
-│   ├── docker_executor.js       # Container management
-│   └── github_actions.js        # Workflow integration
-│
-├── vfs/                         # Virtual file system
-│   ├── container.js             # VFS main class
-│   ├── diff_engine.js           # Change tracking
-│   └── audit_logger.js          # Decision tracking
-│
-├── auth/                        # Security
-│   ├── oauth.js                 # Google/GitHub OAuth
-│   ├── jwt.js                   # Token management
-│   └── session.js               # Session handling
 │
 └── utils/                       # Utilities
     ├── logger.js                # Winston structured logging
@@ -220,9 +241,15 @@ apps/server-bridge/
     └── security.js              # XSS protection
 ```
 
-#### 3.2.2 State Machine (XState)
+**AI Agent Critical Path:**
+1. `state_machine.js` → Orchestrates all AI operations
+2. `container.js` → Stages changes before disk write
+3. `docker_executor.js` → Tests code in isolation
+4. `router.js` → API endpoints for frontend
+
+#### 3.2.2 State Machine (XState) for AI Agents
 ```javascript
-// Agent Orchestration States
+// Agent Orchestration States - AI AGENT CRITICAL PATH
 const agentMachine = createMachine({
   id: 'agent',
   initial: 'idle',
@@ -280,47 +307,61 @@ const agentMachine = createMachine({
 });
 ```
 
+**AI Agent State Machine Navigation:**
+- **Entry Point**: `idle` → `loading_contexts` (START_TASK event)
+- **AST Analysis**: `parsing_ast` uses Tree-sitter for deterministic parsing
+- **Code Generation**: `drafting_code` calls LLM with context
+- **Safety Testing**: `sandboxing` runs Docker containers with `--network none`
+- **Error Recovery**: `rollback` injects antigravity prompt after 3 failures
+- **Success Path**: VFS staging → User approval → Disk commit
+
 ---
 
 ## 4. Data Flow Architecture
 
-### 4.1 Request Flow
+### 4.1 Request Flow for AI Agents
 
 ```
 User Input (Intent Chat)
     ↓
 API Gateway (/api/agent/prompt)
     ↓
-XState Machine (Orchestrator)
+XState Machine (Orchestrator) ← AI AGENT ENTRY POINT
     ↓
-Context Builder (org_core + user_env)
+Context Builder (org_core + user_env) ← ISOLATION ENFORCED
     ↓
-LLM Client (Gemini/OpenAI)
+LLM Client (Gemini/OpenAI) ← CODE GENERATION
     ↓
-VFS Staging (memory/vfs)
+VFS Staging (memory/vfs) ← SAFETY GATE
     ↓
-Docker Sandbox (sandbox/)
+Docker Sandbox (sandbox/) ← ISOLATION TESTING
     ↓
-WebSocket Streaming (orchestrator/websocket)
+WebSocket Streaming (orchestrator/websocket) ← REAL-TIME UPDATES
     ↓
 Frontend Update (Dashboard)
 ```
 
-### 4.2 Data Persistence Flow
+### 4.2 Data Persistence Flow for AI Agents
 
 ```
-Code Generation
+Code Generation (LLM)
     ↓
-VFS Container (in-memory)
+VFS Container (in-memory) ← STAGING AREA
     ↓
-User Approval (DiffViewer)
+User Approval (DiffViewer) ← HUMAN GATE
     ↓
-Database Write (PostgreSQL)
+Database Write (PostgreSQL) ← PERSISTENCE
     ↓
-Semantic Index (pgvector)
+Semantic Index (pgvector) ← SEARCH INDEX
     ↓
-Audit Log (structured logging)
+Audit Log (structured logging) ← TRACEABILITY
 ```
+
+**AI Agent VFS Workflow:**
+1. `stageFile()` → Add to memory, not disk
+2. `approveFile()` → User approval required
+3. `commitToDisk()` → Only after approval
+4. `audit_logger.js` → Records all decisions
 
 ### 4.3 Real-time Communication
 

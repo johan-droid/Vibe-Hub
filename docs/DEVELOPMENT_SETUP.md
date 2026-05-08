@@ -3,7 +3,49 @@
 **Vibe-Hub: Agentic Coding Platform**  
 **Version:** 6.0.0 (V6 Architecture)  
 **Date:** 2026-05-07  
-**Target Audience**: Developers, DevOps Engineers
+**Target Audience**: Developers, DevOps Engineers, AI Agents  
+**AI Agent Focus**: Enhanced for AI agent development workflows
+
+---
+
+## AI Agent Quick Start
+
+**Essential Commands for AI Agents:**
+```bash
+# Start development environment
+npm run dev
+
+# Validate syntax after changes
+node --check <file>
+
+# Run tests
+npm run test
+
+# Check linting
+npm run lint
+
+# Build for production
+npm run build
+```
+
+**Critical Development Rules for AI Agents:**
+- ✅ Always use ES modules (`import`/`export`)
+- ✅ Include `.js` extensions in relative imports
+- ❌ NEVER import between `org_core/` and `user_env/`
+- ✅ Use Docker sandbox for all code execution
+- ✅ Follow V6 architecture isolation
+
+**AI Agent File Navigation:**
+```bash
+# Find JavaScript files
+find_by_name SearchDirectory="apps/server-bridge/src" Pattern="**/*.js"
+
+# Search for patterns
+grep_search SearchPath="apps/server-bridge/src" Query="import.*from.*org_core"
+
+# List directory structure
+list_dir DirectoryPath="apps/server-bridge/src/orchestrator"
+```
 
 ---
 
@@ -218,33 +260,59 @@ npm run env:check        # Validate environment
 npm run setup            # Complete project setup
 ```
 
-### 4.3 Typical Development Flow
+### 4.3 AI Agent Development Workflow
 
 ```bash
 # 1. Create feature branch
 git checkout -b feature/dark-mode-toggle
 
-# 2. Start development
+# 2. Start development environment
 npm run dev
 
-# 3. Make changes
-# - Edit frontend in apps/user-interface/
-# - Edit backend in apps/server-bridge/
-# - Test changes in browser
+# 3. AI Agent Code Analysis Phase
+# - Read existing code with read_file tool
+# - Search patterns with grep_search
+# - Understand architecture with find_by_name
 
-# 4. Run tests
+# 4. AI Agent Implementation Phase
+# - Use multi_edit for coordinated changes
+# - Follow V6 isolation rules
+# - Include .js extensions in imports
+
+# 5. AI Agent Validation Phase
+node --check apps/server-bridge/src/orchestrator/state_machine.js
+npm run lint
 npm run test
 
-# 5. Lint and format
-npm run lint:fix
-npm run format
+# 6. AI Agent Documentation Phase
+# - Update relevant markdown files
+# - Document API changes
+# - Update architecture docs
 
-# 6. Commit changes
+# 7. Commit changes
 git add .
 git commit -m "feat: add dark mode toggle component"
-
-# 7. Push and create PR
 git push origin feature/dark-mode-toggle
+```
+
+### 4.4 AI Agent Debugging Workflow
+
+```bash
+# 1. Syntax validation
+node --check <file>
+
+# 2. Check for V6 violations
+grep_search SearchPath="apps/server-bridge/src" Query="import.*user_env.*org_core"
+grep_search SearchPath="apps/server-bridge/src" Query="require\("
+
+# 3. Run specific tests
+npm test -- tests/unit/backend/state-machine.test.js
+
+# 4. Monitor state machine
+tail -f logs/agent.log | grep "Agent Status"
+
+# 5. Check VFS staging
+curl -H "Authorization: Bearer <token>" http://localhost:3001/api/vfs/pending
 ```
 
 ---
@@ -662,21 +730,77 @@ Brief description of changes
    - Documentation updated
    - At least one approval
 
-### 8.4 Release Process
+### 8.5 AI Agent Testing Guidelines
 
-```bash
-# Update version
-npm version patch  # or minor/major
+#### Unit Testing for AI Agents
+```javascript
+// tests/unit/backend/state-machine.test.js
+import { createAgentMachine } from '../../apps/server-bridge/src/orchestrator/state_machine';
 
-# Build and test
-npm run build
-npm run test
+test('AI agent state machine transitions correctly', async () => {
+  const machine = createAgentMachine();
+  const service = interpret(machine).start();
 
-# Create release
-git tag v1.2.3
-git push origin v1.2.3
+  // Test AI agent entry point
+  service.send({ type: 'START_TASK' });
+  expect(service.state.value).toBe('loading_contexts');
 
-# Deploy (automated in CI/CD)
+  // Test context loading
+  service.send({ type: 'CONTEXTS_LOADED' });
+  expect(service.state.value).toBe('parsing_ast');
+
+  // Test AST analysis
+  service.send({ type: 'AST_PARSED' });
+  expect(service.state.value).toBe('drafting_code');
+
+  service.stop();
+});
+```
+
+#### Integration Testing for AI Agents
+```javascript
+// tests/integration/api/agent.test.js
+import request from 'supertest';
+import app from '../../../apps/server-bridge/index.js';
+
+test('AI agent API endpoint integration', async () => {
+  const response = await request(app)
+    .post('/api/agent/prompt')
+    .set('Authorization', 'Bearer valid-token')
+    .send({
+      message: 'Create test component',
+      context: { language: 'en', effort: 'minimal' },
+      socketId: 'test-socket'
+    });
+
+  expect(response.status).toBe(200);
+  expect(response.body.success).toBe(true);
+  expect(response.body.sessionId).toBeDefined();
+});
+```
+
+#### VFS Testing for AI Agents
+```javascript
+// tests/unit/backend/vfs.test.js
+import VFSContainer from '../../../apps/server-bridge/src/vfs/container.js';
+
+test('AI agent VFS staging workflow', async () => {
+  const vfs = new VFSContainer();
+  
+  // Test file staging
+  const fileId = await vfs.stageFile('test.js', 'original', 'proposed');
+  expect(fileId).toBeDefined();
+  
+  // Test approval workflow
+  await vfs.approveFile(fileId);
+  const status = await vfs.getFileStatus(fileId);
+  expect(status).toBe('approved');
+  
+  // Test commit to disk
+  await vfs.commitToDisk(fileId);
+  const committed = await vfs.isCommitted(fileId);
+  expect(committed).toBe(true);
+});
 ```
 
 ---

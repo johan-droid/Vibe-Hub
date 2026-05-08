@@ -3,7 +3,30 @@
 **Vibe-Hub: Agentic Coding Platform**  
 **Version:** 6.0.0 (V6 Architecture)  
 **Date:** 2026-05-07  
-**Base URL:** `http://localhost:3001/api`
+**Base URL:** `http://localhost:3001/api`  
+**AI Agent Focus:** Enhanced for AI agent integration
+
+---
+
+## AI Agent Quick Reference
+
+**Essential Endpoints for AI Agents:**
+- `POST /api/agent/prompt` - Start AI agent task
+- `GET /api/agent/status` - Monitor agent state
+- `GET /api/vfs/pending` - View staged files
+- `POST /api/vfs/commit` - Commit approved changes
+- `GET /api/terminal/sessions` - Terminal management
+
+**AI Agent Authentication:**
+- Use `Authorization: Bearer <token>` header
+- Tokens obtained via OAuth handshake
+- Session management via PostgreSQL
+
+**WebSocket Events for AI Agents:**
+- `agent_status` - State machine transitions
+- `file_staged` - VFS updates
+- `terminal_output` - Execution results
+- `error` - Failure notifications
 
 ---
 
@@ -128,7 +151,7 @@ POST /api/auth/logout
 
 ### 2.1 Agent Orchestration
 
-#### Send User Prompt
+#### Send User Prompt (AI Agent Entry Point)
 ```http
 POST /api/agent/prompt
 ```
@@ -152,6 +175,11 @@ POST /api/agent/prompt
 }
 ```
 
+**AI Agent Context Parameters:**
+- `language`: Must be 'en', 'hi', or 'or' (language lock enforced)
+- `effort`: 'minimal', 'standard', or 'thorough'
+- `projectPath`: Target directory for changes
+
 **Response:**
 ```json
 {
@@ -161,6 +189,11 @@ POST /api/agent/prompt
   "message": "Agent started processing your request"
 }
 ```
+
+**AI Agent Flow:**
+1. Triggers XState machine `START_TASK` event
+2. Enters `loading_contexts` state
+3. Begins deterministic orchestration
 
 #### Get Agent Status
 ```http
@@ -251,9 +284,9 @@ POST /api/agent/reset
 
 ## 3. Virtual File System
 
-### 3.1 File Management
+### 3.1 File Management for AI Agents
 
-#### Get Pending Files
+#### Get Pending Files (VFS Staging Area)
 ```http
 GET /api/vfs/pending
 ```
@@ -298,6 +331,12 @@ GET /api/vfs/pending
   ]
 }
 ```
+
+**AI Agent VFS Workflow:**
+1. Files are staged in memory, not on disk
+2. `sandboxPassed: true` indicates Docker testing succeeded
+3. `retries` shows generation attempts
+4. User approval required before commit
 
 #### Get File Diff
 ```http
@@ -351,7 +390,7 @@ GET /api/vfs/diff/:fileId
 }
 ```
 
-#### Commit Approved Changes
+#### Commit Approved Changes (AI Agent Final Step)
 ```http
 POST /api/vfs/commit
 ```
@@ -389,6 +428,12 @@ POST /api/vfs/commit
   "message": "Successfully committed 2 files"
 }
 ```
+
+**AI Agent Commit Process:**
+1. Only files with user approval can be committed
+2. VFS validates file integrity before disk write
+3. Audit log records all commit operations
+4. Semantic index updated for future searches
 
 #### Reject Staged Changes
 ```http
@@ -603,11 +648,12 @@ socket.emit('join_room', {
 });
 ```
 
-### 5.2 Server → Client Events
+### 5.2 Server → Client Events for AI Agents
 
 #### Agent Status Updates
 ```javascript
 socket.on('agent_status', (data) => {
+  // AI AGENT STATE MACHINE TRANSITIONS
   // data: {
   //   status: 'parsing_ast' | 'drafting_code' | 'sandboxing' | 'success' | 'error',
   //   message: 'Analyzing code structure...',
@@ -618,9 +664,18 @@ socket.on('agent_status', (data) => {
 });
 ```
 
+**AI Agent State Monitoring:**
+- `loading_contexts`: Fetching org_core + user_env
+- `parsing_ast`: Tree-sitter analysis in progress
+- `drafting_code`: LLM generating code
+- `sandboxing`: Docker testing code
+- `success`: VFS staging complete, awaiting approval
+- `error`: Failure occurred, check rollback
+
 #### File Staging Events
 ```javascript
 socket.on('file_staged', (data) => {
+  // VFS STAGING UPDATES
   // data: {
   //   fileId: 'file_123',
   //   filePath: 'src/components/DarkModeToggle.jsx',
@@ -634,6 +689,12 @@ socket.on('file_staged', (data) => {
   // }
 });
 ```
+
+**AI Agent VFS Monitoring:**
+- `staged`: New file ready for review
+- `modified`: Existing file changed
+- `new`: Completely new file created
+- `sandboxPassed`: Docker testing succeeded
 
 #### Terminal Output Events
 ```javascript
