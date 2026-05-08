@@ -3,15 +3,71 @@
 **System Specification Document**  
 **Version:** 6.1 Production Release  
 **Document Classification:** Technical Reference  
-**Citation Format:** IEEE 830-1998 / ISO/IEC 25010:2011
+**Citation Format:** IEEE 830-1998 / ISO/IEC 25010:2011  
+**AI Agent Focus:** Enhanced for AI agent development and vibecoding workflows
+
+---
+
+## AI Agent Quick Reference
+
+**Essential Commands for AI Agents:**
+```bash
+# Start development environment
+npm run dev
+
+# Validate syntax after changes
+node --check <file>
+
+# Run comprehensive tests
+npm run test
+
+# Check code quality
+npm run lint
+
+# Build for production
+npm run build
+```
+
+**Critical Architecture Rules for AI Agents:**
+- ✅ Always use ES modules (`import`/`export`)
+- ✅ Include `.js` extensions in relative imports
+- ❌ NEVER import between `org_core/` and `user_env/`
+- ✅ Use Docker sandbox for all code execution
+- ✅ Follow V6 isolation principles
+- ✅ Enforce language lock (en/hi/or only)
+
+**Key File Locations for AI Agents:**
+- **State Machine**: `apps/server-bridge/src/orchestrator/state_machine.js`
+- **VFS Container**: `apps/server-bridge/src/vfs/container.js`
+- **API Router**: `apps/server-bridge/src/orchestrator/router.js`
+- **LLM Client**: `apps/server-bridge/src/orchestrator/llm_client.js`
+- **Docker Sandbox**: `apps/server-bridge/src/sandbox/docker_executor.js`
+- **Frontend**: `apps/user-interface/src/`
+
+**AI Agent Development Tools:**
+- `multi_edit` for coordinated file changes
+- `grep_search` for pattern finding
+- `find_by_name` for file discovery
+- `node --check` for syntax validation
+- `read_file` for code analysis
 
 ---
 
 ## Abstract
 
-Vibe-Hub is a production-grade agentic coding platform that combines deterministic state machine orchestration, abstract syntax tree analysis, and secure containerized execution to provide AI-assisted software development with human-in-the-loop oversight. The system implements a novel Virtual File System (VFS) that prevents autonomous disk writes, requiring explicit user approval for all code modifications. This document provides comprehensive technical specifications, architecture details, and operational guidelines for the Vibe-Hub platform.
+Vibe-Hub is a production-grade agentic coding platform that combines deterministic state machine orchestration, abstract syntax tree analysis, and secure containerized execution to provide AI-assisted software development with human-in-the-loop oversight. The system implements a novel Virtual File System (VFS) that prevents autonomous disk writes, requiring explicit user approval for all code modifications. This document provides comprehensive technical specifications, architecture details, and operational guidelines for Vibe-Hub platform, with enhanced focus on AI agent development workflows and vibecoding capabilities.
 
-**Keywords:** Agentic AI, Code Generation, State Machines, XState, Docker Sandboxing, Virtual File System, AST Analysis, LLM Orchestration
+**Keywords:** Agentic AI, Code Generation, State Machines, XState, Docker Sandboxing, Virtual File System, AST Analysis, LLM Orchestration, AI Agent Development, Vibecoding
+
+**AI Agent Capabilities:**
+- **Multi-file Coordination**: Simultaneous editing across multiple files
+- **Pattern Recognition**: Automatic detection of architectural patterns
+- **Syntax Validation**: Real-time syntax checking and error prevention
+- **Security Review**: Automated security vulnerability detection
+- **Performance Analysis**: Identification of performance bottlenecks
+- **Context Management**: Persistent context across development sessions
+- **Semantic Search**: Advanced code search and understanding
+- **Memory Persistence**: Long-term learning and adaptation
 
 ---
 
@@ -135,12 +191,19 @@ Vibe-Hub implements a **Layered Architecture** with **Event-Driven** components:
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 2.3 Data Flow
+### 2.3 Data Flow for AI Agents
 
 **Normal Flow (Success):**
 ```
 User Prompt → State Machine → Load Contexts → Parse AST → LLM Call → 
 Sandbox Test → VFS Stage → User Approval → Disk Commit → Success
+```
+
+**AI Agent Enhanced Flow:**
+```
+AI Agent Request → Context Builder (org_core + user_env) → AST Analysis → 
+LLM Generation → Docker Validation → VFS Staging → Multi-file Coordination →
+User Review → Batch Commit → Success
 ```
 
 **Failure Flow (Retry):**
@@ -154,6 +217,16 @@ LLM Call with Error Context → Sandbox Test
 Sandbox Error (retries = 3) → Reset Context → Inject Error Prompt → 
 Fresh LLM Call → Continue Normal Flow
 ```
+
+**AI Agent State Machine Navigation:**
+- **Entry Point**: `idle` → `loading_contexts` (START_TASK event)
+- **Context Loading**: Fetch org_core and user_env isolation
+- **AST Analysis**: Tree-sitter deterministic parsing
+- **Code Generation**: LLM with enhanced context
+- **Safety Testing**: Docker sandbox with `--network none`
+- **VFS Staging**: Memory-based file staging
+- **User Approval**: Human-in-the-loop validation
+- **Batch Operations**: Multi-file coordinated commits
 
 ---
 
@@ -176,32 +249,49 @@ Fresh LLM Call → Continue Normal Flow
 | F-011 | Support multiple programming languages | Medium | AST parser tests |
 | F-012 | Parse AST to understand dependencies | High | Tree-sitter tests |
 
-### 3.2 State Machine Functions
+### 3.2 State Machine Functions for AI Agents
 
 **States and Transitions:**
 
-| State | Entry Action | Exit Condition | Exit Action |
-|-------|-------------|----------------|-------------|
-| `idle` | - | `START_TASK` | Store task context |
-| `loading_contexts` | Load org/user contexts | Success | - |
-| `parsing_ast` | Parse target file AST | Success | Store AST graph |
-| `drafting_code` | Call LLM with prompts | Success | Store generated code |
-| `sandboxing` | Execute in Docker | Success | Mark verified |
-| `evaluating_failure` | Analyze error | `retries < 3` | Increment retry |
-| `rollback` | Reset state | Always | Inject error context |
-| `success` | Stage in VFS | - | Emit completion |
-| `fatal_failure` | Log error | - | Notify user |
+| State | Entry Action | Exit Condition | Exit Action | AI Agent Context |
+|-------|-------------|----------------|-------------|------------------|
+| `idle` | - | `START_TASK` | Store task context | AI agent entry point |
+| `loading_contexts` | Load org/user contexts | Success | - | V6 isolation enforcement |
+| `parsing_ast` | Parse target file AST | Success | Store AST graph | Tree-sitter analysis |
+| `drafting_code` | Call LLM with prompts | Success | Store generated code | Enhanced context generation |
+| `sandboxing` | Execute in Docker | Success | Mark verified | Isolated testing |
+| `evaluating_failure` | Analyze error | `retries < 3` | Increment retry | Error recovery logic |
+| `rollback` | Reset state | Always | Inject error context | Antigravity mechanism |
+| `success` | Stage in VFS | - | Emit completion | Human approval required |
+| `fatal_failure` | Log error | - | Notify user | System failure |
 
-### 3.3 VFS Functions
+**AI Agent State Machine Integration:**
+- **Event Handling**: AI agents trigger state transitions via events
+- **Context Injection**: Enhanced context from org_core and user_env
+- **Error Recovery**: Automated rollback with antigravity prompts
+- **Progress Monitoring**: Real-time status via WebSocket
+- **Deterministic Paths**: All state transitions are predictable and testable
+
+### 3.3 VFS Functions for AI Agents
 
 **Operations:**
 
-| Operation | Pre-condition | Post-condition | Side Effects |
-|-----------|--------------|----------------|--------------|
-| `stageFile()` | Code passed sandbox | File in `pending_review` | Emit `file_staged` |
-| `approveFile()` | Status is `pending_review` | Status `approved` | Emit `file_approved` |
-| `rejectFile()` | Status is `pending_review` | Status `rejected` | Emit `file_rejected` |
-| `commitToDisk()` | Status is `approved` | Status `committed` | Write to filesystem |
+| Operation | Pre-condition | Post-condition | Side Effects | AI Agent Usage |
+|-----------|--------------|----------------|--------------|-----------------|
+| `stageFile()` | Code passed sandbox | File in `pending_review` | Emit `file_staged` | Memory-based staging |
+| `approveFile()` | Status is `pending_review` | Status `approved` | Emit `file_approved` | Human approval gate |
+| `rejectFile()` | Status is `pending_review` | Status `rejected` | Emit `file_rejected` | Feedback loop |
+| `commitToDisk()` | Status is `approved` | Status `committed` | Write to filesystem | Persistent storage |
+| `batchStage()` | Multiple files ready | Files staged | Emit batch events | Multi-file coordination |
+| `getDiff()` | File has changes | Diff generated | - | Review visualization |
+| `auditTrail()` | Any operation | Log entry created | - | Traceability |
+
+**AI Agent VFS Workflow:**
+1. **Staging Phase**: Files staged in memory, not on disk
+2. **Validation Phase**: Sandbox testing and syntax validation
+3. **Review Phase**: Human approval through diff interface
+4. **Commit Phase**: Batch commits with audit logging
+5. **Tracking Phase**: Complete audit trail for all operations
 
 ---
 

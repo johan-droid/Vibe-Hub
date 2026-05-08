@@ -60,3 +60,20 @@ Thumbs.db
 # Vibe Hub Specific
 # (Add any project-specific ignore patterns here)
 apps/server-bridge/scratch/rollouts/
+
+# Documentation and archive files
+docs/archive/
+docs/consolidated/
+*.md.bak
+*.md.tmp
+
+# Development artifacts
+scratch.js
+*.swp
+*.swo
+
+# Temporary files
+temp/
+tmp/
+.DS_Store
+Thumbs.db
