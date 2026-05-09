@@ -48,7 +48,7 @@ export default function ConnectorsPanel() {
           <Plug size={16} className="text-primary" />
           <span className="text-xs font-black uppercase tracking-[0.15em]">Connectors</span>
         </div>
-        <button className="p-2 hover:bg-surface-container-low rounded-lg transition-colors">
+        <button aria-label="Settings" title="Settings" className="p-2 hover:bg-surface-container-low rounded-lg transition-colors">
           <Settings2 size={16} className="text-on-surface-variant" />
         </button>
       </div>
@@ -70,6 +70,8 @@ export default function ConnectorsPanel() {
                 className="w-full h-10 bg-surface-container-low border border-outline-variant/20 rounded-xl pl-4 pr-10 text-xs font-medium focus:outline-none focus:border-primary/40 focus:bg-surface-container-lowest transition-all"
               />
               <button 
+                aria-label="Link Repository"
+                title="Link Repository"
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-primary text-on-primary rounded-lg shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
                 disabled={loading || !repoUrl}
                 onClick={async () => {
@@ -102,7 +104,7 @@ export default function ConnectorsPanel() {
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle2 size={12} className="text-google-green" />
-                    <button className="text-on-surface-variant/40 hover:text-google-red transition-colors">
+                    <button aria-label={`Remove ${project.name}`} title={`Remove ${project.name}`} className="text-on-surface-variant/40 hover:text-google-red transition-colors">
                       <X size={12} />
                     </button>
                   </div>
@@ -137,7 +139,7 @@ export default function ConnectorsPanel() {
         <section>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant/40">File Assets</h3>
-            <label className="cursor-pointer">
+            <label aria-label="Upload File" title="Upload File" className="cursor-pointer">
               <input type="file" className="hidden" onChange={(e) => {
                 const file = e.target.files[0];
                 if (file) addUploadedFile({ id: Date.now().toString(), name: file.name, size: file.size });
@@ -156,7 +158,7 @@ export default function ConnectorsPanel() {
                   <p className="text-[11px] font-bold truncate">{file.name}</p>
                   <p className="text-[9px] font-medium text-on-surface-variant/40">{(file.size / 1024).toFixed(1)} KB</p>
                 </div>
-                <button className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-google-red/10 hover:text-google-red rounded-lg transition-all">
+                <button aria-label={`Remove ${file.name}`} title={`Remove ${file.name}`} className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-google-red/10 hover:text-google-red rounded-lg transition-all">
                   <X size={12} />
                 </button>
               </div>
