@@ -20,6 +20,11 @@ import { modelService } from './models.js';
 /**
  * AgentOrchestrator — Brain v5.0 (Task Queue Edition)
  */
+
+import { SecurityGate } from "./agents/security-gate.js";
+import { SolutionsLedger } from "./solutions-ledger.js";
+import { TheBrain } from "./agents/the-brain.js";
+
 export class AgentOrchestrator {
   constructor() {
     this.router = new Router();
@@ -346,6 +351,19 @@ export class AgentOrchestrator {
           toolCalls: finalResult?.toolCalls?.map(call => call.name || call.tool || call) || [],
           contentPreview: finalResult?.content || '',
         });
+
+
+        if (targetDomain === 'security') {
+          const gate = new SecurityGate();
+          const check = gate.analyze(finalResult?.content);
+          if (check.status === "REJECTED") {
+            // Re-route to the brain
+            SolutionsLedger.recordFailure('security-scan', `[SECURITY_ALERT] ${check.vulnerability_report}`);
+            const brain = new TheBrain();
+            brain.process('security-scan', finalResult?.content);
+            return await runExpertLoop('code');
+          }
+        }
 
         if (effortLevel === 'quick') break;
 
