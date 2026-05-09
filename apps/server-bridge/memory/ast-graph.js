@@ -488,8 +488,19 @@ export class HybridContextRetriever {
     if (astResultCount < 3 && query) {
       // Fall back to embeddings for semantic search
       const embedding = await this.embeddings.getEmbedding(query);
-      // Query would go to pgvector here - simplified
-      results.embeddingResults = []; // Populated by caller with actual vector search
+
+      // Enforce V6 Isolation: Never fetch user_env constraints
+      const res = await pool.query(
+        `SELECT id, file_path, node_name, content,
+                1 - (embedding <=> $1::vector) as similarity
+         FROM semantic_embeddings
+         WHERE context_type != 'user_env'
+         ORDER BY embedding <=> $1::vector
+         LIMIT 5`,
+        [`[${embedding.join(',')}]`]
+      );
+
+      results.embeddingResults = res.rows;
     }
 
     return results;
