@@ -1,0 +1,5 @@
+{
+  "status": "failure",
+  "vitest_output": "FAIL test/api.test.js [ test/api.test.js ] Error: Cannot find package 'supertest' imported from /app/apps/server-bridge/test/api.test.js",
+  "hono_patch_verified": true
+}

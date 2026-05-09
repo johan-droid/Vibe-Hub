@@ -20,7 +20,8 @@
     "start:server": "npm run start --workspace=apps/server-bridge",
     "validate": "node --check apps/server-bridge/index.js && node --check apps/server-bridge/orchestrator/index.js && node --check apps/server-bridge/orchestrator/skill-loader.js",
     "sanitize": "node scripts/selina-sanitize.mjs",
-    "release:gate": "node scripts/selina-release-gate.mjs"
+    "release:gate": "node scripts/selina-release-gate.mjs",
+    "postinstall": "npx patch-package"
   },
   "devDependencies": {
     "@babel/plugin-transform-modules-systemjs": "^7.29.4",
