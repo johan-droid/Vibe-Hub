@@ -27,6 +27,7 @@ import {
 import { consumeOAuthHandoff } from './oauth-store.js';
 import { getUserAuthHistory } from '../db.js';
 import logger from '../utils/detailed-logger.js';
+import { csrfProtection } from '../utils/csrf.js';
 
 const router = Router();
 
@@ -111,7 +112,7 @@ router.get('/status', optionalAuth, async (req, res) => {
  * POST /api/auth/logout
  * Logout current session
  */
-router.post('/logout', optionalAuth, async (req, res) => {
+router.post('/logout', optionalAuth, csrfProtection, async (req, res) => {
   try {
     const { sessionId } = req;
     const userId = req.user?.id;
@@ -133,7 +134,7 @@ router.post('/logout', optionalAuth, async (req, res) => {
  * POST /api/auth/logout-all
  * Logout all sessions except current
  */
-router.post('/logout-all', requireAuth, async (req, res) => {
+router.post('/logout-all', requireAuth, csrfProtection, async (req, res) => {
   try {
     const { sessionId } = req;
     const userId = req.user.id;
@@ -186,7 +187,7 @@ router.get('/sessions', requireAuth, async (req, res) => {
  * POST /api/auth/sessions/:id/revoke
  * Revoke a specific session
  */
-router.post('/sessions/:id/revoke', requireAuth, async (req, res) => {
+router.post('/sessions/:id/revoke', requireAuth, csrfProtection, async (req, res) => {
   try {
     const { id: sessionIdToRevoke } = req.params;
     const userId = req.user.id;
