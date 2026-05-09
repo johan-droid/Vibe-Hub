@@ -13,6 +13,7 @@
     "apps/server-bridge"
   ],
   "scripts": {
+    "postinstall": "patch-package",
     "dev:ui": "npm run dev --workspace=apps/user-interface",
     "dev:server": "npm run dev --workspace=apps/server-bridge",
     "dev": "npx concurrently -n UI,BRAIN -c cyan,magenta \"npm run dev:ui\" \"npm run dev:server\"",
@@ -23,7 +24,8 @@
     "release:gate": "node scripts/selina-release-gate.mjs"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "concurrently": "^9.1.0",
+    "patch-package": "^8.0.1"
   },
   "overrides": {
     "workbox-build": {
