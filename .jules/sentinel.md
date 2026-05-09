@@ -1,4 +1,0 @@
-## 2026-05-09 - [Express Framework Header Leakage & Missing Auth CSRF]
-**Vulnerability:** The Express `X-Powered-By` header was enabled, potentially leaking framework details, and state-changing authentication endpoints (`/logout`, `/logout-all`, `/sessions/:id/revoke`) in `apps/server-bridge/auth/routes.js` lacked explicit CSRF protection middleware.
-**Learning:** Even with `helmet` enabled (which usually disables `X-Powered-By`), explicitly disabling `X-Powered-By` is a good defense-in-depth practice. Additionally, while global CSRF protection might exist, sensitive session mutation endpoints using cookies must explicitly enforce CSRF validation (`csrfProtection` middleware) to prevent forceful logouts or session revocations via cross-origin requests.
-**Prevention:** Always verify that sensitive endpoints explicitly include CSRF middleware, and explicitly disable `X-Powered-By` via `app.disable('x-powered-by')` as a baseline server configuration.

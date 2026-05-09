@@ -344,12 +344,11 @@ export class VFSContainer {
     try {
       const entries = await this.instance.fs.readdir(path, { withFileTypes: true });
 
-      const limit = pLimit(10);
       const ignoredResults = await Promise.all(
-        entries.map((e) => limit(() => {
+        entries.map((e) => {
           const fullPath = path === '.' ? e.name : `${path}/${e.name}`;
           return this.isPathIgnored(fullPath);
-        }))
+        })
       );
 
       return entries
@@ -660,7 +659,6 @@ export class VFSContainer {
     const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, (m) => '\\' + m);
     const queryRegex = new RegExp(escapedQuery, 'i');
 
-    const limit = pLimit(10);
     const walk = async (dir) => {
       try {
         const entries = await this.instance.fs.readdir(dir, { withFileTypes: true });
