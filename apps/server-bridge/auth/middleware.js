@@ -6,7 +6,7 @@ import {
   rotateRefreshToken,
 } from './session.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'test' || process.env.VITEST ? 'test-secret' : undefined);
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'test' ? 'test-secret' : undefined);
 const AUTH_COOKIES = {
   access: 'selina_access_token',
   session: 'selina_session',

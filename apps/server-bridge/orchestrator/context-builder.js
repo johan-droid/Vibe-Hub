@@ -195,10 +195,20 @@ export class ContextBuilder {
     linkedProjects
   }) {
     // Load both systems independently
+    // Strict architectural isolation: No cross-imports between org_core and user_env are allowed here.
     const [orgConstraints, userPrefs] = await Promise.all([
       OrgConstraintsLoader.load(projectName),
       UserPreferencesLoader.load(userId)
     ]);
+
+    // Ensure org_core constraints override user_env preferences if there is any overlap
+    const orgOverrides = orgConstraints.map(c => c.type);
+    for (const prefType of Object.keys(userPrefs)) {
+      if (orgOverrides.includes(prefType)) {
+        // org_core MUST override user_env
+        delete userPrefs[prefType];
+      }
+    }
 
     const userLang = userPrefs.language?.content?.code || 'en';
 
