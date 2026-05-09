@@ -1,3 +1,4 @@
+import logger from '../utils/detailed-logger.js';
 import jwt from 'jsonwebtoken';
 import {
   validateAccessTokenSession,
@@ -13,11 +14,11 @@ const AUTH_COOKIES = {
 };
 
 function isSecureCookie() {
-  return process.env.NODE_ENV === 'production' && String(process.env.UI_ORIGIN).startsWith('https://');
+  return process.env.NODE_ENV === 'production';
 }
 
 if (!JWT_SECRET) {
-  console.error('FATAL: JWT_SECRET environment variable is not set.');
+  logger.error('Auth', 'FATAL: JWT_SECRET environment variable is not set.');
   process.exit(1);
 }
 
@@ -113,7 +114,7 @@ export async function authenticateFromHeaders(headers = {}, explicitAccessToken 
  */
 export function setAuthCookies(res, { accessToken, refreshToken, sessionToken }) {
   const secure = isSecureCookie();
-  const sameSite = secure ? 'none' : 'lax';
+  const sameSite = 'strict';
 
   // Access token (short-lived, sent automatically with API calls)
   res.cookie(AUTH_COOKIES.access, accessToken, {
@@ -152,7 +153,7 @@ export function setAuthCookies(res, { accessToken, refreshToken, sessionToken })
  */
 export function clearAuthCookies(res) {
   const secure = isSecureCookie();
-  const sameSite = secure ? 'none' : 'lax';
+  const sameSite = 'strict';
 
   res.clearCookie(AUTH_COOKIES.access, { path: '/', secure, sameSite });
   res.clearCookie(AUTH_COOKIES.session, { path: '/', secure, sameSite });

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { memo, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Activity, AlertCircle, CheckCircle2, GitBranch, PenTool, Search, Terminal } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
@@ -24,7 +24,7 @@ function iconFor(text) {
   return { icon: Terminal, color: 'text-secondary' };
 }
 
-export default function ActivityFeed() {
+const ActivityFeed = memo(function ActivityFeed() {
   const { agentThoughts } = useStore();
   const scrollRef = useRef(null);
   const entries = useMemo(() => agentThoughts.map((thought) => ({ thought, text: thoughtText(thought) })).filter((entry) => entry.text), [agentThoughts]);
@@ -81,7 +81,7 @@ export default function ActivityFeed() {
                 />
               </div>
               <h3 className="label-large uppercase tracking-[0.2em] opacity-30">Waiting for Link</h3>
-              <p className="mt-2 label-small text-on-surface-variant/30 leading-relaxed max-w-[200px]">
+              <p className="mt-2 label-small text-on-surface-variant/50 leading-relaxed max-w-[200px]">
                 Initialize workspace communication to begin data ingestion.
               </p>
             </div>
@@ -90,4 +90,6 @@ export default function ActivityFeed() {
       </div>
     </div>
   );
-}
+});
+
+export default ActivityFeed;
