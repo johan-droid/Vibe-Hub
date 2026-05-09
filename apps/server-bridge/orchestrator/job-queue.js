@@ -1,3 +1,4 @@
+import { TheBrain } from "./agents/the-brain.js";
 import crypto from 'crypto';
 import IORedis from 'ioredis';
 import { Job, Queue, Worker } from 'bullmq';
@@ -46,7 +47,25 @@ export function createCodeQueue({ processor, io }) {
           timestamp: new Date().toISOString(),
         });
       }
+
+      // Evaluate if task needs heavy-lift bypass
+      const brain = new TheBrain();
+      const brainResult = await brain.process(job.id, job.data.prompt);
+
+      if (brainResult && brainResult.isHeavyLift) {
+        logger.info(`Task ${job.id} identified as heavy-lift (>5 files). Dispatched to GitHub Actions.`);
+        if (io && socketId) {
+          io.to(socketId).emit('agent_status', {
+            status: 'heavy_lift_dispatched',
+            message: 'Task spans > 5 files. Dispatched to async Heavy-Lift runner.',
+            jobId: job.id
+          });
+        }
+        return { status: 'bypassed_for_heavy_lift' };
+      }
+
       return processor({ ...job.data, jobId: job.id }, job);
+
     },
     {
       connection: workerConnection,
