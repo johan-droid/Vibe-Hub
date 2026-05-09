@@ -32,6 +32,7 @@
     "dompurify": "^3.4.2",
     "express-rate-limit": "^8.5.1",
     "ip-address": "^10.2.0",
-    "serialize-javascript": "^7.0.5"
+    "serialize-javascript": "^7.0.5",
+    "hono": "4.12.18"
   }
 }
