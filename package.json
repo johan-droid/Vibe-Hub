@@ -20,10 +20,12 @@
     "start:server": "npm run start --workspace=apps/server-bridge",
     "validate": "node --check apps/server-bridge/index.js && node --check apps/server-bridge/orchestrator/index.js && node --check apps/server-bridge/orchestrator/skill-loader.js",
     "sanitize": "node scripts/selina-sanitize.mjs",
-    "release:gate": "node scripts/selina-release-gate.mjs"
+    "release:gate": "node scripts/selina-release-gate.mjs",
+    "postinstall": "npx patch-package"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "concurrently": "^9.1.0",
+    "patch-package": "^8.0.1"
   },
   "overrides": {
     "workbox-build": {
