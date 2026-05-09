@@ -35,7 +35,7 @@ const safePath = z.string()
 export const codeRequestSchema = z.object({
   prompt: z.string()
     .min(1, 'Prompt is required')
-    .max(10000, 'Prompt too long (max 10000 chars)'),
+    .max(1000, 'Prompt too long (max 1000 chars)'),
   userId: z.string()
     .min(1, 'User ID is required')
     .uuid('Invalid user ID format'),

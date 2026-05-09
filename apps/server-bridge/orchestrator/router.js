@@ -5,7 +5,8 @@ import { createActor } from 'xstate';
 import agentMachine from './state_machine.js';
 import { selectSkillProfile } from './skill-graph.js';
 import { vfs } from '../vfs/container.js';
-import { logger, logStateTransition } from '../utils/logger.js';
+import { logStateTransition } from '../utils/logger.js';
+import logger from '../utils/detailed-logger.js';
 import { codeRequestSchema, vfsCommitSchema, validateRequest } from '../utils/validation.js';
 import { captureException } from '../utils/sentry.js';
 import { recordSandboxDuration } from '../utils/metrics.js';
@@ -171,7 +172,7 @@ ${prompt}
                     status: entry.status,
                     timestamp: entry.metadata.timestamp
                 });
-                console.log(`[Router] Broadcasted staged file: ${entry.filePath}`);
+                logger.info('Router', `Broadcasted staged file: ${entry.filePath}`);
             }
         };
         vfs.on('file_staged', onFileStaged);
@@ -190,7 +191,7 @@ ${prompt}
             const agentService = createActor(agentMachine);
             const subscription = agentService.subscribe({
               next: (state) => {
-                console.log(`Agent Status: transitioned to [${state.value}]`);
+                logger.info('Agent', `transitioned to [${state.value}]`);
                 if (state.value === 'sandboxing') {
                     sandboxStartedAt = Date.now();
                 }

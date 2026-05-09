@@ -1,3 +1,4 @@
+import logger from '../utils/detailed-logger.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { exec } from 'child_process';
@@ -34,11 +35,11 @@ class RepositoryManager {
       const exists = await fs.access(localPath).then(() => true).catch(() => false);
       
       if (!exists) {
-        console.log(`[RepoManager] Cloning ${repoUrl} to ${localPath}`);
+        logger.info('RepoManager', `Cloning ${repoUrl} to ${localPath}`);
         await fs.mkdir(path.dirname(localPath), { recursive: true });
         await execPromise(`git clone --depth 1 ${repoUrl} ${localPath}`);
       } else {
-        console.log(`[RepoManager] Updating ${repoName}`);
+        logger.info('RepoManager', `Updating ${repoName}`);
         await execPromise(`git -C ${localPath} pull`);
       }
 
@@ -53,7 +54,7 @@ class RepositoryManager {
         indexedSymbols: Object.keys(graph).length
       };
     } catch (error) {
-      console.error(`[RepoManager] Link failed:`, error);
+      logger.error('RepoManager', `Link failed:`, error);
       throw error;
     }
   }

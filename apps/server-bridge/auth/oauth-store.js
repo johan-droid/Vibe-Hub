@@ -1,3 +1,4 @@
+import logger from '../utils/detailed-logger.js';
 import crypto from 'crypto';
 import { pool } from '../db.js';
 
@@ -22,7 +23,7 @@ async function withRetry(operation, retries = 3, baseDelay = 500) {
       }
 
       const delay = baseDelay * Math.pow(2, attempt);
-      console.log(`[OAuth Retry] Attempt ${attempt + 1}/${retries} failed, retrying in ${delay}ms...`);
+      logger.info('OAuth', `Attempt ${attempt + 1}/${retries} failed, retrying in ${delay}ms...`);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
@@ -66,7 +67,7 @@ export async function createOAuthState({ provider, returnOrigin }) {
     }, 3, 500);
     return state;
   } catch (err) {
-    console.warn('[OAuth] DB insert failed after retries, using fallback for state:', err.message);
+    logger.warn('OAuth', 'DB insert failed after retries, using fallback for state:', { message: err.message });
     // Fallback to in-memory for transient failures
     fallbackOAuthStates.set(state, {
       provider,
@@ -117,7 +118,7 @@ export async function consumeOAuthState({ provider, state }) {
       returnOrigin: record.return_origin,
     };
   } catch (err) {
-    console.warn('[OAuth] DB query failed, checking fallback for state:', err.message);
+    logger.warn('OAuth', 'DB query failed, checking fallback for state:', { message: err.message });
     // Fallback to in-memory
     const fallback = fallbackOAuthStates.get(state);
     if (fallback && fallback.expiresAt > Date.now() && fallback.provider === provider) {
@@ -151,10 +152,10 @@ export async function createOAuthHandoff({ provider, session, user }) {
         ]
       );
     }, 3, 500);
-    console.log('[OAuth] Handoff stored in database:', code.substring(0, 8) + '...');
+    logger.info('OAuth', 'Handoff stored in database:', { code: code.substring(0, 8) + '...' });
     return code;
   } catch (err) {
-    console.warn('[OAuth] DB insert failed after retries, using fallback for handoff:', err.message);
+    logger.warn('OAuth', 'DB insert failed after retries, using fallback for handoff:', { message: err.message });
     // Fallback to in-memory
     fallbackOAuthHandoffs.set(code, {
       provider,
@@ -162,7 +163,7 @@ export async function createOAuthHandoff({ provider, session, user }) {
       user,
       expiresAt: expiresAt.getTime(),
     });
-    console.log('[OAuth] Handoff stored in memory fallback:', code.substring(0, 8) + '...');
+    logger.info('OAuth', 'Handoff stored in memory fallback:', { code: code.substring(0, 8) + '...' });
     return code;
   }
 }
@@ -197,13 +198,13 @@ export async function consumeOAuthHandoff(code) {
 
     // Check if already consumed
     if (record.consumed_at) {
-      console.warn('[OAuth] Attempt to reuse handoff code:', code.substring(0, 8));
+      logger.warn('OAuth', 'Attempt to reuse handoff code:', { message: code.substring(0, 8) });
       return null;
     }
 
     // Check expiration
     if (new Date(record.expires_at) <= new Date()) {
-      console.warn('[OAuth] Expired handoff code:', code.substring(0, 8));
+      logger.warn('OAuth', 'Expired handoff code:', { message: code.substring(0, 8) });
       return null;
     }
 
@@ -226,7 +227,7 @@ export async function consumeOAuthHandoff(code) {
       user: parseJsonb(record.user_data),
     };
   } catch (err) {
-    console.warn('[OAuth] DB query failed, checking fallback for handoff:', err.message);
+    logger.warn('OAuth', 'DB query failed, checking fallback for handoff:', { message: err.message });
     // Fallback to in-memory
     const fallback = fallbackOAuthHandoffs.get(code);
     if (fallback && fallback.expiresAt > Date.now()) {
@@ -244,8 +245,8 @@ export async function cleanupExpiredOAuthTokens() {
   try {
     await pool.query('DELETE FROM oauth_states WHERE expires_at < NOW()');
     await pool.query('DELETE FROM oauth_handoffs WHERE expires_at < NOW() AND consumed_at IS NULL');
-    console.log('[OAuth] Cleanup completed - removed expired tokens');
+    logger.info('OAuth', 'Cleanup completed - removed expired tokens');
   } catch (err) {
-    console.error('[OAuth] Cleanup failed:', err.message);
+    logger.error('OAuth', 'Cleanup failed:', err.message);
   }
 }
