@@ -32,7 +32,7 @@ function LoadingText({ text = SELINA_BRAND.productName, subtitle = 'Initializing
       <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white">
         {text}
       </h1>
-      <p className="text-sm font-semibold tracking-[0.22em] uppercase text-white/45">
+      <p className="text-sm font-semibold tracking-[0.22em] uppercase text-white/60">
         {subtitle}{dots}
       </p>
       
@@ -93,7 +93,7 @@ export function FullPageLoader({
       
       {/* Footer watermark */}
       <motion.div
-        className="absolute bottom-8 text-[10px] font-mono tracking-[0.4em] text-white/15"
+        className="absolute bottom-8 text-[10px] font-mono tracking-[0.4em] text-white/30"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 2 }}

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ThemeContext } from './ThemeContext.js';
+import { ThemeContext } from './ThemeContextDef';
 
 export const ThemeProvider = ({ children }) => {
   // Always use dark theme as specified

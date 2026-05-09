@@ -128,13 +128,17 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"], // Required for Swagger UI and some UI libraries
+      styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
       scriptSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: cspConnectSrc,
     },
   },
-  crossOriginEmbedderPolicy: false, // Allow embedding if needed
+  crossOriginEmbedderPolicy: false,
+  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  frameguard: { action: 'deny' },
+  xContentTypeOptions: true,
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }));
 
 // Rate limiting - Prevent abuse
@@ -153,40 +157,54 @@ const redisRateStore = (prefix) => redisClients
     })
   : undefined;
 
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: parseLimit(process.env.RATE_LIMIT_GENERAL, isProd ? 100 : 1000),
-  message: { error: 'Too many requests, please try again later.' },
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: parseLimit(process.env.RATE_LIMIT_AUTH, isProd ? 30 : 300),
+  message: { error: 'Auth rate limit exceeded. Please wait.' },
   standardHeaders: true,
   legacyHeaders: false,
-  store: redisRateStore('global'),
+  store: redisRateStore('auth'),
 });
 
-const apiLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: parseLimit(process.env.RATE_LIMIT_API, isProd ? 30 : 300),
-  message: { error: 'API rate limit exceeded.' },
+const agentLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: parseLimit(process.env.RATE_LIMIT_AGENT, isProd ? 10 : 100),
+  message: { error: 'Agent prompt rate limit exceeded. Please wait.' },
   standardHeaders: true,
   legacyHeaders: false,
-  store: redisRateStore('api'),
+  store: redisRateStore('agent'),
 });
 
-const orchestrationLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: parseLimit(process.env.RATE_LIMIT_ORCHESTRATION, isProd ? 5 : 60),
-  message: { error: 'Orchestration rate limit exceeded. Please wait.' },
+const vfsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: parseLimit(process.env.RATE_LIMIT_VFS, isProd ? 200 : 2000),
+  message: { error: 'VFS rate limit exceeded. Please wait.' },
   standardHeaders: true,
   legacyHeaders: false,
-  store: redisRateStore('code'),
+  store: redisRateStore('vfs'),
 });
 
-app.use(generalLimiter); // Apply to all requests
-app.use('/api/', apiLimiter); // Stricter for API
-app.use('/api/code', orchestrationLimiter); // Strictest for LLM calls
-app.use('/api/v6/code', orchestrationLimiter);
+const terminalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: parseLimit(process.env.RATE_LIMIT_TERMINAL, isProd ? 50 : 500),
+  message: { error: 'Terminal rate limit exceeded. Please wait.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: redisRateStore('terminal'),
+});
 
-const WS_RATE_WINDOW_MS = parseLimit(process.env.WS_RATE_WINDOW_MS, 60 * 1000);
-const WS_MAX_CONNECTIONS_PER_WINDOW = parseLimit(process.env.WS_MAX_CONNECTIONS_PER_WINDOW, isProd ? 30 : 300);
+
+app.use('/api/auth/', authLimiter);
+app.use('/api/code', agentLimiter);
+app.use('/api/v6/code', agentLimiter);
+app.use('/api/fs/', vfsLimiter);
+app.use('/api/v6/fs/', vfsLimiter);
+app.use('/api/terminal/', terminalLimiter);
+app.use('/api/v6/terminal/', terminalLimiter);
+
+const WS_RATE_WINDOW_MS = parseLimit(process.env.WS_RATE_WINDOW_MS, 15 * 60 * 1000);
+const WS_MAX_CONNECTIONS_PER_WINDOW = parseLimit(process.env.WS_MAX_CONNECTIONS_PER_WINDOW, isProd ? 1000 : 1000);
 const WS_MAX_ACTIVE_PER_IP = parseLimit(process.env.WS_MAX_ACTIVE_PER_IP, isProd ? 50 : 500);
 const WS_MAX_ACTIVE_PER_USER = parseLimit(process.env.WS_MAX_ACTIVE_PER_USER, isProd ? 5 : 50);
 const wsBuckets = new Map();
@@ -255,7 +273,7 @@ function releaseWsUser(userId) {
 const corsOrigin = process.env.NODE_ENV === 'production' 
   ? (process.env.UI_ORIGIN || true) 
   : true;
-app.use(cors({ origin: corsOrigin, credentials: true }));
+app.use(cors({ origin: process.env.UI_ORIGIN || 'http://localhost:5173', credentials: true }));
 
 
 // Request context logging (adds requestId and logs requests)
@@ -701,20 +719,20 @@ io.use(async (socket, next) => {
 });
 
 io.on('connection', (socket) => {
-  console.log(`[Socket.io] Client connected: ${socket.id}`);
+  logger.info('Socket.io', `Client connected: ${socket.id}`);
   socket.join(`user_${socket.data.user.id}`);
   
   socket.on('join', (data) => {
     if (data.userId && String(data.userId) === String(socket.data.user.id)) {
       socket.join(`user_${socket.data.user.id}`);
-      console.log(`[Socket.io] Socket ${socket.id} joined room user_${socket.data.user.id}`);
+      logger.info('Socket.io', `Socket ${socket.id} joined room user_${socket.data.user.id}`);
     }
   });
   
   socket.on('disconnect', () => {
     releaseWsConnection(socket.data.ip);
     releaseWsUser(socket.data.user?.id);
-    console.log(`[Socket.io] Client disconnected: ${socket.id}`);
+    logger.info('Socket.io', `Client disconnected: ${socket.id}`);
   });
 });
 
@@ -1505,17 +1523,17 @@ async function start() {
   // ── Database ────────────────────────────────────────────────────────────
   let dbHealthy = false;
   try {
-    console.log('[Startup] Initializing database...');
+    logger.info('Startup', 'Initializing database...');
     await initDB();
 
     // Verify database is actually working with a test query
     const { pool } = await import('./db.js');
     const testResult = await pool.query('SELECT NOW() as current_time');
-    console.log('[Startup] Database connected successfully at:', testResult.rows[0].current_time);
+    logger.info('Startup', 'Database connected successfully at:', { details: testResult.rows[0].current_time });
     dbHealthy = true;
   } catch (err) {
-    console.error('[Startup] Database initialization failed:', err.message);
-    console.error('[Startup] Auth features will not work without database connection.');
+    logger.error('Startup', 'Database initialization failed:', err.message);
+    logger.error('Startup', 'Auth features will not work without database connection.');
     // Auth requires DB - log warning but still start server for non-auth features
   }
 

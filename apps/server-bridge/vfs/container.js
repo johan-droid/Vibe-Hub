@@ -1,3 +1,5 @@
+import logger from '../utils/detailed-logger.js';
+import pLimit from 'p-limit';
 /**
  * Virtual File System (VFS) — Secure Staging Area v6
  * 
@@ -92,7 +94,7 @@ class VirtualFileSystem extends EventEmitter {
       }
       setVfsStats(this.getStats());
     } catch (error) {
-      console.warn(`[VFS] Redis hydration failed: ${error.message}`);
+      logger.warn('VFS', `Redis hydration failed: ${error.message}`);
     }
   }
 
@@ -112,7 +114,7 @@ class VirtualFileSystem extends EventEmitter {
         this.emit(payload.eventName, payload.entry);
       }
     } catch (error) {
-      console.warn(`[VFS] Redis event ignored: ${error.message}`);
+      logger.warn('VFS', `Redis event ignored: ${error.message}`);
     }
   }
 
@@ -136,7 +138,7 @@ class VirtualFileSystem extends EventEmitter {
       .sadd(this.redisEntriesKey, entry.filePath)
       .publish(this.redisChannel, JSON.stringify(payload))
       .exec()
-      .catch(error => console.warn(`[VFS] Redis persist failed: ${error.message}`));
+      .catch(error => logger.warn('VFS', `Redis persist failed: ${error.message}`));
   }
 
   deleteEntry(eventName, filePath, entry) {
@@ -156,7 +158,7 @@ class VirtualFileSystem extends EventEmitter {
       .srem(this.redisEntriesKey, filePath)
       .publish(this.redisChannel, JSON.stringify(payload))
       .exec()
-      .catch(error => console.warn(`[VFS] Redis delete failed: ${error.message}`));
+      .catch(error => logger.warn('VFS', `Redis delete failed: ${error.message}`));
   }
 
   audit(operation, entry, payload = {}) {
@@ -213,7 +215,7 @@ class VirtualFileSystem extends EventEmitter {
       size: proposedContent.length
     });
     
-    console.log(`[VFS] Staged: ${filePath} (${proposedContent.length} bytes)`);
+    logger.info('VFS', `Staged: ${filePath} (${proposedContent.length} bytes)`);
     return entry;
   }
 
@@ -265,7 +267,7 @@ class VirtualFileSystem extends EventEmitter {
       approvedAt: entry.metadata.approvedAt
     });
     
-    console.log(`[VFS] Approved for commit: ${filePath}`);
+    logger.info('VFS', `Approved for commit: ${filePath}`);
     
     return entry;
   }
@@ -294,7 +296,7 @@ class VirtualFileSystem extends EventEmitter {
       reason
     });
     
-    console.log(`[VFS] Rejected: ${filePath} (${reason})`);
+    logger.info('VFS', `Rejected: ${filePath} (${reason})`);
 
     // Keep entry for audit log, but mark as rejected
     return entry;
@@ -317,7 +319,8 @@ class VirtualFileSystem extends EventEmitter {
 
     try {
       // Write to physical disk
-      await fsModule.writeFile(filePath, entry.proposedContent, 'utf-8');
+      const limit = pLimit(10);
+      await limit(() => fsModule.writeFile(filePath, entry.proposedContent, 'utf-8'));
       
       entry.status = 'committed';
       entry.metadata.committedAt = new Date().toISOString();
@@ -331,11 +334,11 @@ class VirtualFileSystem extends EventEmitter {
         size: entry.proposedContent.length
       });
       
-      console.log(`[VFS] Committed to disk: ${filePath}`);
+      logger.info('VFS', `Committed to disk: ${filePath}`);
       
       return entry;
     } catch (error) {
-      console.error(`[VFS] Commit failed: ${filePath}`, error);
+      logger.error('VFS', `Commit failed: ${filePath}`, error);
       
       // Audit logging for failed commit
       this.audit('commit_failed', entry, {
@@ -363,7 +366,7 @@ class VirtualFileSystem extends EventEmitter {
     }
     
     if (cleared > 0) {
-      console.log(`[VFS] Cleared ${cleared} old entries`);
+      logger.info('VFS', `Cleared ${cleared} old entries`);
     }
     
     return cleared;
@@ -398,7 +401,7 @@ class VirtualFileSystem extends EventEmitter {
     }
 
     if (cleared > 0) {
-      console.log(`[VFS] Expired ${cleared} stale entries`);
+      logger.info('VFS', `Expired ${cleared} stale entries`);
     }
 
     return cleared;

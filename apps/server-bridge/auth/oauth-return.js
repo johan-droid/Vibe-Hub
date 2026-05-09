@@ -85,8 +85,8 @@ export function getOAuthRequestOrigin(req) {
 export function setOAuthReturnOriginCookie(res, origin) {
   res.cookie(RETURN_ORIGIN_COOKIE, origin, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production' && origin.startsWith('https://'),
-    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
     maxAge: 15 * 60 * 1000,
     path: '/',
   });
