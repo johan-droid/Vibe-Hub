@@ -14,9 +14,12 @@ const skillCache = new Map();
  */
 function loadSkill(name) {
   if (skillCache.has(name)) return skillCache.get(name);
-  
+
   try {
-    const content = readFileSync(join(SKILLS_DIR, `${name}.md`), 'utf-8');
+    const targetPath = join(SKILLS_DIR, `${name}.md`);
+    if (!targetPath.startsWith(SKILLS_DIR)) return '';
+
+    const content = readFileSync(targetPath, 'utf-8');
     skillCache.set(name, content);
     return content;
   } catch {
@@ -29,13 +32,13 @@ function loadSkill(name) {
  */
 function detectStack(projectTree, packageJson) {
   const stack = new Set();
-  
+
   if (packageJson) {
     const deps = {
       ...packageJson.dependencies,
       ...packageJson.devDependencies
     };
-    
+
     if (deps['react'] || deps['react-dom']) stack.add('react');
     if (deps['next']) stack.add('react');
     if (deps['vue']) stack.add('vue');
@@ -43,7 +46,7 @@ function detectStack(projectTree, packageJson) {
     if (deps['express'] || deps['fastify']) stack.add('node');
     if (deps['prisma'] || deps['@prisma/client']) stack.add('node');
   }
-  
+
   // Check file extensions in tree
   if (projectTree) {
     const treeStr = JSON.stringify(projectTree);
@@ -51,7 +54,7 @@ function detectStack(projectTree, packageJson) {
     if (treeStr.includes('.jsx') || treeStr.includes('.js')) stack.add('javascript');
     if (treeStr.includes('.css') || treeStr.includes('.scss')) stack.add('css');
   }
-  
+
   return Array.from(stack);
 }
 
