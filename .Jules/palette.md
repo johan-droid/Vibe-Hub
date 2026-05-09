@@ -1,3 +1,3 @@
-## 2024-05-03 - Accessible Icon Buttons
-**Learning:** Icon-only buttons lacking ARIA labels block screen-reader access and tooltips improve UX discoverability.
-**Action:** Always include `aria-label` and `title` for buttons without text content.
+## 2026-05-09 - Accessible Icon-Only Buttons
+**Learning:** Icon-only buttons often lack accessible names, making them invisible to screen readers and difficult to understand for sighted users without context. Both `aria-label` (for screen readers) and `title` (for native tooltips on hover) are necessary to provide full accessibility and a good user experience. Furthermore, using dynamic content (like `project.name` or `file.name`) in these labels provides clearer context for destructive actions (e.g. "Remove X" instead of just "Remove").
+**Action:** When creating icon-only interactive elements (like buttons or labels acting as buttons), always provide descriptive `aria-label` and `title` attributes. Use dynamic values where appropriate to provide context.

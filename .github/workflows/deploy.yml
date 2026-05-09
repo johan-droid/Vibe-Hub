@@ -18,6 +18,13 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Start Redis and Postgres services
+        run: |
+          docker run --name pg-test -e POSTGRES_PASSWORD=postgres -d -p 5432:5432 postgres:15
+          docker run --name redis-test -d -p 6379:6379 redis:7
+          # Wait for services to be ready
+          sleep 5
+
       - name: Install dependencies
         run: npm ci
 
