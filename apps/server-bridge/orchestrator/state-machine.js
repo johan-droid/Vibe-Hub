@@ -122,6 +122,10 @@ export const createAgentMachine = (deps) => {
     onVerify, 
     onDebate, 
     onRollback,
+    onMerge,
+    onSecurityAudit,
+    onApplyAndExecute,
+    onIntentValidation,
     onComplete 
   } = deps;
 
@@ -239,7 +243,7 @@ export const createAgentMachine = (deps) => {
           onDone: [
             {
               guard: ({ event }) => event.output.approved,
-              target: 'complete'
+              target: 'merging'
             },
             {
               guard: ({ context }) => context.currentNode.verification.attempts >= 3,
@@ -283,6 +287,117 @@ export const createAgentMachine = (deps) => {
               target: 'failed'
             }
           ]
+        }
+      },
+
+
+
+      merging: {
+        entry: assign({
+          executionHistory: ({ context }) => [...context.executionHistory, 'merging']
+        }),
+        invoke: {
+          input: ({ context }) => context,
+          src: fromPromise(async ({ input }) => {
+            const result = await onMerge(input.currentNode);
+            return result;
+          }),
+          onDone: {
+            target: 'securityAuditing',
+            actions: assign({
+              currentNode: ({ context, event }) => {
+                context.currentNode.masterPatch = event.output;
+                return context.currentNode;
+              }
+            })
+          },
+          onError: {
+            target: 'failed'
+          }
+        }
+      },
+
+      securityAuditing: {
+        entry: assign({
+          executionHistory: ({ context }) => [...context.executionHistory, 'securityAuditing']
+        }),
+        invoke: {
+          input: ({ context }) => context,
+          src: fromPromise(async ({ input }) => {
+            const result = await onSecurityAudit(input.currentNode);
+            if (result !== 'CLEARED') {
+                throw new Error("Security audit failed: " + result);
+            }
+            return result;
+          }),
+          onDone: {
+            target: 'executingSandbox'
+          },
+          onError: {
+            target: 'failed',
+            actions: assign({
+               currentNode: ({ context, event }) => {
+                 context.currentNode.errorLog.push(event.error.message);
+                 return context.currentNode;
+               }
+            })
+          }
+        }
+      },
+
+      executingSandbox: {
+        entry: assign({
+          executionHistory: ({ context }) => [...context.executionHistory, 'executingSandbox']
+        }),
+        invoke: {
+          input: ({ context }) => context,
+          src: fromPromise(async ({ input }) => {
+            const result = await onApplyAndExecute(input.currentNode);
+            return result;
+          }),
+          onDone: {
+            target: 'intentValidating',
+            actions: assign({
+              currentNode: ({ context, event }) => {
+                context.currentNode.sandboxLogs = event.output.logs;
+                return context.currentNode;
+              }
+            })
+          },
+          onError: {
+            target: 'failed',
+            actions: assign({
+               currentNode: ({ context, event }) => {
+                 context.currentNode.errorLog.push(event.error.message);
+                 return context.currentNode;
+               }
+            })
+          }
+        }
+      },
+
+      intentValidating: {
+        entry: assign({
+          executionHistory: ({ context }) => [...context.executionHistory, 'intentValidating']
+        }),
+        invoke: {
+          input: ({ context }) => context,
+          src: fromPromise(async ({ input }) => {
+            const result = await onIntentValidation(input.currentNode);
+            if (!result.satisfied) {
+                throw new Error("Intent validation failed: " + result.reasoning);
+            }
+            return result;
+          }),
+          onDone: {
+            target: 'complete'
+          },
+          onError: {
+            target: 'rollback',
+            actions: assign({
+                alternateStrategy: ({ event }) => "Intent validation failed: " + event.error.message
+            })
+          }
         }
       },
 
