@@ -17,4 +17,8 @@ export class TheBrain {
     // Placeholder for actual logic calling the model
     return [];
   }
+
+  process(taskId, context) {
+    console.log(`TheBrain processing task ${taskId} with context:`, context);
+  }
 }

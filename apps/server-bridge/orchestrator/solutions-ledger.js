@@ -17,4 +17,8 @@ export class SolutionsLedger {
     }
     return history.join("\n");
   }
+
+  static recordFailure(taskId, message) {
+    console.error(`[SolutionsLedger] Task ${taskId} FAILED: ${message}`);
+  }
 }

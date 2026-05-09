@@ -1,4 +1,7 @@
 import { Router } from './router.js';
+import { checkSecurity } from './security-shield.js';
+import { triageAndRoute } from './agents/triage-router.js';
+import { runPreFlight } from './static-analyzer.js';
 import { 
   CodeExpert, UIExpert, DebuggerExpert, GitExpert, ReviewerExpert, ManagerExpert, SecurityAuditorExpert,
   CreativeDirectorExpert, DesignSystemArchitect, MotionDesignerExpert, VisualAssetGenerator
@@ -20,6 +23,11 @@ import { modelService } from './models.js';
 /**
  * AgentOrchestrator — Brain v5.0 (Task Queue Edition)
  */
+
+import { SecurityGate } from "./agents/security-gate.js";
+import { SolutionsLedger } from "./solutions-ledger.js";
+import { TheBrain } from "./agents/the-brain.js";
+
 export class AgentOrchestrator {
   constructor() {
     this.router = new Router();
@@ -126,6 +134,20 @@ export class AgentOrchestrator {
    * Handle user prompt with ReAct loop and Peer Review (Debate).
    */
   async handlePrompt(prompt, effortLevel, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, runContext = null) {
+    try {
+      checkSecurity(prompt);
+    } catch (e) {
+      if (e.message === 'SECURITY_VIOLATION') {
+        throw e;
+      }
+    }
+
+    const triage = await triageAndRoute(prompt);
+    const preFlight = await runPreFlight(triage.target_files);
+    if (preFlight.errors) {
+      prompt = `PRE_FLIGHT_ERRORS: ${preFlight.summary}\nRAW_PROMPT: ${prompt}`;
+    }
+
     if (!this.projectTree) {
       if (emitState) emitState('reading', 'Scanning project architecture...');
       await this.preScan(onToolCall);
@@ -346,6 +368,19 @@ export class AgentOrchestrator {
           toolCalls: finalResult?.toolCalls?.map(call => call.name || call.tool || call) || [],
           contentPreview: finalResult?.content || '',
         });
+
+
+        if (targetDomain === 'security') {
+          const gate = new SecurityGate();
+          const check = gate.analyze(finalResult?.content);
+          if (check.status === "REJECTED") {
+            // Re-route to the brain
+            SolutionsLedger.recordFailure('security-scan', `[SECURITY_ALERT] ${check.vulnerability_report}`);
+            const brain = new TheBrain();
+            brain.process('security-scan', finalResult?.content);
+            return await runExpertLoop('code');
+          }
+        }
 
         if (effortLevel === 'quick') break;
 
