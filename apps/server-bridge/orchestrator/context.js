@@ -51,7 +51,15 @@ export class SharedContext {
     if (this.history.length > 20) {
       const slice = this.history.slice(-10);
       const firstUser = slice.findIndex(m => m.role === 'user');
-      this.history = firstUser > 0 ? slice.slice(firstUser) : slice;
+      if (firstUser !== -1) {
+        this.history = slice.slice(firstUser);
+      } else {
+        // Fallback: search backwards through entire history to find the most recent user message
+        const lastUser = this.history.findLastIndex(m => m.role === 'user');
+        if (lastUser !== -1) {
+          this.history = this.history.slice(lastUser);
+        }
+      }
     }
   }
 
