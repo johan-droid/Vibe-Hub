@@ -1,4 +1,4 @@
-import TokenGovernor from '../token-governor.js';
+import { TokenGovernor } from '../token-governor.js';
 
 export class LeadArchitect {
   async buildParallelMatrix(featureRequest) {

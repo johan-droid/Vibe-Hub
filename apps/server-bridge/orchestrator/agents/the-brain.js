@@ -1,4 +1,4 @@
-import TokenGovernor from '../token-governor.js';
+import { TokenGovernor } from '../token-governor.js';
 import { SolutionsLedger } from '../solutions-ledger.js';
 
 export class TheBrain {
