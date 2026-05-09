@@ -1,4 +1,7 @@
 import { Router } from './router.js';
+import { checkSecurity } from './security-shield.js';
+import { triageAndRoute } from './agents/triage-router.js';
+import { runPreFlight } from './static-analyzer.js';
 import { 
   CodeExpert, UIExpert, DebuggerExpert, GitExpert, ReviewerExpert, ManagerExpert, SecurityAuditorExpert,
   CreativeDirectorExpert, DesignSystemArchitect, MotionDesignerExpert, VisualAssetGenerator
@@ -126,6 +129,20 @@ export class AgentOrchestrator {
    * Handle user prompt with ReAct loop and Peer Review (Debate).
    */
   async handlePrompt(prompt, effortLevel, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, runContext = null) {
+    try {
+      checkSecurity(prompt);
+    } catch (e) {
+      if (e.message === 'SECURITY_VIOLATION') {
+        throw e;
+      }
+    }
+
+    const triage = await triageAndRoute(prompt);
+    const preFlight = await runPreFlight(triage.target_files);
+    if (preFlight.errors) {
+      prompt = `PRE_FLIGHT_ERRORS: ${preFlight.summary}\nRAW_PROMPT: ${prompt}`;
+    }
+
     if (!this.projectTree) {
       if (emitState) emitState('reading', 'Scanning project architecture...');
       await this.preScan(onToolCall);
