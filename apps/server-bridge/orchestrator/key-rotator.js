@@ -1,38 +1,51 @@
-export class KeyRotator {
-  constructor(keys = []) {
-    this.keys = keys;
-    this.currentIndex = 0;
-    this.retries = 0;
-  }
-
-  getHeaders() {
-    return this.keys[this.currentIndex];
-  }
-
-  rotate(provider) {
-    if (this.keys.length > 0) {
-      this.currentIndex = (this.currentIndex + 1) % this.keys.length;
+export class ProviderExhaustedError extends Error {
+    constructor(provider) {
+        super(`PROVIDER_EXHAUSTED: ${provider}`);
+        this.name = 'ProviderExhaustedError';
     }
-  }
-
-  async executeWithRotation(provider, apiCallFn) {
-    try {
-      const result = await apiCallFn(this.getHeaders());
-      this.retries = 0;
-      return result;
-    } catch (error) {
-      if (error.status === 429 || error.status === 403) {
-        console.warn(`[ROTATOR] Key ${this.currentIndex} for ${provider} exhausted. Swapping...`);
-        this.rotate(provider);
-        if (this.retries < 3) {
-          this.retries++;
-          return this.executeWithRotation(provider, apiCallFn);
-        }
-      }
-      this.retries = 0;
-      throw error;
-    }
-  }
 }
 
-export default KeyRotator;
+export class KeyRotator {
+    constructor() {
+        this.keys = {
+            groq: (process.env.GROQ_KEYS || '').split(',').filter(Boolean),
+            nim: (process.env.NVIDIA_NIM_KEYS || '').split(',').filter(Boolean),
+            gemini: (process.env.GEMINI_KEYS || '').split(',').filter(Boolean)
+        };
+        this.currentIndex = {
+            groq: 0,
+            nim: 0,
+            gemini: 0
+        };
+    }
+
+    async executeWithRotation(provider, apiCallFn) {
+        const providerKeys = this.keys[provider];
+        if (!providerKeys || providerKeys.length === 0) {
+            throw new Error(`No keys configured for provider: ${provider}`);
+        }
+
+        let attempts = 0;
+        const maxAttempts = providerKeys.length;
+
+        while (attempts < maxAttempts) {
+            const currentKey = providerKeys[this.currentIndex[provider]];
+            try {
+                return await apiCallFn(currentKey);
+            } catch (error) {
+                const status = error.status || error.statusCode || (error.response && error.response.status);
+                if (status === 429 || status === 403) {
+                    const currentIdx = this.currentIndex[provider];
+                    const nextIdx = (currentIdx + 1) % providerKeys.length;
+                    console.warn(`[Rotator] ${provider.toUpperCase()} Key ${currentIdx + 1} exhausted, swapping to Key ${nextIdx + 1}`);
+                    this.currentIndex[provider] = nextIdx;
+                    attempts++;
+                } else {
+                    throw error;
+                }
+            }
+        }
+
+        throw new ProviderExhaustedError(provider);
+    }
+}
