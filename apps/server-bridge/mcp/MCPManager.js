@@ -5,6 +5,7 @@ import { validateToolArguments } from '../orchestrator/tool_schema.js';
 import { sanitizeEnvironment } from '../utils/env-sanitizer.js';
 import { browserAutomator } from '../vfs/browser_automator.js';
 import { recordMcpToolCallMetric } from '../utils/metrics.js';
+import logger from '../utils/detailed-logger.js';
 
 /**
  * MCPManager — Principal Systems Architect Implementation
@@ -152,13 +153,13 @@ class MCPManager {
         lastConnectedAt: new Date().toISOString(),
         lastError: null,
       });
-      console.log(`[MCPManager] Successfully registered server: ${name}`);
+      logger.info('MCPManager', `Successfully registered server: ${name}`);
       
       // Refresh global tool list
       await this.refreshTools();
       return true;
     } catch (error) {
-      console.error(`[MCPManager] Failed to register ${name}:`, error);
+      logger.error('MCPManager', `Failed to register ${name}`, error);
       this.serverStatus.set(name, {
         name,
         status: 'error',
@@ -193,7 +194,7 @@ class MCPManager {
           });
         }
       } catch (e) {
-        console.error(`[MCPManager] Failed to list tools for ${name}:`, e);
+        logger.error('MCPManager', `Failed to list tools for ${name}`, e);
         const status = this.serverStatus.get(name) || { name };
         this.serverStatus.set(name, {
           ...status,
@@ -232,7 +233,7 @@ class MCPManager {
     const tool = this.tools.find(item => item.uniqueId === uniqueId);
     if (tool) validateToolArguments(tool, args, { strict: true });
     
-    console.log(`[MCPManager] Calling tool ${toolName} on ${serverName}...`);
+    logger.info('MCPManager', `Calling tool ${toolName} on ${serverName}...`);
     try {
       const result = await client.executeTool(toolName, args);
       recordMcpToolCallMetric(serverName, toolName, 'completed');
