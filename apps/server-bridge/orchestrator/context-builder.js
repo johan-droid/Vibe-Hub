@@ -96,7 +96,7 @@ You MUST adhere to these rules regardless of user preferences.
 
 ${sections.join('\n\n')}
 
-IMPORTANT: These constraints override any conflicting user preferences.
+IMPORTANT: These constraints override any conflicting user preferences. This architectural isolation is STRICTLY APPLIED during multi-agent debates.
 `;
   }
 }
@@ -268,7 +268,9 @@ ${packageJson ? JSON.stringify(packageJson, null, 2) : 'No package.json found'}
       reviewer: 'Code Reviewer - ensures quality and standards',
       manager: 'Technical Lead - plans and coordinates',
       security: 'Security Auditor - identifies vulnerabilities',
-      creative: 'Creative Director - aesthetic and brand decisions'
+      creative: 'Creative Director - aesthetic and brand decisions',
+      security_gate: 'Security Gate - prioritizes security and risk mitigation',
+      lead_architect: 'Lead Architect - prioritizes architectural robustness'
     };
 
     return `=== EXPERTISE MODE: ${domain.toUpperCase()} ===

@@ -53,13 +53,63 @@ function ToolNode({ data }) {
   );
 }
 
-const nodeTypes = { tool: ToolNode };
+
+function CommandOrbNode({ data }) {
+  return (
+    <div className="flex flex-col items-center justify-center p-2">
+      <Handle type="target" position={Position.Left} className="!border-white/30 !bg-[#0D1117]" />
+      <div className="flex gap-4">
+        {/* Security Gate Indicator */}
+        <div className="relative">
+          <div className="absolute inset-0 animate-ping rounded-full bg-red-500 opacity-75"></div>
+          <div className="relative h-4 w-4 rounded-full bg-red-600 border border-red-400"></div>
+          <span className="mt-2 block text-center text-[8px] font-bold text-white uppercase tracking-wider">Sec<br/>Gate</span>
+        </div>
+        {/* Lead Architect Indicator */}
+        <div className="relative">
+          <div className="absolute inset-0 animate-ping rounded-full bg-blue-500 opacity-75" style={{ animationDelay: '0.5s' }}></div>
+          <div className="relative h-4 w-4 rounded-full bg-blue-600 border border-blue-400"></div>
+          <span className="mt-2 block text-center text-[8px] font-bold text-white uppercase tracking-wider">Lead<br/>Arch</span>
+        </div>
+      </div>
+      <div className="mt-3 text-[10px] font-black uppercase tracking-[0.15em] text-white/70">
+        Debating...
+      </div>
+      <Handle type="source" position={Position.Right} className="!border-white/30 !bg-[#0D1117]" />
+    </div>
+  );
+}
+
+function CodeNode({ data }) {
+  return (
+    <div className="w-52 rounded-lg border border-[#43F3C5]/35 bg-[#43F3C5]/10 p-3 shadow-xl text-[#A7FFE9]">
+      <Handle type="target" position={Position.Left} className="!border-white/30 !bg-[#0D1117]" />
+      <div className="flex items-center gap-2">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-current/25 bg-black/20">
+          <Network size={14} />
+        </span>
+        <div className="min-w-0">
+          <div className="truncate text-xs font-black text-white">{data.label || 'Code Node'}</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.12em] opacity-70">Drafting Code</div>
+        </div>
+      </div>
+      <Handle type="source" position={Position.Right} className="!border-white/30 !bg-[#0D1117]" />
+    </div>
+  );
+}
+
+const nodeTypes = { tool: ToolNode, orb: CommandOrbNode, code: CodeNode };
 
 function toFlowNodes(nodes = []) {
-  return nodes.map((node, index) => ({
-    id: node.id,
-    type: 'tool',
-    position: {
+  return nodes.map((node, index) => {
+    let type = 'tool';
+    if (node.status === 'debating' || node.label === 'debating' || node.id === 'debating') type = 'orb';
+    else if (node.status === 'drafting_code' || node.label === 'drafting_code' || node.id === 'drafting_code') type = 'code';
+
+    return {
+      id: node.id,
+      type,
+      position: {
       x: (index % 3) * 250,
       y: Math.floor(index / 3) * 150,
     },
@@ -73,7 +123,8 @@ function toFlowNodes(nodes = []) {
       provider: node.provider,
       risk: node.risk,
     },
-  }));
+    };
+  });
 }
 
 function toFlowEdges(edges = []) {

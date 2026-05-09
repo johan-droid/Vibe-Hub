@@ -144,7 +144,7 @@ const agentMachine = createMachine({
           return await semanticGraphBuilder.buildSemanticGraph(input.targetFile);
         }),
         onDone: {
-          target: 'drafting_code',
+          target: 'debating',
           actions: assign({ astGraph: ({ event }) => event.output })
         },
         onError: {
@@ -156,6 +156,31 @@ const agentMachine = createMachine({
       }
     },
 
+
+    debating: {
+      invoke: {
+        input: ({ context }) => context,
+        src: fromPromise(async ({ input }) => {
+          // Simulate a multi-agent debate generating competing AST proposals
+          const [securityProposal, architectProposal] = await Promise.all([
+            Promise.resolve({ ...input.astGraph, debate_focus: 'security' }),
+            Promise.resolve({ ...input.astGraph, debate_focus: 'architecture' })
+          ]);
+          // Merge or resolve debate here. For now, just pass the merged focus to astGraph
+          return { ...input.astGraph, securityProposal, architectProposal, resolved: true };
+        }),
+        onDone: {
+          target: 'drafting_code',
+          actions: assign({ astGraph: ({ event }) => event.output })
+        },
+        onError: {
+          target: 'fatal_failure',
+          actions: assign({
+            sandboxError: ({ event }) => event.error?.message || String(event.error)
+          })
+        }
+      }
+    },
     drafting_code: {
       invoke: {
         // Execute the live API call using the current machine context

@@ -303,3 +303,29 @@ You create custom illustrations, icons, and visuals.
     `;
   }
 }
+
+
+export class SecurityGateExpert extends EmployeeBase {
+  constructor(sharedContext = null) {
+    super('gemini-2.0-flash', sharedContext);
+    this.domainInstruction = `
+# Domain: Security Gate
+
+You are the **Security Gate**. Your role is to evaluate proposals and generate AST modifications with a strict focus on security and risk mitigation.
+During debate, you will propose an AST that prioritizes security.
+`;
+  }
+}
+
+
+export class LeadArchitectExpert extends EmployeeBase {
+  constructor(sharedContext = null) {
+    super('gemini-2.0-flash', sharedContext);
+    this.domainInstruction = `
+# Domain: Lead Architect
+
+You are the **Lead Architect**. Your role is to evaluate proposals and generate AST modifications with a strict focus on structural integrity, scalability, and system design.
+During debate, you will propose an AST that prioritizes architectural robustness.
+`;
+  }
+}
