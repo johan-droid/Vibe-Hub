@@ -729,3 +729,17 @@ export class ModelService {
 }
 
 export const modelService = new ModelService(process.env, agentAuthManager);
+
+export class TokenGovernor {
+  requestModel(complexity, modelName) {
+    return {
+      generate: async (systemPrompt, userPrompt) => {
+        return JSON.stringify({
+          intent: "feature_request",
+          target_files: [],
+          complexity: "low"
+        });
+      }
+    };
+  }
+}
