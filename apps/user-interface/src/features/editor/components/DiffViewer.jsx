@@ -103,7 +103,19 @@ const DiffViewer = memo(function DiffViewer({ onApply, onDiscard }) {
           </AnimatePresence>
         </div>
 
+
         <div className="flex items-center gap-3">
+          {hasVfsDiff && activeDiff?.metadata?.testOutput && (
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-md text-xs font-bold uppercase tracking-widest ${
+              activeDiff.metadata.testOutput.toLowerCase().includes('fail') ||
+              activeDiff.metadata.testOutput.toLowerCase().includes('error') ||
+              !activeDiff.metadata.testOutput.toLowerCase().includes('pass')
+                ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                : 'bg-green-500/10 text-green-400 border border-green-500/20'
+            }`}>
+              {activeDiff.metadata.testOutput.toLowerCase().includes('fail') || activeDiff.metadata.testOutput.toLowerCase().includes('error') || !activeDiff.metadata.testOutput.toLowerCase().includes('pass') ? 'Tests Failed' : 'Tests Passed'}
+            </div>
+          )}
           <AnimatePresence>
             {(diffData || hasVfsDiff) && (
               <motion.div 
