@@ -22,6 +22,23 @@ export class GithubBridge {
         }
     }
 
+
+    async dispatchHeavyLift(owner, repo, payload) {
+        try {
+            const response = await this.octokit.rest.actions.createWorkflowDispatch({
+                owner,
+                repo,
+                workflow_id: 'heavy-lift.yml',
+                ref: 'main',
+                inputs: payload
+            });
+            return response.data;
+        } catch (error) {
+            console.error("Failed to dispatch heavy-lift workflow:", error);
+            throw error;
+        }
+    }
+
     // Pseudo webhook listener structure routing to Triage (Layer 1)
     handleWebhookEvent(event) {
         const { action, pull_request, comment, check_run } = event;
