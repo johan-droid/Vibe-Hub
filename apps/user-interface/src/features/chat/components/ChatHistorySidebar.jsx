@@ -99,6 +99,8 @@ export default function ChatHistorySidebar() {
             <div className="space-y-1">
               {linkedProjects.map(project => (
                 <button
+                  type="button"
+                  aria-label={`Open project ${project.name}`}
                   key={project.id}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-surface-container-low group transition-colors text-left"
                 >
@@ -117,6 +119,8 @@ export default function ChatHistorySidebar() {
             {chatSessions.length > 0 ? (
               chatSessions.map(chat => (
                 <button
+                  type="button"
+                  aria-label={`Load chat session ${chat.title || 'New Chat'}`}
                   key={chat.id}
                   onClick={() => loadSession(chat.id)}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg group transition-colors text-left ${activeSessionId === chat.id ? 'bg-primary/10 text-primary' : 'hover:bg-surface-container-low'}`}
