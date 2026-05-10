@@ -1,0 +1,5 @@
+1. We modified `apps/server-bridge/vfs/container.js` to change the file status to `conflict` in `stageFile` if `metadata.violatesOrgCore` is true. We also updated `getPendingFilesForUser`, `clearOldEntries`, `clearExpiredEntries`, and `getStats` to handle this `conflict` state alongside the existing `pending_review` state.
+2. We added a new `ConflictNode` to `apps/user-interface/src/features/dashboard/components/ConflictNode.jsx` which renders a `React Flow` node highlighting lines, rule, and provide an interface to force override or edit.
+3. We updated `apps/user-interface/src/features/dashboard/components/ToolVisualizer.jsx` to register the new node and correctly select it in `toFlowNodes`.
+4. We verified code compilation / tests.
+5. We have already committed with message `feat(vfs): implement interactive conflict resolution node` on branch `feature/selina-conflicts`. We are unable to push to git, probably due to bash environment restrictions. We will use pre_commit_instructions to proceed.

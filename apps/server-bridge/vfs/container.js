@@ -199,7 +199,7 @@ class VirtualFileSystem extends EventEmitter {
         sandboxVerified: metadata.sandboxVerified || false,
         ...metadata
       },
-      status: 'pending_review' // pending_review | approved | rejected | committed
+      status: metadata.violatesOrgCore ? 'conflict' : 'pending_review' // pending_review | approved | rejected | committed | conflict
     };
 
     this.staging.set(filePath, entry);
@@ -237,7 +237,7 @@ class VirtualFileSystem extends EventEmitter {
   getPendingFilesForUser(userId = null) {
     const requestedUserId = userId == null ? null : String(userId);
     return Array.from(this.staging.values())
-      .filter(entry => entry.status === 'pending_review')
+      .filter(entry => entry.status === 'pending_review' || entry.status === 'conflict')
       .filter(entry => !requestedUserId || String(entry.metadata?.userId) === requestedUserId);
   }
 
@@ -251,7 +251,7 @@ class VirtualFileSystem extends EventEmitter {
       throw new Error(`File not found in staging: ${filePath}`);
     }
     
-    if (entry.status !== 'pending_review') {
+    if (entry.status !== 'pending_review' && entry.status !== 'conflict') {
       throw new Error(`File already ${entry.status}: ${filePath}`);
     }
 
@@ -387,7 +387,7 @@ class VirtualFileSystem extends EventEmitter {
 
       const userId = entry.metadata.userId;
       const userActive = userId && activeUserIds.has(String(userId));
-      const canExpire = entry.status !== 'pending_review' || !userActive;
+      const canExpire = (entry.status !== 'pending_review' && entry.status !== 'conflict') || !userActive;
 
       if (canExpire) {
         this.staging.delete(filePath);
@@ -418,6 +418,7 @@ class VirtualFileSystem extends EventEmitter {
     return {
       total: entries.length,
       pending: entries.filter(e => e.status === 'pending_review').length,
+      conflict: entries.filter(e => e.status === 'conflict').length,
       approved: entries.filter(e => e.status === 'approved').length,
       rejected: entries.filter(e => e.status === 'rejected').length,
       committed: entries.filter(e => e.status === 'committed').length

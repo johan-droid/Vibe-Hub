@@ -9,6 +9,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { GitBranch, Network, ShieldAlert, Wrench } from 'lucide-react';
+import { ConflictNode } from './ConflictNode';
 
 const statusTone = {
   started: 'border-[#8DA2FF]/35 bg-[#8DA2FF]/10 text-[#B8C5FF]',
@@ -53,17 +54,21 @@ function ToolNode({ data }) {
   );
 }
 
-const nodeTypes = { tool: ToolNode };
+const nodeTypes = { tool: ToolNode, conflict: ConflictNode };
 
 function toFlowNodes(nodes = []) {
   return nodes.map((node, index) => ({
     id: node.id,
-    type: 'tool',
+    type: node.nodeKind === 'conflict' ? 'conflict' : 'tool',
     position: {
       x: (index % 3) * 250,
       y: Math.floor(index / 3) * 150,
     },
     data: {
+      violatingLines: node.violatingLines,
+      rule: node.rule,
+      onOverride: node.onOverride,
+      onEditAst: node.onEditAst,
       label: node.label,
       status: node.status,
       source: node.source,
