@@ -1,30 +1,26 @@
 diff --git a/node_modules/hono/dist/cjs/middleware/cache/index.js b/node_modules/hono/dist/cjs/middleware/cache/index.js
-index 8a7f882..f1d2009 100644
+index 8a7f882..cfdcd34 100644
 --- a/node_modules/hono/dist/cjs/middleware/cache/index.js
 +++ b/node_modules/hono/dist/cjs/middleware/cache/index.js
-@@ -22,6 +22,10 @@ __export(cache_exports, {
- module.exports = __toCommonJS(cache_exports);
+@@ -23,7 +23,7 @@ module.exports = __toCommonJS(cache_exports);
  const defaultCacheableStatusCodes = [200];
  const shouldSkipCache = (res) => {
-+  const varyAuthCheck = res.headers.get("Vary");
-+  if (varyAuthCheck && (varyAuthCheck.toLowerCase().includes("authorization") || varyAuthCheck.toLowerCase().includes("cookie"))) {
-+    return true;
-+  }
    const vary = res.headers.get("Vary");
-   if (vary && vary.includes("*")) {
+-  if (vary && vary.includes("*")) {
++  if (vary && (vary.includes("*") || vary.includes("Authorization") || vary.includes("Cookie"))) {
      return true;
+   }
+   const cacheControl = res.headers.get("Cache-Control");
 diff --git a/node_modules/hono/dist/middleware/cache/index.js b/node_modules/hono/dist/middleware/cache/index.js
-index ea953f7..ee30485 100644
+index ea953f7..2815ef4 100644
 --- a/node_modules/hono/dist/middleware/cache/index.js
 +++ b/node_modules/hono/dist/middleware/cache/index.js
-@@ -1,6 +1,10 @@
- // src/middleware/cache/index.ts
+@@ -2,7 +2,7 @@
  var defaultCacheableStatusCodes = [200];
  var shouldSkipCache = (res) => {
-+  const varyAuthCheck = res.headers.get("Vary");
-+  if (varyAuthCheck && (varyAuthCheck.toLowerCase().includes("authorization") || varyAuthCheck.toLowerCase().includes("cookie"))) {
-+    return true;
-+  }
    const vary = res.headers.get("Vary");
-   if (vary && vary.includes("*")) {
+-  if (vary && vary.includes("*")) {
++  if (vary && (vary.includes("*") || vary.includes("Authorization") || vary.includes("Cookie"))) {
      return true;
+   }
+   const cacheControl = res.headers.get("Cache-Control");

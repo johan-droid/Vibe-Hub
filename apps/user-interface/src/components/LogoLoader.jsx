@@ -32,7 +32,7 @@ function LoadingText({ text = SELINA_BRAND.productName, subtitle = 'Initializing
       <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white">
         {text}
       </h1>
-      <p className="text-sm font-semibold tracking-[0.22em] uppercase text-white/60">
+      <p className="text-sm font-semibold tracking-[0.22em] uppercase text-white">
         {subtitle}{dots}
       </p>
       

@@ -26,7 +26,7 @@ export function normalizeDatabaseUrl(connectionString = process.env.DATABASE_URL
   }
 }
 
-// Connection config optimized for serverless/neon databases
+// Connection config compatible with serverless Postgres (Neon) and Supabase
 pool = new pg.Pool({
   connectionString: normalizeDatabaseUrl(),
   ssl: process.env.NODE_ENV === 'production'
@@ -37,10 +37,10 @@ pool = new pg.Pool({
         }),
       }
     : { rejectUnauthorized: false }, // Allow self-signed certs in dev
-  max: Number.parseInt(process.env.PG_POOL_MAX || '20', 10),
+  max: 20,
   min: Number.parseInt(process.env.PG_POOL_MIN || '2', 10),
-  idleTimeoutMillis: Number.parseInt(process.env.PG_IDLE_TIMEOUT_MS || '60000', 10),
-  connectionTimeoutMillis: Number.parseInt(process.env.PG_CONNECTION_TIMEOUT_MS || '10000', 10), // 10s for Neon
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
   statement_timeout: Number.parseInt(process.env.PG_STATEMENT_TIMEOUT_MS || '30000', 10),
   query_timeout: Number.parseInt(process.env.PG_QUERY_TIMEOUT_MS || '30000', 10),
 });

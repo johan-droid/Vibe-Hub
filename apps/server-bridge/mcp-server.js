@@ -138,7 +138,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case 'selina_read_file':
-      case 'selina_read_file': {
         // BUG #4 FIX: path.resolve() handles ../ but we must ALSO verify the
         // resolved path is still inside workspaceRoot. Without this check,
         // a path of "../../etc/passwd" resolves to an absolute path that
@@ -158,28 +157,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           query: args.query
         });
         return { content: [{ type: 'text', text: content }] };
-      }
 
       case 'selina_search_symbols':
-      case 'selina_search_symbols': {
         // Implementation of efficient recursive search
         // On Windows with Ryzen 5, we use a throttled async walk to avoid IO saturation
         return { content: [{ type: 'text', text: `Search capability for "${args.query}" initialized. [Optimized implementation pending file-system indexer integration]` }] };
-      }
 
       case 'selina_get_memory':
-      case 'selina_get_memory': {
         const memory = await loadMemory('default_user', args.projectId);
         return {
-          content: [{ 
-            type: 'text', 
+          content: [{
+            type: 'text',
             text: JSON.stringify({
               instructions: memory.userMemory,
               recentLearnings: memory.brainJournal.slice(-5) // Only return most recent to save tokens
-            }, null, 2) 
+            }, null, 2)
           }],
         };
-      }
 
       default:
         throw new Error(`Tool "${name}" is not implemented.`);
