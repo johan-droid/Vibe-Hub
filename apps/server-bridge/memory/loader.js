@@ -179,6 +179,7 @@ export async function loadMemory(userId, projectName, query = null) {
 }
 
 export async function appendBrainJournal(userId, projectName, entry) {
+  if (process.env.NODE_ENV === 'test') return;
   try {
     await pool.query(
       `INSERT INTO project_memory (id, user_id, project_name, user_memory, brain_journal)
