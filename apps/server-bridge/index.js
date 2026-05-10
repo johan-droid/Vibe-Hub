@@ -123,7 +123,6 @@ const cspConnectSrc = isProd
   : ["'self'", 'http://localhost:*', 'ws://localhost:*', 'http://127.0.0.1:*', 'ws://127.0.0.1:*'];
 
 // Helmet.js - Security headers (CSP, HSTS, X-Frame-Options, etc.)
-app.disable('x-powered-by');
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
