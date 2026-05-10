@@ -1,3 +1,10 @@
+/**
+ * @fileoverview apps/server-bridge/mcp-server.js
+ * @module SelinaMCPServer
+ * @description Core implementation of the Model Context Protocol (MCP) server for Selina.
+ * This module enables the AI swarm to dynamically query external systems, retrieve context,
+ * and execute tools via the StdioServerTransport, integrating seamlessly with the agent loop.
+ */
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -5,12 +12,6 @@ import fs from 'fs/promises';
 import path from 'path';
 import { loadMemory } from './memory/loader.js';
 
-/**
- * Selina MCP Server - High Performance Implementation
- * 
- * Engineered for Ryzen 5 5500U (6C/12T) environments.
- * Focuses on low memory overhead and intelligent context retrieval.
- */
 
 const server = new Server(
   {

@@ -1,13 +1,9 @@
 /**
- * SAAS-GRADE: Auth Management Routes
- * 
- * Provides endpoints for:
- * - Token refresh
- * - Logout (single session)
- * - Logout all sessions
- * - List active sessions
- * - Revoke specific session
- * - Get auth history
+ * @fileoverview apps/server-bridge/auth/routes.js
+ * @module AuthRoutes
+ * @description SAAS-Grade authentication management routes for Selina.
+ * Handles secure token lifecycle, session revocation, single/global logout,
+ * and provides audit trails for authentication history. Protected by CSRF middleware.
  */
 
 import { Router } from 'express';

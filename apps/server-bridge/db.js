@@ -1,3 +1,10 @@
+/**
+ * @fileoverview apps/server-bridge/db.js
+ * @module DatabaseConnection
+ * @description Manages PostgreSQL database connections and pgvector configuration.
+ * Implements connection pooling, SSL normalization, and provides utility functions
+ * for secure data persistence and semantic memory storage.
+ */
 import pg from 'pg';
 import logger from './utils/detailed-logger.js';
 

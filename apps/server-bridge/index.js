@@ -1,5 +1,9 @@
 /**
- * server-bridge/index.js - Selina server bridge v4.1
+ * @fileoverview apps/server-bridge/index.js
+ * @module SelinaServerBridge
+ * @description The primary entry point for the Selina core server bridge.
+ * Initializes the Express server, configures core middleware (CORS, Helmet, Rate Limiting),
+ * sets up WebSockets for real-time orchestrator communication, and registers API routers.
  */
 
 import './load-env.js';
