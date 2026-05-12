@@ -1,0 +1,26 @@
+diff --git a/node_modules/hono/dist/cjs/middleware/cache/index.js b/node_modules/hono/dist/cjs/middleware/cache/index.js
+index 8a7f882..cfdcd34 100644
+--- a/node_modules/hono/dist/cjs/middleware/cache/index.js
++++ b/node_modules/hono/dist/cjs/middleware/cache/index.js
+@@ -23,7 +23,7 @@ module.exports = __toCommonJS(cache_exports);
+ const defaultCacheableStatusCodes = [200];
+ const shouldSkipCache = (res) => {
+   const vary = res.headers.get("Vary");
+-  if (vary && vary.includes("*")) {
++  if (vary && (vary.includes("*") || vary.includes("Authorization") || vary.includes("Cookie"))) {
+     return true;
+   }
+   const cacheControl = res.headers.get("Cache-Control");
+diff --git a/node_modules/hono/dist/middleware/cache/index.js b/node_modules/hono/dist/middleware/cache/index.js
+index ea953f7..2815ef4 100644
+--- a/node_modules/hono/dist/middleware/cache/index.js
++++ b/node_modules/hono/dist/middleware/cache/index.js
+@@ -2,7 +2,7 @@
+ var defaultCacheableStatusCodes = [200];
+ var shouldSkipCache = (res) => {
+   const vary = res.headers.get("Vary");
+-  if (vary && vary.includes("*")) {
++  if (vary && (vary.includes("*") || vary.includes("Authorization") || vary.includes("Cookie"))) {
+     return true;
+   }
+   const cacheControl = res.headers.get("Cache-Control");

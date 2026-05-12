@@ -7,7 +7,7 @@ import { clearExpiredTier2 } from './utils/localStorage';
 import { FullPageLoader } from './components/LogoLoader';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { api } from './services/api';
-import { ThemeProvider } from "./context/ThemeProvider";
+import { ThemeProvider } from "./context/ThemeContext";
 import "./styles/globals.css";
 import { SELINA_BRAND } from './brand/selina';
 

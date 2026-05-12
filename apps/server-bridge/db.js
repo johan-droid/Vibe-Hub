@@ -26,7 +26,7 @@ export function normalizeDatabaseUrl(connectionString = process.env.DATABASE_URL
   }
 }
 
-// Connection config optimized for serverless/neon databases
+// Connection config compatible with serverless Postgres (Neon) and Supabase
 pool = new pg.Pool({
   connectionString: normalizeDatabaseUrl(),
   ssl: process.env.NODE_ENV === 'production'
