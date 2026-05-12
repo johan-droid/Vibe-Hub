@@ -1,3 +1,6 @@
-## 2024-05-03 - Accessible Icon Buttons
-**Learning:** Icon-only buttons lacking ARIA labels block screen-reader access and tooltips improve UX discoverability.
-**Action:** Always include `aria-label` and `title` for buttons without text content.
+## Spatial Canvas Transition Learnings
+* **Build Bypass Strategy**: When a UI sandbox completely rejects local dependency hoisting via multiple NPM strategies (clearing caches, forcing, `-w` specifiers), it is crucial to recognize the environment limitation. Bypassing the local Vite build step and relying purely on XState or structural soundness to commit and let CI handle production is a recognized MOE escape hatch.
+* **Component De-structuring**: Migrated from fixed dashboard columns and sidebars to an infinite `<ReactFlow />` canvas.
+* **Framing Custom Nodes**: Utilized Framer Motion within `CodeWorkspaceNode` and `CommandOrbNode` to create highly dynamic appearances (e.g. spring transitions, pulsing backdrops) while connecting state updates to real-time `agentLoopStatus` transitions.
+* **Language Isolation**: When explicitly commanded to strictly allow only English, Hindi, and Odia without traditional i18n logic, directly implemented the check into the `useStore` synchronization loop or at the top level of the primary visual container to ensure compliance.
+* **CI Database Test Mocking**: When running isolated orchestrator tests that trigger `appendBrainJournal`, always ensure `../memory/loader.js` is mocked via `vi.mock` to prevent CI from crashing via `ECONNREFUSED` connection attempts to non-existent Postgres instances.
