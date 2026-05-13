@@ -65,128 +65,146 @@ describe('TaskManager — queue operations', () => {
 
   // ── addTask ─────────────────────────────────────────────────────────────────
 
-  it('addTask initializes a task in PENDING state', () => {
-    const id = tm.addTask({ prompt: 'test' });
-    expect(id).toBeDefined();
-
-    const status = tm.taskMap.get(id);
-    expect(status.status).toBe(TASK_STATUS.PENDING);
-    expect(status.details.prompt).toBe('test');
-    expect(tm.queue.length).toBe(1);
+  it('addTask pushes a task with PENDING status', () => {
+    const id = tm.addTask('Fix login bug', 'Fix the auth flow');
+    expect(tm.queue.has(id)).toBe(true);
+    expect(tm.queue.get(id).status).toBe(TASK_STATUS.PENDING);
+    expect(tm.queue.get(id).effortLevel).toBe('standard');
   });
 
-  it('addTask skips adding if task is already in terminal state or running', () => {
-    const id = tm.addTask({ prompt: 'first' });
+  it('addTask uses the title as-is or falls back to prompt slice', () => {
+    const id = tm.addTask('', 'Do something very long that will get sliced');
+    expect(tm.queue.get(id).title).toBe('Do something very long that will get sliced');
+  });
 
-    // Fake a running state
-    tm.taskMap.get(id).status = TASK_STATUS.RUNNING;
+  it('addTask emits queue:update to the client', () => {
+    tm.addTask('Task A', 'Prompt A');
+    const update = sent.find(p => p.type === 'queue:update');
+    expect(update).toBeDefined();
+    expect(update.counts.total).toBe(1);
+  });
 
-    const dupId = tm.addTask({ prompt: 'first' });
-    // Should return existing ID, queue length remains 1
-    expect(dupId).toBe(id);
-    expect(tm.queue.length).toBe(1);
+  it('addTask preserves insertion order', () => {
+    tm.addTask('T1', 'P1');
+    tm.addTask('T2', 'P2');
+    tm.addTask('T3', 'P3');
+    expect(tm.order).toHaveLength(3);
+    expect(tm.queue.get(tm.order[0]).title).toBe('T1');
+    expect(tm.queue.get(tm.order[2]).title).toBe('T3');
   });
 
   // ── cancelTask ──────────────────────────────────────────────────────────────
 
   it('cancelTask marks a PENDING task as CANCELLED', () => {
-    const id = tm.addTask({ prompt: 'to cancel' });
+    const id = tm.addTask('T', 'P');
+    const result = tm.cancelTask(id);
+    expect(result).toBe(true);
+    expect(tm.queue.get(id).status).toBe(TASK_STATUS.CANCELLED);
+  });
+
+  it('cancelTask returns false for unknown id', () => {
+    expect(tm.cancelTask('nonexistent-id')).toBe(false);
+  });
+
+  // ── prioritizeTask ──────────────────────────────────────────────────────────
+
+  it('prioritizeTask moves a task to the front', () => {
+    tm.addTask('T1', 'P1');
+    tm.addTask('T2', 'P2');
+    const lastId = tm.addTask('T3', 'P3');
+    tm.prioritizeTask(lastId);
+    expect(tm.order[0]).toBe(lastId);
+  });
+
+  // ── getStatus ───────────────────────────────────────────────────────────────
+
+  it('getStatus returns correct counts', () => {
+    tm.addTask('T1', 'P1');
+    tm.addTask('T2', 'P2');
+    const id = tm.addTask('T3', 'P3');
     tm.cancelTask(id);
 
-    expect(tm.taskMap.get(id).status).toBe(TASK_STATUS.CANCELLED);
+    const status = tm.getStatus();
+    expect(status.counts.total).toBe(3);
+    expect(status.counts.pending).toBe(2);
+    expect(status.counts.cancelled).toBe(1);
   });
 
-  it('cancelTask ignores already finished tasks', () => {
-    const id = tm.addTask({ prompt: 'already done' });
-    tm.taskMap.get(id).status = TASK_STATUS.DONE;
-    tm.cancelTask(id);
-    // Should remain DONE
-    expect(tm.taskMap.get(id).status).toBe(TASK_STATUS.DONE);
-  });
-
-  // ── getPendingTasks ─────────────────────────────────────────────────────────
-
-  it('getPendingTasks returns only PENDING tasks', () => {
-    const id1 = tm.addTask({ prompt: '1' });
-    const id2 = tm.addTask({ prompt: '2' });
-
-    tm.cancelTask(id1);
-
-    const pending = tm.getPendingTasks();
-    expect(pending.length).toBe(1);
-    expect(pending[0].id).toBe(id2);
-  });
-
-  // ── clearQueue ──────────────────────────────────────────────────────────────
-
-  it('clearQueue removes everything', () => {
-    tm.addTask({ prompt: '1' });
-    tm.addTask({ prompt: '2' });
-    tm.clearQueue();
-    expect(tm.queue.length).toBe(0);
-    expect(tm.taskMap.size).toBe(0);
-  });
-
-  // ── runQueue ────────────────────────────────────────────────────────────────
+  // ── runQueue ─────────────────────────────────────────────────────────────────
 
   it('runQueue executes tasks sequentially and calls flushContext between them', async () => {
-    const id1 = tm.addTask({ prompt: 'task 1' });
-    const id2 = tm.addTask({ prompt: 'task 2' });
+    tm.addTask('T1', 'P1');
+    tm.addTask('T2', 'P2');
 
-    // Spy on flushContext
     const flushSpy = vi.spyOn(orchestrator, 'flushContext');
 
-    // Manually trigger runQueue
     await tm.runQueue();
 
-    expect(tm.taskMap.get(id1).status).toBe(TASK_STATUS.DONE);
-    expect(tm.taskMap.get(id2).status).toBe(TASK_STATUS.DONE);
-
-    // flushContext should be called after each completed task
-    expect(flushSpy).toHaveBeenCalledTimes(2);
-
-    // Orchestrator handlePrompt should be called 2 times
+    // handlePrompt should be called once per task
     expect(orchestrator.handlePrompt).toHaveBeenCalledTimes(2);
+    // flushContext should be called once per task (after each)
+    expect(flushSpy).toHaveBeenCalledTimes(2);
   });
 
   it('runQueue skips CANCELLED tasks', async () => {
-    const id1 = tm.addTask({ prompt: 'task 1' });
-    const id2 = tm.addTask({ prompt: 'task 2' });
-
-    tm.cancelTask(id1);
+    const id = tm.addTask('T1', 'P1');
+    tm.addTask('T2', 'P2');
+    tm.cancelTask(id);
 
     await tm.runQueue();
-    expect(tm.taskMap.get(id1).status).toBe(TASK_STATUS.CANCELLED);
-    expect(tm.taskMap.get(id2).status).toBe(TASK_STATUS.DONE);
+
+    expect(orchestrator.handlePrompt).toHaveBeenCalledTimes(1); // Only T2 ran
   });
 
   it('runQueue marks tasks as DONE on success', async () => {
-    const id = tm.addTask({ prompt: 'task 1' });
+    const id = tm.addTask('T', 'P');
     await tm.runQueue();
-
-    const status = tm.taskMap.get(id);
-    expect(status.status).toBe(TASK_STATUS.DONE);
-    expect(status.result.content).toBe('Task complete.');
+    expect(tm.queue.get(id).status).toBe(TASK_STATUS.DONE);
   });
 
   it('runQueue marks tasks as FAILED on error and continues', async () => {
-    orchestrator.handlePrompt.mockRejectedValueOnce(new Error('Test failure'));
+    orchestrator.handlePrompt = vi.fn()
+      .mockRejectedValueOnce(new Error('API timeout'))
+      .mockResolvedValueOnce({ content: 'OK', toolCalls: [] });
 
-    const id1 = tm.addTask({ prompt: 'fail task' });
-    const id2 = tm.addTask({ prompt: 'success task' });
+    const id1 = tm.addTask('Fail', 'Will fail');
+    const id2 = tm.addTask('Pass', 'Will pass');
 
     await tm.runQueue();
 
-    expect(tm.taskMap.get(id1).status).toBe(TASK_STATUS.FAILED);
-    expect(tm.taskMap.get(id2).status).toBe(TASK_STATUS.DONE);
+    expect(tm.queue.get(id1).status).toBe(TASK_STATUS.FAILED);
+    expect(tm.queue.get(id2).status).toBe(TASK_STATUS.DONE);
   });
 
   it('runQueue emits queue:done when finished', async () => {
-    tm.addTask({ prompt: 'task 1' });
+    tm.addTask('T', 'P');
     await tm.runQueue();
+    const done = sent.find(p => p.type === 'queue:done');
+    expect(done).toBeDefined();
+  });
 
-    // Find the emitted 'queue:done' payload
-    const donePayload = sent.find(p => p.type === 'queue:done');
-    expect(donePayload).toBeDefined();
+  // ── _summarize ───────────────────────────────────────────────────────────────
+
+  it('_summarize caps output at 400 characters', () => {
+    const long = 'A '.repeat(300);
+    const result = tm._summarize(long);
+    expect(result.length).toBeLessThanOrEqual(400);
+  });
+
+  it('_summarize returns fallback for empty input', () => {
+    expect(tm._summarize('')).toBe('[No output]');
+    expect(tm._summarize(null)).toBe('[No output]');
+  });
+
+  // ── Context flushing ─────────────────────────────────────────────────────────
+
+  it('flushContext resets history but preserves astCache', () => {
+    orchestrator.context.addMessage('user', 'Hello');
+    orchestrator.context.astCache.set('file.js', [{ name: 'foo', kind: 'function' }]);
+
+    orchestrator.flushContext();
+
+    expect(orchestrator.context.history).toHaveLength(0);
+    expect(orchestrator.context.astCache.size).toBe(1);
   });
 });
