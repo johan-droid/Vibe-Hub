@@ -1,3 +1,10 @@
+/**
+ * @fileoverview apps/user-interface/src/App.jsx
+ * @module SelinaFrontendApp
+ * @description The root React component for the Selina User Interface.
+ * Configures client-side routing (React Router), state management integration (Zustand),
+ * physics-based animations (Framer Motion), and core visual themes.
+ */
 import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
