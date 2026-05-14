@@ -191,6 +191,14 @@ export default function Workspace() {
             <AnimatePresence>
               {terminalPanelVisible && <TerminalSessionsPanel />}
             </AnimatePresence>
+
+            {/* Nova Devs Branding */}
+            <div className="absolute bottom-4 right-4 z-40 pointer-events-none select-none">
+              <span className="text-xs tracking-wide text-white/30 transition-colors hover:text-white/70">
+                Backed by Nova Devs
+              </span>
+            </div>
+
           </main>
 
           {/* Right Sidebar: Connectors */}
