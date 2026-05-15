@@ -1,5 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { agentAuthManager } from '../auth/agent-auth.js';
+import { countTokens, tokenize } from './tokenizer.js';
+import { logger } from '../utils/detailed-logger.js';
 
 let _geminiClient = null;
 function getGeminiClient() {
@@ -27,6 +29,10 @@ export class EmbeddingsService {
    * @returns {Promise<number[]>}
    */
   async getEmbedding(text) {
+    const tokens = tokenize(text);
+    const tokenCount = countTokens(text);
+    logger.info('EmbeddingsService', `Pre-tokenized text into ${tokens.length} discrete tokens (est. ${tokenCount} budget tokens).`);
+
     const model = getGeminiClient().getGenerativeModel({ model: this.modelName });
     
     // Retry logic (Gap #5 consistency)
