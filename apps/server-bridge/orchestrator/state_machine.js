@@ -40,9 +40,16 @@ async function executeGeneratedCodeInLocalDocker(input) {
 
   const workspacePath = await fs.mkdtemp(path.join(os.tmpdir(), `selina-xstate-${crypto.randomUUID()}-`));
   const scriptPath = chooseCandidateFilename(input.targetFile);
+  const testScriptPath = 'candidate.test.js';
 
   try {
     await fs.writeFile(path.join(workspacePath, scriptPath), input.generatedCode, 'utf-8');
+
+    // Write generated tests if available
+    if (input.generatedTests && input.generatedTests.trim().length > 0) {
+      await fs.writeFile(path.join(workspacePath, testScriptPath), input.generatedTests, 'utf-8');
+    }
+
     const result = await SandboxExecutor.executeLocalDockerSandbox({
       workspacePath,
       scriptPath,
@@ -50,8 +57,26 @@ async function executeGeneratedCodeInLocalDocker(input) {
       timeoutMs: SANDBOX_TIMEOUT_MS,
     });
 
+    let testOutput = '';
+    if (result.success && input.generatedTests && input.generatedTests.trim().length > 0) {
+      const testResult = await SandboxExecutor.executeLocalDockerCommand({
+        workspacePath,
+        command: 'node',
+        args: ['--test', testScriptPath],
+        timeoutMs: SANDBOX_TIMEOUT_MS,
+      });
+      testOutput = testResult.stdout + '\n' + testResult.stderr;
+      if (!testResult.success) {
+        return {
+          success: false,
+          error_trace: `Test execution failed:\n${testOutput}`,
+          sandbox: testResult.sandbox,
+        };
+      }
+    }
+
     if (result.success) {
-      return { success: true, sandbox: result.sandbox, stdout: result.stdout };
+      return { success: true, sandbox: result.sandbox, stdout: result.stdout, testOutput };
     }
 
     return {
@@ -84,7 +109,9 @@ const agentMachine = createMachine({
     targetFile: null,
     originalCode: '',
     requestId: null,
-    stagedFile: null
+    stagedFile: null,
+    generatedTests: null,
+    testOutput: null
   },
   states: {
     idle: {
@@ -170,7 +197,7 @@ const agentMachine = createMachine({
           );
         }),
         onDone: {
-          target: 'sandboxing',
+          target: 'generating_tests',
           actions: assign({ generatedCode: ({ event }) => event.output })
         },
         onError: {
@@ -183,6 +210,33 @@ const agentMachine = createMachine({
       }
     },
 
+
+    generating_tests: {
+      invoke: {
+        input: ({ context }) => context,
+        src: fromPromise(async ({ input }) => {
+          const testPrompt = `Generate a comprehensive test suite for the following code using Node.js native 'node:test' and 'node:assert'. No markdown, ONLY valid JS code.
+
+` + input.generatedCode;
+          return await llmClient.generateCode(
+            input.orgContext,
+            input.userContext,
+            testPrompt,
+            { file: 'test_candidate.js', strict_imports: [], strict_exports: [], internal_functions: [] },
+            null
+          );
+        }),
+        onDone: {
+          target: 'sandboxing',
+          actions: assign({ generatedTests: ({ event }) => event.output })
+        },
+        onError: {
+          target: 'sandboxing',
+          actions: assign({ generatedTests: () => '// Test generation failed' })
+        }
+      }
+    },
+
     sandboxing: {
       invoke: {
         input: ({ context }) => context,
@@ -190,7 +244,8 @@ const agentMachine = createMachine({
         onDone: [
           {
             target: 'success',
-            guard: ({ event }) => event.output.success === true
+            guard: ({ event }) => event.output.success === true,
+            actions: assign({ testOutput: ({ event }) => event.output.testOutput })
           },
           {
             target: 'evaluating_failure',
@@ -248,7 +303,8 @@ const agentMachine = createMachine({
               userId: context.userId,
               requestId: context.requestId,
               effortLevel: context.effortLevel,
-              crossFileCoherenceEnabled: context.crossFileCoherenceEnabled
+              crossFileCoherenceEnabled: context.crossFileCoherenceEnabled,
+              testOutput: context.testOutput
             }
           );
           return entry;
