@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createActionGrant, hashToolParams, verifyActionGrant } from '../auth/action-grants.js';
 import { buildExpertDiagnostics, resolveExpertProfile } from '../orchestrator/expert-routing.js';
 import { createJsonRpcEvent, validateJsonRpcEnvelope } from '../orchestrator/jsonrpc.js';
@@ -8,6 +8,10 @@ import { AgentAuthManager } from '../auth/agent-auth.js';
 import { ModelService } from '../orchestrator/models.js';
 
 describe('production gap closure primitives', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('routes CodeExpert to OpenAI and DebuggerExpert to Anthropic with provider fallback diagnostics', () => {
     const env = {
       OPENAI_API_KEY: 'sk-openai',
@@ -52,6 +56,7 @@ describe('production gap closure primitives', () => {
   });
 
   it('signs short-lived action grants against tool intent and params hash', () => {
+    vi.stubEnv('SELINA_ACTION_GRANT_SECRET', 'action-grant-secret-for-tests');
     const paramsHash = hashToolParams({ path: 'src/App.jsx', content: 'x' });
     const grant = createActionGrant({
       userId: 'user-1',
@@ -78,6 +83,21 @@ describe('production gap closure primitives', () => {
       paramsHash: hashToolParams({ path: 'src/App.jsx', content: 'y' }),
       now: 2000,
     })).toMatchObject({ ok: false, code: 'ACTION_GRANT_SCOPE_MISMATCH' });
+  });
+
+  it('requires SELINA_ACTION_GRANT_SECRET instead of falling back to JWT, master, or test keys', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('VITEST', '');
+    vi.stubEnv('SELINA_ACTION_GRANT_SECRET', '');
+    vi.stubEnv('VIBE_MASTER_KEY', 'master-key-that-must-not-sign-grants');
+    vi.stubEnv('JWT_SECRET', 'jwt-secret-that-must-not-sign-grants');
+
+    expect(() => createActionGrant({
+      userId: 'user-1',
+      runId: 'run-1',
+      toolName: 'create_file',
+      paramsHash: hashToolParams({ path: 'src/App.jsx' }),
+    })).toThrow(/SELINA_ACTION_GRANT_SECRET is missing/);
   });
 
   it('fails closed for unknown MCP mutation risk and allows declared readonly MCP tools', async () => {

@@ -370,6 +370,16 @@ export async function initDB(retries = 5) {
 
       CREATE INDEX IF NOT EXISTS idx_agent_memory_items_project ON agent_memory_items(user_id, project_name, kind);
 
+      CREATE TABLE IF NOT EXISTS task_failures (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        task_id TEXT NOT NULL,
+        attempt_summary TEXT NOT NULL,
+        metadata JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_task_failures_task_id ON task_failures(task_id);
+
       CREATE TABLE IF NOT EXISTS mcp_server_registry (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         server_name TEXT UNIQUE NOT NULL,
@@ -964,6 +974,22 @@ export async function insertAgentMemoryItem({
     [userId, projectName, kind, content, JSON.stringify(metadata || {})]
   );
   return result.rows[0];
+}
+
+export async function recordTaskFailure(taskId, attemptSummary, metadata = {}) {
+  const result = await pool.query(
+    'INSERT INTO task_failures (task_id, attempt_summary, metadata) VALUES ($1, $2, $3) RETURNING *',
+    [taskId, attemptSummary, JSON.stringify(metadata)]
+  );
+  return result.rows[0];
+}
+
+export async function getTaskFailures(taskId, limit = 5) {
+  const result = await pool.query(
+    'SELECT attempt_summary FROM task_failures WHERE task_id = $1 ORDER BY created_at DESC LIMIT $2',
+    [taskId, limit]
+  );
+  return result.rows.map(r => r.attempt_summary);
 }
 
 export default pool;

@@ -58,8 +58,8 @@ function detectStack(projectTree, packageJson) {
   return Array.from(stack);
 }
 
-// Rough token estimate: ~4 chars per token for English text
-const estimateTokens = (text) => Math.ceil(text.length / 4);
+// Conservative token estimate: 0.75 tokens per character to prevent overflows
+const estimateTokens = (text) => Math.ceil(text.length * 0.75);
 
 /**
  * Token budgets by effort level.

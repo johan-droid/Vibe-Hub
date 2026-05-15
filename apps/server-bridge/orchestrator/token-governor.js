@@ -36,6 +36,21 @@ export class TokenGovernor {
 
         throw new Error('No routing rule matched the specified complexity and role');
     }
+
+    /**
+     * Returns a pre-configured apiCall function bound to the correct model
+     */
+    async requestModel(taskComplexity, requiredRole) {
+        return async (systemPrompt, userPrompt, options = {}) => {
+            return this.getCompute(taskComplexity, requiredRole, (key, model, provider) => (
+                callRoutedTextModel(key, model, systemPrompt, userPrompt, { ...options, provider })
+            ));
+        };
+    }
+
+    static async getCompute(taskComplexity, requiredRole, apiCallFn) {
+        return new TokenGovernor().getCompute(taskComplexity, requiredRole, apiCallFn);
+    }
 }
 
 export async function callRoutedTextModel(key, model, systemPrompt, userPrompt, options = {}) {

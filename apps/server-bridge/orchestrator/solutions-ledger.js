@@ -1,21 +1,43 @@
+import { recordTaskFailure, getTaskFailures } from '../db.js';
+
+async function bestEffort(operation, fallback) {
+  try {
+    return await operation();
+  } catch (err) {
+    console.error('[SolutionsLedger] DB Error:', err.message);
+    return fallback;
+  }
+}
+
 export class SolutionsLedger {
   constructor() {
-    this.ledger = new Map();
+    // ledger is now persisted in DB
   }
 
-  recordFailure(taskId, attemptSummary) {
-    if (!this.ledger.has(taskId)) {
-      this.ledger.set(taskId, []);
-    }
-    this.ledger.get(taskId).push(attemptSummary);
+  async recordFailure(taskId, attemptSummary, metadata = {}) {
+    return bestEffort(
+      () => recordTaskFailure(taskId, attemptSummary, metadata),
+      null
+    );
   }
 
-  getHistory(taskId) {
-    const history = this.ledger.get(taskId);
+  async getHistory(taskId) {
+    const history = await bestEffort(
+      () => getTaskFailures(taskId, 10),
+      []
+    );
     if (!history || history.length === 0) {
       return "No past failures.";
     }
     return history.join("\n");
+  }
+
+  async getLessons(taskId) {
+    const history = await bestEffort(
+      () => getTaskFailures(taskId, 3),
+      []
+    );
+    return history;
   }
 
   static recordFailure(taskId, message) {

@@ -12,7 +12,7 @@ export class TheBrain {
   }
 
   async planSequentialFix(minifiedContext, taskGoal, taskId, userId = null) {
-    const pastFailures = this.ledger.getHistory(taskId);
+    const pastFailures = await this.ledger.getHistory(taskId);
     const governor = new TokenGovernor();
 
     // V6 Architecture: Separate constraints and preferences
@@ -63,9 +63,8 @@ ${minifiedContext}
 Ledger of Past Failures:
 ${JSON.stringify(pastFailures, null, 2)}`;
 
-    const plannerOutput = await governor.getCompute('high', 'planner', (key, model, provider) => (
-      callRoutedTextModel(key, model, systemPrompt, userPrompt, { provider, maxOutputTokens: 4096 })
-    ));
+    const model = await governor.requestModel('high', 'planner');
+    const plannerOutput = await model(systemPrompt, userPrompt, { maxOutputTokens: 4096 });
 
     try {
       const parsed = JSON.parse(plannerOutput);

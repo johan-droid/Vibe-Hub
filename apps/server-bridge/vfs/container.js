@@ -23,6 +23,7 @@ export class VFSContainer extends EventEmitter {
     super();
     this.options = { ...DEFAULT_OPTIONS, ...options };
     this.root = path.resolve(this.options.workDir);
+    this.realRoot = this._safeRealpath(this.root);
     this.staging = new Map();
     this.auditLog = [];
     this.totalStagedSize = 0;
@@ -99,8 +100,9 @@ export class VFSContainer extends EventEmitter {
         return true;
     }
 
-    const relativePath = path.relative(this.root, path.resolve(this.root, targetPath));
-    if (relativePath.startsWith('..')) return true;
+    const absolutePath = path.resolve(this.root, targetPath);
+    const relativePath = path.relative(this.root, absolutePath);
+    if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) return true;
 
     return this.ig.ignores(relativePath);
   }
@@ -110,10 +112,7 @@ export class VFSContainer extends EventEmitter {
       throw new Error(`Access to path ${targetPath} is restricted`);
     }
 
-    const absolutePath = path.resolve(this.root, targetPath);
-    if (!absolutePath.startsWith(this.root)) {
-      throw new Error('Path escape attempt detected');
-    }
+    const absolutePath = this._validatePath(targetPath);
 
     if (this.staging.has(targetPath)) {
       return this.staging.get(targetPath).content;
@@ -143,10 +142,7 @@ export class VFSContainer extends EventEmitter {
       throw new Error(`Cannot stage ignored path: ${targetPath}`);
     }
 
-    const absolutePath = path.resolve(this.root, targetPath);
-    if (!absolutePath.startsWith(this.root)) {
-      throw new Error('Path escape attempt detected');
-    }
+    const absolutePath = this._validatePath(targetPath);
 
     const size = Buffer.byteLength(content, 'utf8');
     if (size > this.options.maxFileSize) {
@@ -196,7 +192,7 @@ export class VFSContainer extends EventEmitter {
     }
 
     const entry = this.staging.get(targetPath);
-    const absolutePath = path.resolve(this.root, targetPath);
+    const absolutePath = this._validatePath(targetPath);
 
     try {
       await fs.promises.mkdir(path.dirname(absolutePath), { recursive: true });
@@ -319,5 +315,59 @@ export class VFSContainer extends EventEmitter {
 
   getAuditLog() {
     return [...this.auditLog];
+  }
+
+  /**
+   * Securely validate path to prevent escape from root
+   * @private
+   */
+  _validatePath(targetPath) {
+    const absolutePath = path.resolve(this.root, targetPath);
+    const relative = path.relative(this.root, absolutePath);
+    
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+      throw new Error('Path escape attempt detected');
+    }
+
+    const nearestParent = this._nearestExistingParent(path.dirname(absolutePath));
+    const realParent = this._safeRealpath(nearestParent);
+    const parentRelative = path.relative(this.realRoot, realParent);
+    if (parentRelative.startsWith('..') || path.isAbsolute(parentRelative)) {
+      throw new Error('Path escape attempt detected');
+    }
+
+    try {
+      const stat = fs.lstatSync(absolutePath);
+      if (stat.isSymbolicLink()) {
+        throw new Error('Path escape attempt detected');
+      }
+      const realTarget = this._safeRealpath(absolutePath);
+      const targetRelative = path.relative(this.realRoot, realTarget);
+      if (targetRelative.startsWith('..') || path.isAbsolute(targetRelative)) {
+        throw new Error('Path escape attempt detected');
+      }
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+    
+    return absolutePath;
+  }
+
+  _safeRealpath(targetPath) {
+    try {
+      return fs.realpathSync.native(targetPath);
+    } catch {
+      return path.resolve(targetPath);
+    }
+  }
+
+  _nearestExistingParent(targetDir) {
+    let current = path.resolve(targetDir);
+    while (!fs.existsSync(current)) {
+      const parent = path.dirname(current);
+      if (parent === current) return this.root;
+      current = parent;
+    }
+    return current;
   }
 }

@@ -12,7 +12,7 @@ function escapeRegex(value) {
 export class ApprovalEngine {
   constructor({ timeoutMs = 120_000 } = {}) {
     this.rules = [];
-    this.approveOnceUntil = 0;
+    this.approvalLeases = new Map();
     this.timeoutMs = timeoutMs;
   }
 
@@ -31,7 +31,13 @@ export class ApprovalEngine {
       break;
     }
 
-    if (Date.now() < this.approveOnceUntil) return true;
+    this.pruneExpiredLeases();
+    const leaseKey = this.leaseKey(context);
+    if (leaseKey) {
+      const leaseExpiry = this.approvalLeases.get(leaseKey) || 0;
+      if (Date.now() < leaseExpiry) return true;
+    }
+
     if (typeof uiFn !== 'function') return false;
 
     const result = await Promise.race([
@@ -48,11 +54,22 @@ export class ApprovalEngine {
     }
 
     if (result === 'approve' || result === 'approve_always') {
-      this.approveOnceUntil = Date.now() + 300_000;
+      if (leaseKey) this.approvalLeases.set(leaseKey, Date.now() + 300_000);
       return true;
     }
 
     return false;
+  }
+
+  leaseKey(context = {}) {
+    if (!context.runId || !context.toolName) return null;
+    return `${context.runId}:${context.toolName}`;
+  }
+
+  pruneExpiredLeases(now = Date.now()) {
+    for (const [key, expiry] of this.approvalLeases.entries()) {
+      if (expiry <= now) this.approvalLeases.delete(key);
+    }
   }
 }
 

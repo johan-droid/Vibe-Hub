@@ -1,14 +1,17 @@
 import { TokenGovernor, callRoutedTextModel } from '../token-governor.js';
 
-export async function synthesizeDiffs(workerOutputs, contractSchema) {
-  // Use Governor to request 'low' complexity 'planner' (Gemini 1.5 Flash).
-  // System Prompt: "You are the Merge Master. You have multiple code diffs from parallel workers. Ensure they follow the Contract Schema. Resolve any naming collisions. Output a single, unified JSON Master Patch."
+export async function synthesizeDiffs(workerOutputs, groundTruthContext = {}) {
   const governor = new TokenGovernor();
-  const systemPrompt = `You are the Merge Master. You have multiple code diffs from parallel workers. Ensure they follow the Contract Schema. Resolve any naming collisions. Output a single, unified JSON Master Patch.`;
-  const prompt = `Worker Outputs: ${JSON.stringify(workerOutputs)}\nContract Schema: ${JSON.stringify(contractSchema)}`;
+  const { systemPrompt, prompt } = buildMergeSynthesisPrompt(workerOutputs, groundTruthContext);
 
   const masterPatch = await governor.getCompute('low', 'planner', (key, model, provider) => (
     callRoutedTextModel(key, model, systemPrompt, prompt, { provider, maxOutputTokens: 4096, jsonMode: true })
   ));
   return masterPatch;
+}
+
+export function buildMergeSynthesisPrompt(workerOutputs, groundTruthContext = {}) {
+  const systemPrompt = `You are the Merge Master. You have multiple code diffs from workers. Reconcile them against the Ground Truth Context produced by completed sync nodes. Treat generated types, AST, files, and exports in that context as authoritative. Resolve naming collisions and output a single strict JSON Master Patch.`;
+  const prompt = `Worker Outputs: ${JSON.stringify(workerOutputs)}\nGround Truth Context: ${JSON.stringify(groundTruthContext)}`;
+  return { systemPrompt, prompt };
 }

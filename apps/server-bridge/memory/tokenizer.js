@@ -5,10 +5,29 @@ const FALLBACK_ENCODING = 'o200k_base';
 const MESSAGE_OVERHEAD_TOKENS = 4;
 const encoderCache = new Map();
 
+/**
+ * Estimate tokens using a conservative heuristic (0.75 tokens per character)
+ * to prevent API context overflows in high-load scenarios.
+ */
 export function countTokens(text, options = {}) {
   const normalized = normalizeTokenText(text);
   if (!normalized) return 0;
-  return getEncoder(options.model).encode(normalized).length;
+  
+  // ⚡ Hardened Heuristic: 0.75 multiplier per request for conservative budgeting
+  return Math.ceil(normalized.length * 0.75);
+}
+
+/**
+ * Detailed token count using tiktoken for precision when needed.
+ */
+export function countTokensPrecise(text, options = {}) {
+  const normalized = normalizeTokenText(text);
+  if (!normalized) return 0;
+  try {
+    return getEncoder(options.model).encode(normalized).length;
+  } catch {
+    return countTokens(text);
+  }
 }
 
 export function tokenize(text, options = {}) {

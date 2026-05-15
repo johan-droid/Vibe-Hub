@@ -24,7 +24,7 @@ export class ContextPruner {
             return messageHistory;
         }
 
-        const anchorMessage = isSystemMessage(messageHistory[0]) ? messageHistory[0] : null;
+        const anchorMessage = messageHistory[0]; // Anchor the first message (index 0) as required
         const historyBody = anchorMessage ? messageHistory.slice(1) : [...messageHistory];
         const recentWindowStart = findRecentWindowStart(historyBody, this.recentUserTurns);
         const recentMessages = historyBody.slice(recentWindowStart);

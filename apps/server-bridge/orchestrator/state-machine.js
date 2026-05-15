@@ -9,11 +9,20 @@
 
 import { createMachine, createActor, assign, fromPromise } from 'xstate';
 import { v4 as uuid } from 'uuid';
+import { execFile } from 'child_process';
+import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
+import { promisify } from 'util';
+import { sanitizeEnvironment } from '../utils/env-sanitizer.js';
+
+const execFileAsync = promisify(execFile);
+const CHECKPOINT_REF_PREFIX = 'refs/selina/checkpoints';
 
 // ─── DAG Node Structure ───────────────────────────────────────────────────────
 
 export class ExecutionNode {
-  constructor({ parentId = null, action, codeSnapshot = new Map() }) {
+  constructor({ parentId = null, action, checkpointRef = null, checkpointCommit = null }) {
     this.id = uuid();
     this.parentId = parentId;
     this.action = action; // { name: string, args: object }
@@ -21,19 +30,79 @@ export class ExecutionNode {
     this.verification = { passed: false, attempts: 0, maxAttempts: 3 };
     this.children = [];
     this.state = 'pending'; // pending | running | success | failed | rolledback
-    this.codeSnapshot = codeSnapshot; // Map<filePath, content> - state before this action
+    this.checkpointRef = checkpointRef;
+    this.checkpointCommit = checkpointCommit;
     this.createdAt = new Date().toISOString();
     this.errorLog = [];
+  }
+}
+
+// ─── Git Checkpoint Store ─────────────────────────────────────────────────────
+
+export class GitCheckpointStore {
+  constructor({ workDir = process.env.SELINA_GIT_WORKTREE || process.cwd(), gitBin = 'git' } = {}) {
+    this.workDir = path.resolve(workDir);
+    this.gitBin = gitBin;
+  }
+
+  async _git(args, options = {}) {
+    const { stdout } = await execFileAsync(this.gitBin, args, {
+      cwd: this.workDir,
+      timeout: options.timeout || 30_000,
+      env: {
+        ...sanitizeEnvironment(process.env, { inherit: 'core' }),
+        GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME || 'Selina Checkpoint',
+        GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL || 'selina-checkpoint@local',
+        GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME || 'Selina Checkpoint',
+        GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL || 'selina-checkpoint@local',
+        ...(options.env || {}),
+      },
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    return String(stdout || '').trim();
+  }
+
+  async _repoRoot() {
+    return this._git(['rev-parse', '--show-toplevel']);
+  }
+
+  async createCheckpoint(nodeId) {
+    await this._repoRoot();
+    const ref = `${CHECKPOINT_REF_PREFIX}/${nodeId}`;
+    const tempIndex = path.join(os.tmpdir(), `selina-git-index-${nodeId}-${uuid()}`);
+
+    try {
+      const env = { GIT_INDEX_FILE: tempIndex };
+      await this._git(['read-tree', 'HEAD'], { env }).catch(() => null);
+      await this._git(['add', '-A', '--', '.'], { env });
+      const tree = await this._git(['write-tree'], { env });
+      const head = await this._git(['rev-parse', '--verify', 'HEAD']).catch(() => '');
+      const commitArgs = ['commit-tree', tree, '-m', `selina-node-${nodeId}`];
+      if (head) commitArgs.splice(2, 0, '-p', head);
+      const commit = await this._git(commitArgs, { env });
+      await this._git(['update-ref', ref, commit]);
+      return { ref, commit };
+    } finally {
+      await fs.rm(tempIndex, { force: true }).catch(() => null);
+    }
+  }
+
+  async restoreCheckpoint(ref) {
+    if (!ref || !String(ref).startsWith(`${CHECKPOINT_REF_PREFIX}/`)) {
+      throw new Error('Refusing to restore an unscoped Selina checkpoint ref.');
+    }
+    await this._git(['reset', '--hard', ref], { timeout: 60_000 });
+    return { restored: true, ref };
   }
 }
 
 // ─── Rollback System ──────────────────────────────────────────────────────────
 
 export class RollbackSystem {
-  constructor(onRestoreFiles) {
+  constructor(onRestoreCheckpoint) {
     this.nodeMap = new Map(); // id -> ExecutionNode
     this.currentBranch = []; // Stack of node IDs in current execution path
-    this.onRestoreFiles = onRestoreFiles; // Callback to restore files from snapshot
+    this.onRestoreCheckpoint = onRestoreCheckpoint; // Callback to restore Git checkpoint refs
   }
 
   registerNode(node) {
@@ -82,9 +151,9 @@ export class RollbackSystem {
     // Mark current node as failed
     node.state = 'failed';
 
-    // Restore code to parent snapshot
-    if (parent.codeSnapshot && parent.codeSnapshot.size > 0) {
-      await this.onRestoreFiles(parent.codeSnapshot);
+    // Restore code to parent Git checkpoint without keeping file contents in JS memory.
+    if (parent.checkpointRef) {
+      await this.onRestoreCheckpoint(parent.checkpointRef);
     }
 
     // Trim current branch back to parent
@@ -427,36 +496,32 @@ export class StateMachineTaskManager {
   constructor(orchestrator, callbacks) {
     this.orchestrator = orchestrator;
     this.callbacks = callbacks;
-    this.rollbackSystem = new RollbackSystem(this._restoreFiles.bind(this));
+    this.gitCheckpoints = new GitCheckpointStore({ workDir: callbacks?.workspacePath || process.cwd() });
+    this.rollbackSystem = new RollbackSystem(this._restoreCheckpoint.bind(this));
     this.actor = null;
-    this.fileCache = new Map(); // Current file states for snapshotting
   }
 
   /**
-   * Capture current file state before executing an action
+   * Capture the current worktree state in Git before executing an action.
+   * Stores only a ref/commit id on the node; file contents live in Git objects.
    */
-  async _captureCodeSnapshot() {
-    const snapshot = new Map();
-    // Files are tracked through the onToolCall callback
-    // This will be populated by intercepting read_file/write_file calls
-    for (const [path, content] of this.fileCache) {
-      snapshot.set(path, content);
-    }
-    return snapshot;
+  async _checkpointNode(node) {
+    if (!node || node.checkpointRef) return node;
+    const checkpoint = await this.gitCheckpoints.createCheckpoint(node.id);
+    node.checkpointRef = checkpoint.ref;
+    node.checkpointCommit = checkpoint.commit;
+    return node;
   }
 
   /**
-   * Restore files from a snapshot during rollback
+   * Restore files from a Git checkpoint during rollback
    */
-  async _restoreFiles(snapshot) {
-    const restored = [];
-    for (const [path, content] of snapshot) {
-      // Write the old content back
-      await this.callbacks.onToolCall('write_file', { path, content });
-      this.fileCache.set(path, content);
-      restored.push(path);
-    }
-    return restored;
+  async _restoreCheckpoint(checkpointRef) {
+    return this.gitCheckpoints.restoreCheckpoint(checkpointRef);
+  }
+
+  _isMutationTool(name) {
+    return ['write_file', 'edit_file', 'create_file', 'patch_file', 'replace_file_content', 'multi_replace_file_content'].includes(name);
   }
 
   /**
@@ -466,9 +531,9 @@ export class StateMachineTaskManager {
     // Initialize the first node
     const initialNode = new ExecutionNode({
       parentId: null,
-      action: { name: 'init', args: { prompt: task.prompt } },
-      codeSnapshot: await this._captureCodeSnapshot()
+      action: { name: 'init', args: { prompt: task.prompt } }
     });
+    await this._checkpointNode(initialNode);
     
     this.rollbackSystem.registerNode(initialNode);
 
@@ -477,20 +542,8 @@ export class StateMachineTaskManager {
       onExecuteAction: async (action) => {
         // Track file reads/writes
         const wrappedToolCall = async (name, args) => {
-          if (name === 'read_file') {
-            const result = await this.callbacks.onToolCall(name, args);
-            this.fileCache.set(args.path, result);
-            return result;
-          }
-          if (name === 'write_file' || name === 'edit_file') {
-            // Capture snapshot before modification
-            const currentContent = this.fileCache.get(args.path);
-            if (currentContent) {
-              initialNode.codeSnapshot.set(args.path, currentContent);
-            }
-            const result = await this.callbacks.onToolCall(name, args);
-            this.fileCache.set(args.path, args.content || result);
-            return result;
+          if (this._isMutationTool(name)) {
+            await this._checkpointNode(input.currentNode || initialNode);
           }
           return this.callbacks.onToolCall(name, args);
         };

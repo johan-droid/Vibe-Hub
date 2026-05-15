@@ -375,9 +375,10 @@ export class AgentOrchestrator {
           const check = gate.analyze(finalResult?.content);
           if (check.status === "REJECTED") {
             // Re-route to the brain
-            SolutionsLedger.recordFailure('security-scan', `[SECURITY_ALERT] ${check.vulnerability_report}`);
-            const brain = new TheBrain();
-            brain.process('security-scan', finalResult?.content);
+            const ledger = new SolutionsLedger();
+            await ledger.recordFailure('security-scan', `[SECURITY_ALERT] ${check.vulnerability_report}`);
+            const brain = new TheBrain(ledger);
+            await brain.process('security-scan', finalResult?.content);
             return await runExpertLoop('code');
           }
         }

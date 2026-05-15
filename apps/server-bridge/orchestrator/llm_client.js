@@ -102,9 +102,8 @@ class LLMClient {
         staticContext,
       });
       const useCachedContent = Boolean(cachedContent);
-      const contentsText = useCachedContent ? userInstruction : (fallbackUserInstruction || [staticContext, userInstruction].filter(Boolean).join('\n\n'));
-      // 2. Execute the network request
-      // Using Gemini API format (adjust if using OpenAI/Anthropic)
+      const fullSystemInstruction = [systemInstruction, staticContext].filter(Boolean).join('\n\n');
+      
       const response = await callWithAuthRetry(this.authManager, 'gemini', () => fetch(`${endpoint}?key=${apiKey}`, {
         method: 'POST',
         headers: {
@@ -112,14 +111,14 @@ class LLMClient {
         },
         body: JSON.stringify({
           ...(useCachedContent ? { cachedContent } : { systemInstruction: {
-            parts: [{ text: systemInstruction }]
+            parts: [{ text: fullSystemInstruction }]
           } }),
           contents: [{
             role: 'user',
-            parts: [{ text: contentsText }]
+            parts: [{ text: userInstruction }]
           }],
           generationConfig: {
-            temperature: 0.2, // Keep temperature low for deterministic coding tasks
+            temperature: 0.2,
             maxOutputTokens: 8192
           }
         })
@@ -245,8 +244,9 @@ class LLMClient {
 
 export function extractCodePayload(text) {
   const rawCode = String(text || '').trim();
-  const match = rawCode.match(/^```[a-zA-Z0-9_-]*[ \t]*\r?\n([\s\S]*?)\r?\n```[ \t]*$/);
-  return match ? match[1] : rawCode;
+  const regex = /^```[a-z]*\n([\s\S]*?)\n```/gm;
+  const matches = [...rawCode.matchAll(regex)];
+  return matches.length > 0 ? matches[0][1] : rawCode;
 }
 
 export default new LLMClient();

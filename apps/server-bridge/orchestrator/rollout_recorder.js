@@ -39,24 +39,31 @@ function limitString(value) {
   return `${value.slice(0, MAX_STRING_LENGTH)}\n...[truncated]`;
 }
 
-function redactString(value) {
-  return limitString(value)
+function redactString(value, sensitiveValues = []) {
+  let redacted = limitString(value)
     .replace(/(authorization\s*[:=]\s*)(bearer\s+)?[^\s"',}]+/gi, '$1[redacted]')
     .replace(/((?:api[_-]?key|cookie|jwt|password|secret|session|token)\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,}]+)/gi, '$1[redacted]');
+
+  for (const { key, val } of sensitiveValues) {
+    if (val && val.length > 5) {
+      redacted = redacted.split(val).join(`[REDACTED_${key}]`);
+    }
+  }
+  return redacted;
 }
 
-function redactValue(value, depth = 0) {
+function redactValue(value, sensitiveValues = [], depth = 0) {
   if (depth > 6) return '[max-depth]';
   if (value === null || value === undefined) return value;
-  if (typeof value === 'string') return redactString(value);
+  if (typeof value === 'string') return redactString(value, sensitiveValues);
   if (typeof value === 'number' || typeof value === 'boolean') return value;
-  if (Array.isArray(value)) return value.slice(0, 50).map(item => redactValue(item, depth + 1));
+  if (Array.isArray(value)) return value.slice(0, 50).map(item => redactValue(item, sensitiveValues, depth + 1));
 
   if (typeof value === 'object') {
     return Object.fromEntries(
       Object.entries(value).slice(0, 100).map(([key, item]) => [
         key,
-        SECRET_KEY_PATTERN.test(key) ? '[redacted]' : redactValue(item, depth + 1),
+        SECRET_KEY_PATTERN.test(key) ? '[redacted]' : redactValue(item, sensitiveValues, depth + 1),
       ])
     );
   }
@@ -126,6 +133,11 @@ export class RolloutRecorder {
     this.planFile = path.join(this.dir, 'plans.md');
     this.implementationFile = path.join(this.dir, 'implement.md');
     this.statusFile = path.join(this.dir, 'status.md');
+
+    this.sensitiveValues = Object.keys(process.env)
+      .filter(key => SECRET_KEY_PATTERN.test(key))
+      .map(key => ({ key, val: process.env[key] }))
+      .filter(item => item.val && item.val.length > 5);
   }
 
   static async create(metadata = {}) {
@@ -156,7 +168,7 @@ export class RolloutRecorder {
       sessionId: this.sessionId || this.runId,
       parent_rollout_id: this.parentRolloutId,
       type: sanitizeSegment(type, 'event'),
-      payload: redactValue(payload),
+      payload: redactValue(payload, this.sensitiveValues),
     };
     await fs.appendFile(this.eventsFile, `${JSON.stringify(event)}\n`, 'utf-8');
     return event;

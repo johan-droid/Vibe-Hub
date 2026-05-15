@@ -74,6 +74,12 @@ const mcpToolCalls = new client.Counter({
   labelNames: ['server', 'tool', 'status'],
 });
 
+const agentRecovery = new client.Counter({
+  name: 'agent_recovery_total',
+  help: 'Agent successful recoveries using SolutionsLedger lessons.',
+  labelNames: ['taskId'],
+});
+
 metricsRegistry.registerMetric(httpDuration);
 metricsRegistry.registerMetric(stateTransitions);
 metricsRegistry.registerMetric(sandboxDuration);
@@ -85,6 +91,7 @@ metricsRegistry.registerMetric(activeSockets);
 metricsRegistry.registerMetric(agentToolCalls);
 metricsRegistry.registerMetric(approvalDecisions);
 metricsRegistry.registerMetric(mcpToolCalls);
+metricsRegistry.registerMetric(agentRecovery);
 
 export function metricsMiddleware(req, res, next) {
   const end = httpDuration.startTimer();
@@ -164,6 +171,10 @@ export function recordMcpToolCallMetric(server, tool, status) {
     tool: String(tool || 'unknown'),
     status: String(status || 'unknown'),
   });
+}
+
+export function recordAgentRecoveryMetric(taskId) {
+  agentRecovery.inc({ taskId: String(taskId || 'unknown') });
 }
 
 export async function renderMetrics() {

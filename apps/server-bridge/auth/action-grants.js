@@ -4,10 +4,9 @@ import { v4 as uuid } from 'uuid';
 const DEFAULT_TTL_MS = 120_000;
 
 function secret() {
-  const value = process.env.SELINA_ACTION_GRANT_SECRET || process.env.VIBE_MASTER_KEY || process.env.JWT_SECRET;
+  const value = process.env.SELINA_ACTION_GRANT_SECRET;
   if (value) return value;
-  if (process.env.NODE_ENV === 'test' || process.env.VITEST) return 'test-action-grant-secret';
-  throw new Error('SELINA_ACTION_GRANT_SECRET or JWT_SECRET is required for action grants');
+  throw new Error('CRITICAL SECURITY ERROR: SELINA_ACTION_GRANT_SECRET is missing. This key is mandatory for signing Action Grants and must be isolated from JWT_SECRET to prevent forgery.');
 }
 
 function canonicalize(value) {

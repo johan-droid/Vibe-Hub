@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import {
   getAgentRun,
   getAgentRunEvents,
@@ -47,7 +48,7 @@ export function persistRunStatus(runIdentity, status, metadata = {}) {
 export function persistRunEvent(envelope, runIdentity) {
   if (!envelope?.id || !runIdentity?.runId) return null;
   return bestEffort(() => recordAgentRunEvent({
-    id: `${String(envelope.id)}:${String(envelope.params?.status || envelope.params?.state || envelope.method)}:${Date.now()}`,
+    id: `${String(envelope.id)}:${String(envelope.params?.status || envelope.params?.state || envelope.method)}:${crypto.randomUUID()}`,
     runId: runIdentity.runId,
     rootRunId: runIdentity.rootRunId || runIdentity.runId,
     parentRunId: runIdentity.parentRunId || null,

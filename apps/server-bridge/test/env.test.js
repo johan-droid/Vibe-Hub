@@ -7,6 +7,7 @@ const productionBaseEnv = {
   JWT_SECRET: 'jwt-secret-for-tests',
   CSRF_SECRET: 'csrf-secret-for-tests',
   VIBE_MASTER_KEY: 'master-key-for-tests',
+  SELINA_ACTION_GRANT_SECRET: 'action-grant-secret-for-tests',
   UI_ORIGIN: 'https://vibe-hub-ui.onrender.com',
   SELINA_MODEL_PROVIDER: 'nim',
   NIM_API_KEY: 'nim-key-for-tests',
@@ -54,6 +55,13 @@ describe('Environment validation', () => {
 
     expect(() => validateEnvironment(env))
       .toThrow('Missing required production environment variables: VIBE_MASTER_KEY');
+  });
+
+  it('requires a dedicated SELINA_ACTION_GRANT_SECRET in production', () => {
+    const env = { ...productionBaseEnv, SELINA_ACTION_GRANT_SECRET: '' };
+
+    expect(() => validateEnvironment(env))
+      .toThrow('Missing required production environment variables: SELINA_ACTION_GRANT_SECRET');
   });
 
   it('requires credentials for the selected production model provider', () => {

@@ -942,7 +942,10 @@ wss.on('connection', async (ws, req) => {
         paramsHash: hashToolParams(args || {}),
         approvalFn: (reason, approvalContext) => approvalEngine.request(
           reason,
-          approvalContext,
+          {
+            ...approvalContext,
+            runId: session.currentRunIdentity?.runId || toolCallId,
+          },
           async (promptText) => {
             const approved = await onPlan(
               [{

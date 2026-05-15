@@ -97,4 +97,44 @@ describe('Agent auth gate', () => {
     await expect(decision).resolves.toBe(false);
     vi.useRealTimers();
   });
+
+  it('scopes approval leases to runId and toolName', async () => {
+    const engine = new ApprovalEngine({ timeoutMs: 10 });
+    const firstApproval = vi.fn(async () => 'approve');
+    const denied = vi.fn(async () => 'deny');
+
+    await expect(engine.request('write file', {
+      runId: 'run-a',
+      toolName: 'create_file',
+      params: '{}',
+    }, firstApproval)).resolves.toBe(true);
+
+    await expect(engine.request('write file again', {
+      runId: 'run-a',
+      toolName: 'create_file',
+      params: '{}',
+    }, denied)).resolves.toBe(true);
+    expect(denied).not.toHaveBeenCalled();
+
+    await expect(engine.request('other run same tool', {
+      runId: 'run-b',
+      toolName: 'create_file',
+      params: '{}',
+    }, denied)).resolves.toBe(false);
+    expect(denied).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not create reusable approval leases without a runId', async () => {
+    const engine = new ApprovalEngine({ timeoutMs: 10 });
+
+    await expect(engine.request('write file', {
+      toolName: 'create_file',
+      params: '{}',
+    }, async () => 'approve')).resolves.toBe(true);
+
+    await expect(engine.request('write file again', {
+      toolName: 'create_file',
+      params: '{}',
+    }, async () => 'deny')).resolves.toBe(false);
+  });
 });
