@@ -201,7 +201,7 @@ const agentMachine = createMachine({
           actions: assign({ generatedCode: ({ event }) => event.output })
         },
         onError: {
-          target: 'fatal_failure',
+          target: 'evaluating_failure',
           // Log the error. If the API fails, the machine halts.
           actions: assign({
             sandboxError: ({ event }) => event.error?.message || String(event.error)
@@ -282,7 +282,9 @@ const agentMachine = createMachine({
       entry: assign({
         retries: 0,
         rollbacks: ({ context }) => context.rollbacks + 1,
-        taskPrompt: ({ context }) => `${context.taskPrompt}\n\nSYSTEM OVERRIDE: Your previous architectural approach failed completely with error: ${context.sandboxError}. Do NOT retry the same logic. Pivot to a completely different design pattern.` 
+        taskPrompt: function injectAntigravityPrompt({ context }) {
+          return `${context.taskPrompt}\n\nSYSTEM OVERRIDE: Your previous architectural approach failed completely with error: ${context.sandboxError}. Do NOT retry the same logic. Pivot to a completely different design pattern.`;
+        }
       }),
       always: 'drafting_code'
     },
