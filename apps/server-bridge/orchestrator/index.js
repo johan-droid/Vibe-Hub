@@ -214,7 +214,7 @@ export class AgentOrchestrator {
       try {
         const result = await onToolCall(name, args);
         await recordRollout('tool_call_finished', { name, result });
-        if (['edit_file', 'replace_file_content', 'multi_replace_file_content', 'create_file'].includes(name)) {
+        if (['edit_file', 'patch_file', 'replace_file_content', 'multi_replace_file_content', 'create_file'].includes(name)) {
           await recordRollout('edit_applied', { name, result });
         }
         if (['run_command', 'security_sandbox'].includes(name)) {

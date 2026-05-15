@@ -40,10 +40,10 @@ If you encounter any of the following, you must **STOP and use `ask_clarificatio
 
 You have TWO file-writing tools:
 - `create_file`: For creating NEW files that don't exist yet.
-- `edit_file`: For modifying EXISTING files with search/replace blocks.
+- `patch_file`: For modifying EXISTING files with fuzzy search/replace blocks.
 
 **Rules:**
-- ALWAYS prefer `edit_file` over `create_file` when modifying existing files.
+- ALWAYS prefer `patch_file` over `create_file` when modifying existing files.
 - Each `search` block must contain enough context to be UNIQUE in the file.
 - Include 1-2 lines of surrounding context in your `search` blocks for uniqueness.
 - NEVER replace an entire file when you only need to change 3 lines.
@@ -53,12 +53,8 @@ You have TWO file-writing tools:
 ```json
 {
   "path": "src/App.jsx",
-  "edits": [
-    {
-      "search": "import React from 'react';\nimport { useState } from 'react';",
-      "replace": "import React, { useState, useEffect } from 'react';"
-    }
-  ]
+  "search_content": "import React from 'react';\nimport { useState } from 'react';",
+  "replace_content": "import React, { useState, useEffect } from 'react';"
 }
 ```
 
@@ -151,7 +147,7 @@ When a build or command fails:
 
 ## 11. Safety & Control Protocol (v3.1)
 
-- **Git Checkpoints**: An automatic Git checkpoint is created before any `edit_file` or `create_file` operation. This allows for effortless rollbacks if a change introduces regression.
+- **Git Checkpoints**: An automatic Git checkpoint is created before any `patch_file` or `create_file` operation. This allows for effortless rollbacks if a change introduces regression.
 - **Permission Awareness**: Respect the project's `.gitignore`. NEVER read or modify files that are ignored by Git unless explicitly asked. The `list_files` and `grep_search` tools will automatically filter ignored files.
 - **Atomic Edits**: When performing multiple edits, ensure they are logically consistent. If one edit fails, the system may revert the entire set to maintain integrity.
 

@@ -8,9 +8,9 @@ export class ProviderExhaustedError extends Error {
 export class KeyRotator {
     constructor() {
         this.keys = {
-            groq: (process.env.GROQ_KEYS || '').split(',').filter(Boolean),
-            nim: (process.env.NVIDIA_NIM_KEYS || '').split(',').filter(Boolean),
-            gemini: (process.env.GEMINI_KEYS || '').split(',').filter(Boolean)
+            groq: splitKeys(process.env.GROQ_KEYS || process.env.GROQ_API_KEY),
+            nim: splitKeys(process.env.NVIDIA_NIM_KEYS || process.env.NIM_API_KEY || process.env.NVIDIA_NIM_API_KEY || process.env.NVIDIA_API_KEY),
+            gemini: splitKeys(process.env.GEMINI_KEYS || process.env.GEMINI_API_KEY)
         };
         this.currentIndex = {
             groq: 0,
@@ -48,4 +48,8 @@ export class KeyRotator {
 
         throw new ProviderExhaustedError(provider);
     }
+}
+
+function splitKeys(value = '') {
+    return value.split(',').map(key => key.trim()).filter(Boolean);
 }

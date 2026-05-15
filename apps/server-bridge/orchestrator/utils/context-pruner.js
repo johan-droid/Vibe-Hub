@@ -1,46 +1,157 @@
-// using groq sdk hypothetically or simple fetch if needed, assuming TokenGovernor could return a fast model
-import { TokenGovernor } from '../token-governor.js';
+import { countMessageTokens, extractMessageText } from '../../memory/tokenizer.js';
+import { TokenGovernor, callRoutedTextModel } from '../token-governor.js';
+
+const DEFAULT_MAX_HISTORY_TOKENS = 10000;
+const DEFAULT_TARGET_HISTORY_TOKENS = 8000;
+const DEFAULT_RECENT_USER_TURNS = 4;
+const DEFAULT_SUMMARY_OUTPUT_TOKENS = 256;
 
 export class ContextPruner {
-    constructor() {
+    constructor(options = {}) {
         this.governor = new TokenGovernor();
+        this.maxHistoryTokens = options.maxHistoryTokens || DEFAULT_MAX_HISTORY_TOKENS;
+        this.targetHistoryTokens = options.targetHistoryTokens || DEFAULT_TARGET_HISTORY_TOKENS;
+        this.recentUserTurns = options.recentUserTurns || DEFAULT_RECENT_USER_TURNS;
+        this.summaryOutputTokens = options.summaryOutputTokens || DEFAULT_SUMMARY_OUTPUT_TOKENS;
     }
 
     async pruneSessionMemory(messageHistory) {
-        // Very basic token count estimation (words * 1.3)
-        const estimateTokens = (text) => text.split(/\s+/).length * 1.3;
+        if (!Array.isArray(messageHistory) || messageHistory.length === 0) {
+            return messageHistory;
+        }
 
-        let totalTokens = messageHistory.reduce((acc, msg) => acc + estimateTokens(msg.content), 0);
+        if (this.totalHistoryTokens(messageHistory) <= this.maxHistoryTokens) {
+            return messageHistory;
+        }
 
-        if (totalTokens > 10000) {
-            const splitIndex = Math.floor(messageHistory.length / 2);
-            const oldestMessages = messageHistory.slice(0, splitIndex);
-            const remainingMessages = messageHistory.slice(splitIndex);
+        const anchorMessage = isSystemMessage(messageHistory[0]) ? messageHistory[0] : null;
+        const historyBody = anchorMessage ? messageHistory.slice(1) : [...messageHistory];
+        const recentWindowStart = findRecentWindowStart(historyBody, this.recentUserTurns);
+        const recentMessages = historyBody.slice(recentWindowStart);
+        const prunableMessages = historyBody.slice(0, recentWindowStart);
 
-            const textToSummarize = oldestMessages.map(m => `${m.role}: ${m.content}`).join('\n');
+        let summaryMessage = null;
+        if (prunableMessages.length > 0) {
+            summaryMessage = await this.summarizePrunedHistory(prunableMessages, recentMessages[0] || historyBody[0]);
+        }
 
-            // Fast Groq model
-            const aiClient = this.governor.requestModel('low', 'planner'); // Assuming this maps to a fast model like Groq in governor
-            const systemPrompt = "Summarize & Condense the following conversation history into a single paragraph.";
+        let prunedHistory = [
+            ...(anchorMessage ? [anchorMessage] : []),
+            ...(summaryMessage ? [summaryMessage] : []),
+            ...recentMessages,
+        ];
 
-            try {
-                const response = await aiClient.generateContent({
-                    contents: [{ role: 'user', parts: [{ text: textToSummarize }] }],
-                    systemInstruction: { role: 'system', parts: [{ text: systemPrompt }] }
-                });
+        const anchorCount = anchorMessage ? 1 : 0;
+        const preservedPrefixCount = anchorCount + (summaryMessage ? 1 : 0);
+        prunedHistory = trimHistoryToBudget(prunedHistory, this.targetHistoryTokens, anchorCount, preservedPrefixCount);
+        return ensureConversationStartsOnUser(prunedHistory, anchorCount);
+    }
 
-                const summary = response.response.text();
+    totalHistoryTokens(messageHistory) {
+        return messageHistory.reduce((sum, message) => sum + countMessageTokens(message), 0);
+    }
 
-                // Return new history with summary as first message
-                return [
-                    { role: 'system', content: `[Summarized History]: ${summary}` },
-                    ...remainingMessages
-                ];
-            } catch (error) {
-                console.error("Context pruning failed", error);
-                return messageHistory; // Fallback to unpruned history
+    async summarizePrunedHistory(messagesToSummarize, shapeHint) {
+        const systemPrompt = [
+            'You are a context pruner for a coding agent.',
+            'Compress the older conversation into a compact handoff.',
+            'Keep only durable facts: requirements, decisions, failed attempts, file paths, and pending risks.',
+            'Output plain text under 220 tokens.'
+        ].join(' ');
+        const userPrompt = messagesToSummarize
+            .map(message => `${message.role || 'unknown'}: ${extractMessageText(message)}`)
+            .join('\n\n');
+
+        try {
+            const summary = await this.governor.getCompute('low', 'planner', (key, model, provider) => (
+                callRoutedTextModel(key, model, systemPrompt, userPrompt, {
+                    provider,
+                    maxOutputTokens: this.summaryOutputTokens,
+                })
+            ));
+
+            if (!summary || !summary.trim()) {
+                return null;
+            }
+
+            return createSummaryMessage(summary.trim(), shapeHint);
+        } catch (error) {
+            console.error('Context pruning summary failed', error);
+            return null;
+        }
+    }
+}
+
+function findRecentWindowStart(messages, recentUserTurns) {
+    if (messages.length === 0) return 0;
+
+    let userTurnsSeen = 0;
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+        if (isUserLikeMessage(messages[index])) {
+            userTurnsSeen += 1;
+            if (userTurnsSeen >= recentUserTurns) {
+                return index;
             }
         }
-        return messageHistory;
     }
+
+    return 0;
+}
+
+function trimHistoryToBudget(messages, tokenBudget, anchorCount, preservedPrefixCount) {
+    const pruned = [...messages];
+
+    while (pruned.length > preservedPrefixCount && totalTokens(pruned) > tokenBudget) {
+        removeOldestExchange(pruned, preservedPrefixCount);
+    }
+
+    while (pruned.length > anchorCount + 1 && totalTokens(pruned) > tokenBudget) {
+        pruned.splice(anchorCount, 1);
+    }
+
+    return pruned;
+}
+
+function ensureConversationStartsOnUser(messages, anchorCount) {
+    if (messages.length <= anchorCount) return messages;
+
+    const anchored = messages.slice(0, anchorCount);
+    const body = messages.slice(anchorCount);
+    const firstUserIndex = body.findIndex(isUserLikeMessage);
+    if (firstUserIndex <= 0) {
+        return messages;
+    }
+
+    return [...anchored, ...body.slice(firstUserIndex)];
+}
+
+function createSummaryMessage(summary, shapeHint) {
+    const text = `Context summary:\n${summary}`;
+    if (Array.isArray(shapeHint?.parts)) {
+        return { role: 'user', parts: [{ text }] };
+    }
+    return { role: 'user', content: text };
+}
+
+function totalTokens(messages) {
+    return messages.reduce((sum, message) => sum + countMessageTokens(message), 0);
+}
+
+function removeOldestExchange(messages, startIndex) {
+    if (messages.length <= startIndex) return;
+
+    let endIndex = startIndex + 1;
+    while (endIndex < messages.length && !isUserLikeMessage(messages[endIndex])) {
+        endIndex += 1;
+    }
+
+    messages.splice(startIndex, endIndex - startIndex);
+}
+
+function isSystemMessage(message) {
+    return message?.role === 'system';
+}
+
+function isUserLikeMessage(message) {
+    return message?.role === 'user';
 }

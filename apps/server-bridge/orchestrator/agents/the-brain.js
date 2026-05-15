@@ -1,4 +1,4 @@
-import { TokenGovernor } from '../token-governor.js';
+import { TokenGovernor, callRoutedTextModel } from '../token-governor.js';
 import { SolutionsLedger } from '../solutions-ledger.js';
 import { mcpManager } from '../../mcp/MCPManager.js';
 import OrgContextBuilder from '../../org_core/context_builder.js';
@@ -14,7 +14,6 @@ export class TheBrain {
   async planSequentialFix(minifiedContext, taskGoal, taskId, userId = null) {
     const pastFailures = this.ledger.getHistory(taskId);
     const governor = new TokenGovernor();
-    const planner = await governor.requestModel('high', 'planner', 'NVIDIA Nemotron 70B / Gemini Pro');
 
     // V6 Architecture: Separate constraints and preferences
 
@@ -56,8 +55,24 @@ ${JSON.stringify(userPreferences, null, 2)}
 AVAILABLE TOOLS:
 ${JSON.stringify(mcpTools, null, 2)}`;
 
-    // Placeholder for actual logic calling the model
-    return [];
+    const userPrompt = `Task Goal: ${taskGoal}
+
+Minified Context:
+${minifiedContext}
+
+Ledger of Past Failures:
+${JSON.stringify(pastFailures, null, 2)}`;
+
+    const plannerOutput = await governor.getCompute('high', 'planner', (key, model, provider) => (
+      callRoutedTextModel(key, model, systemPrompt, userPrompt, { provider, maxOutputTokens: 4096 })
+    ));
+
+    try {
+      const parsed = JSON.parse(plannerOutput);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
   }
 
   async process(taskId, context) {

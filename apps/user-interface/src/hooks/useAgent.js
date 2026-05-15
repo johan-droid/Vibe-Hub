@@ -108,7 +108,7 @@ export function useAgent() {
         const result = await vfs.executeTool(name, args);
 
         // Emit diffs for surgical edits
-        if (['edit_file', 'replace_file_content', 'multi_replace_file_content'].includes(name) && result?.results) {
+        if (['edit_file', 'patch_file', 'replace_file_content', 'multi_replace_file_content'].includes(name) && result?.results) {
           const successfulEdits = result.results.filter(r => r.status === 'ok');
           if (successfulEdits.length > 0) {
             try {
@@ -134,7 +134,7 @@ export function useAgent() {
         }
 
         // Refresh tree after file changes
-        if (['edit_file', 'replace_file_content', 'multi_replace_file_content', 'create_file', 'write_file'].includes(name)) {
+        if (['edit_file', 'patch_file', 'replace_file_content', 'multi_replace_file_content', 'create_file', 'write_file'].includes(name)) {
           vfs.getTree('.').then(tree => setVfsTree(tree));
         }
 

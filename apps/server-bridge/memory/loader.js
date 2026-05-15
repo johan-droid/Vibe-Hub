@@ -1,5 +1,6 @@
 import Parser from 'tree-sitter';
 import JavaScript from 'tree-sitter-javascript';
+import TypeScript from 'tree-sitter-typescript';
 import fs from 'fs/promises';
 import path from 'path';
 import pool, { insertAgentMemoryItem } from '../db.js';
@@ -9,14 +10,16 @@ class SemanticGraphBuilder {
   constructor() {
     this.languages = new Map([
       ['javascript', JavaScript],
-      ['typescript', JavaScript],
+      ['typescript', TypeScript.typescript],
+      ['tsx', TypeScript.tsx],
     ]);
   }
 
   getLanguageKey(filePath) {
     const ext = path.extname(filePath).toLowerCase();
     if (['.js', '.jsx', '.mjs', '.cjs'].includes(ext)) return 'javascript';
-    if (['.ts', '.tsx'].includes(ext)) return 'typescript';
+    if (ext === '.tsx') return 'tsx';
+    if (ext === '.ts') return 'typescript';
     if (ext === '.py') return 'python';
     if (ext === '.go') return 'go';
     return 'javascript';
@@ -41,10 +44,13 @@ class SemanticGraphBuilder {
     const exportsList = [];
     const importsList = [];
     const functionsList = [];
+    const variablesList = [];
+    const stateContextList = [];
 
     const importTypes = new Set({
       javascript: ['import_statement'],
       typescript: ['import_statement'],
+      tsx: ['import_statement'],
       python: ['import_statement', 'import_from_statement'],
       go: ['import_declaration'],
     }[languageKey] || ['import_statement']);
@@ -52,6 +58,7 @@ class SemanticGraphBuilder {
     const exportTypes = new Set({
       javascript: ['export_statement'],
       typescript: ['export_statement'],
+      tsx: ['export_statement'],
       python: [],
       go: [],
     }[languageKey] || []);
@@ -59,6 +66,7 @@ class SemanticGraphBuilder {
     const functionTypes = new Set({
       javascript: ['function_declaration', 'arrow_function', 'method_definition'],
       typescript: ['function_declaration', 'arrow_function', 'method_definition'],
+      tsx: ['function_declaration', 'arrow_function', 'method_definition'],
       python: ['function_definition', 'class_definition'],
       go: ['function_declaration', 'method_declaration'],
     }[languageKey] || ['function_declaration']);
@@ -71,6 +79,27 @@ class SemanticGraphBuilder {
       } else if (functionTypes.has(node.type)) {
         const nameNode = node.children.find(c => c.type === 'identifier' || c.type === 'field_identifier');
         if (nameNode) functionsList.push(code.substring(nameNode.startIndex, nameNode.endIndex));
+      } else if (node.type === 'variable_declarator') {
+        const nameNode = node.childForFieldName?.('name') || node.namedChild?.(0);
+        const valueNode = node.childForFieldName?.('value');
+        const names = collectBindingNames(nameNode);
+        const declaration = nearestDeclaration(node);
+        const declarationText = code.substring((declaration || node).startIndex, (declaration || node).endIndex);
+        const calleeName = getCalleeName(valueNode);
+        const exported = isExported(node);
+
+        if (names.length > 0 && valueNode?.type !== 'arrow_function') {
+          variablesList.push(declarationText);
+        }
+
+        const stateKind = classifyStateContext(names.join(', '), calleeName, exported);
+        if (stateKind) {
+          stateContextList.push(`${stateKind}: ${declarationText}`);
+        }
+      } else if (node.type === 'field_definition' || node.type === 'public_field_definition') {
+        const declarationText = code.substring(node.startIndex, node.endIndex);
+        variablesList.push(declarationText);
+        stateContextList.push(`class_field: ${declarationText}`);
       }
 
       for (let i = 0; i < node.childCount; i++) {
@@ -79,7 +108,7 @@ class SemanticGraphBuilder {
     };
 
     traverse(tree.rootNode);
-    return { exportsList, importsList, functionsList };
+    return { exportsList, importsList, functionsList, variablesList, stateContextList };
   }
 
   /**
@@ -96,7 +125,7 @@ class SemanticGraphBuilder {
         const parser = new Parser();
         parser.setLanguage(language);
         const tree = parser.parse(code);
-        const { exportsList, importsList, functionsList } = this.collectSymbols({ languageKey, code, tree });
+        const { exportsList, importsList, functionsList, variablesList, stateContextList } = this.collectSymbols({ languageKey, code, tree });
 
         return {
           file: path.basename(filename),
@@ -104,6 +133,8 @@ class SemanticGraphBuilder {
           strict_imports: importsList,
           strict_exports: exportsList,
           internal_functions: functionsList,
+          variables: variablesList,
+          state_context: stateContextList,
           ast_node_count: tree.rootNode.childCount,
           file_hash: hashValue(code)
         };
@@ -127,6 +158,58 @@ class SemanticGraphBuilder {
       throw new Error(`CRITICAL: AST Parsing failed for ${filePath}. Graph broken. ${error.message}`);
     }
   }
+}
+
+function collectBindingNames(node) {
+  if (!node) return [];
+  if (node.type === 'identifier' || node.type === 'property_identifier') return [node.text];
+
+  const names = [];
+  const walk = current => {
+    if (current.type === 'identifier' || current.type === 'property_identifier') {
+      names.push(current.text);
+    }
+    for (let i = 0; i < current.namedChildCount; i += 1) {
+      walk(current.namedChild(i));
+    }
+  };
+  walk(node);
+  return [...new Set(names)];
+}
+
+function nearestDeclaration(node) {
+  let current = node;
+  while (current.parent && ['variable_declarator', 'lexical_declaration', 'variable_declaration'].includes(current.parent.type)) {
+    current = current.parent;
+  }
+  return current.parent?.type === 'export_statement' ? current.parent : current;
+}
+
+function isExported(node) {
+  const declaration = nearestDeclaration(node);
+  return declaration?.type === 'export_statement' || declaration?.parent?.type === 'export_statement';
+}
+
+function getCalleeName(node) {
+  if (!node || node.type !== 'call_expression') return null;
+  const callee = node.childForFieldName?.('function') || node.namedChild?.(0);
+  if (!callee) return null;
+  if (callee.type === 'identifier') return callee.text;
+  if (callee.type === 'member_expression') {
+    const property = callee.childForFieldName?.('property') || callee.namedChild?.(callee.namedChildCount - 1);
+    return property?.text || callee.text;
+  }
+  return callee.text;
+}
+
+function classifyStateContext(name, calleeName = '', exported = false) {
+  if (/^use(State|Reducer)$/u.test(calleeName)) return 'hook_state';
+  if (calleeName === 'useContext') return 'context_value';
+  if (/^use[A-Z].*Store/u.test(calleeName) || (/Store/u.test(name) && /^use[A-Z]/u.test(calleeName))) return 'store_selector';
+  if (/^use[A-Z]/u.test(calleeName)) return 'hook_value';
+  if (exported && /createContext/u.test(calleeName)) return 'context_export';
+  if (exported && (/create/u.test(calleeName) || /Store/u.test(name))) return 'store_export';
+  return exported ? 'exported_variable' : null;
 }
 
 export default new SemanticGraphBuilder();

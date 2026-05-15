@@ -81,6 +81,7 @@ describe('Agent auth gate', () => {
     })).resolves.toMatchObject({ approved: true });
 
     expect(getToolAuthPolicy('create_file')).toMatchObject({ type: 'write', requireApproval: true });
+    expect(getToolAuthPolicy('patch_file')).toMatchObject({ type: 'write', requireApproval: true });
   });
 
   it('approval engine denies on timeout', async () => {

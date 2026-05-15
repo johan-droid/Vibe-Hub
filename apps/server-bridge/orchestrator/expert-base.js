@@ -1,8 +1,10 @@
 import { AGENT_TOOLS } from './tools.js';
 import { modelService } from './models.js';
 import { validateToolCallArguments } from './tool_schema.js';
+import { ContextPruner } from './utils/context-pruner.js';
 
 function textFromHistoryPart(turn) {
+  if (typeof turn?.content === 'string') return turn.content;
   return (turn.parts || []).map(part => part.text || '').join('\n');
 }
 
@@ -28,6 +30,7 @@ export class EmployeeBase {
     this.effortLevel = 'standard';
     this._summarizing = false;
     this.providerOverride = null;
+    this.contextPruner = new ContextPruner();
   }
 
   async execute(prompt, systemPrompt, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, additionalTools = []) {
@@ -278,7 +281,7 @@ export class EmployeeBase {
 
     if (call.name === 'read_file' || call.name === 'list_files') {
       if (emitState) emitState('reading', `Analyzing ${call.args.path || 'project structure'}...`);
-    } else if (['edit_file', 'write_file', 'create_file'].includes(call.name)) {
+    } else if (['edit_file', 'patch_file', 'replace_file_content', 'multi_replace_file_content', 'write_file', 'create_file'].includes(call.name)) {
       if (emitState) emitState('writing', `Surgically editing ${call.args.path || 'file'}...`);
     } else if (call.name === 'run_command') {
       if (emitState) emitState('debugging', `Executing ${call.args.command || 'terminal command'}...`);
@@ -310,32 +313,27 @@ export class EmployeeBase {
   }
 
   async summarizeHistory(systemPrompt) {
-    const messagesToSummarize = this.history.slice(0, -4);
-    const summaryPrompt = `
-      You are a context manager for a coding agent.
-      Summarize the following conversation history into a concise "Neural Context Snapshot".
-      Preserve decisions, codebase learnings, task progress, and pending actions.
+    const prunedHistory = await this.contextPruner.pruneSessionMemory([
+      { role: 'system', content: systemPrompt },
+      ...this.history,
+    ]);
 
-      SYSTEM CONTEXT:
-      ${systemPrompt.slice(0, 4000)}
+    this.history = prunedHistory
+      .slice(prunedHistory[0]?.role === 'system' ? 1 : 0)
+      .map(normalizePrunedHistoryMessage);
 
-      HISTORY:
-      ${JSON.stringify(messagesToSummarize)}
-    `;
-
-    const result = await modelService.completeText({
-      prompt: summaryPrompt,
-      provider: this.providerOverride || process.env.SELINA_EXPERT_MANAGER_PROVIDER || process.env.SELINA_MODEL_PROVIDER,
-      effortLevel: 'quick',
-      domain: 'summarizer',
-      meta: { phase: 'history_summary' },
-    });
-    const snapshot = result.content;
-
-    this.history = [
-      { role: 'user', parts: [{ text: `Neural Context Snapshot:\n${snapshot}` }] },
-      { role: 'model', parts: [{ text: 'Acknowledged. I have absorbed the context snapshot and am ready to continue.' }] },
-      ...this.history.slice(-4),
-    ];
+    if (this.sharedContext) this.sharedContext.history = this.history;
   }
+}
+
+function normalizePrunedHistoryMessage(message) {
+  if (Array.isArray(message?.parts)) {
+    return message;
+  }
+
+  const role = message?.role === 'assistant' ? 'model' : (message?.role || 'user');
+  return {
+    role,
+    parts: [{ text: textFromHistoryPart(message) }],
+  };
 }

@@ -116,22 +116,59 @@ CRITICAL DIRECTIVE: You must respect both Organization constraints and User pref
 `;
   }
 
+  static buildAstContext(astGraph = {}) {
+    const graph = this.pruneAstGraphForTask(astGraph);
+    return `=== [DETERMINISTIC SEMANTIC GRAPH] ===
+Target File: ${graph.file || 'unknown'}
+Available Imports (DO NOT INVENT OTHERS): 
+${formatAstList(graph.strict_imports)}
+
+Current Exports: 
+${formatAstList(graph.strict_exports)}
+
+Internal Signatures:
+${formatAstList(graph.internal_functions)}
+
+State Context (Hooks, Stores, Providers, Variables):
+${formatAstList(graph.state_context || graph.astStateContext || graph.variables)}
+
+Related Dependencies:
+${formatAstList(graph.relatedFiles || graph.astDependencies || graph.dependencies)}
+`;
+  }
+
+  static buildStaticContext(orgContext, userContext, astGraph = {}) {
+    return `${this.buildSystemPrompt(orgContext, userContext)}
+
+${this.buildAstContext(astGraph)}`;
+  }
+
+  static pruneAstGraphForTask(astGraph = {}, taskPrompt = '') {
+    const targetFile = astGraph.file || astGraph.filePath || '';
+    const relevanceTerms = buildRelevanceTerms(taskPrompt, targetFile);
+    const pruneEntries = entries => filterAstEntries(entries, relevanceTerms, targetFile);
+
+    return {
+      ...astGraph,
+      strict_imports: pruneEntries(astGraph.strict_imports || []),
+      strict_exports: pruneEntries(astGraph.strict_exports || []),
+      internal_functions: pruneEntries(astGraph.internal_functions || []),
+      variables: pruneEntries(astGraph.variables || []),
+      state_context: pruneEntries(astGraph.state_context || []),
+      astStateContext: pruneEntries(astGraph.astStateContext || []),
+      dependencies: pruneEntries(astGraph.dependencies || []),
+      astDependencies: pruneEntries(astGraph.astDependencies || []),
+      astDependents: pruneEntries(astGraph.astDependents || []),
+      relatedFiles: pruneEntries(astGraph.relatedFiles || []),
+    };
+  }
+
   /**
    * Builds the dynamic task prompt based on the AST Graph and the current State Machine loop.
    */
-  static buildTaskPrompt(taskPrompt, astGraph, sandboxError = null) {
-    let prompt = `=== [DETERMINISTIC SEMANTIC GRAPH] ===
-Target File: ${astGraph.file}
-Available Imports (DO NOT INVENT OTHERS): 
-${astGraph.strict_imports.join('\n') || 'None'}
-
-Current Exports: 
-${astGraph.strict_exports.join('\n') || 'None'}
-
-Internal Signatures:
-${astGraph.internal_functions.join('\n') || 'None'}
-
-=== [CURRENT TASK] ===
+  static buildTaskPrompt(taskPrompt, astGraph = {}, sandboxError = null, { includeAstContext = true } = {}) {
+    const prunedAstGraph = this.pruneAstGraphForTask(astGraph, taskPrompt);
+    let prompt = `${includeAstContext ? `${this.buildAstContext(prunedAstGraph)}\n` : ''}=== [CURRENT TASK] ===
 ${taskPrompt}
 
 Provide ONLY raw code. No markdown formatting, no explanations.
@@ -151,5 +188,44 @@ Analyze this failure. Fix the logic and output the corrected code. Do NOT repeat
 
     return prompt;
   }
+}
+
+function formatAstList(entries = []) {
+  if (!Array.isArray(entries) || entries.length === 0) return 'None';
+  return entries.map(entry => typeof entry === 'string' ? entry : formatAstEntry(entry)).join('\n') || 'None';
+}
+
+function formatAstEntry(entry) {
+  if (!entry || typeof entry !== 'object') return String(entry ?? '');
+  const name = entry.name || entry.target || entry.filePath || entry.file || JSON.stringify(entry);
+  const location = entry.filePath ? ` in ${entry.filePath}` : '';
+  const type = entry.type ? ` (${entry.type})` : '';
+  return `- ${name}${type}${location}`;
+}
+
+function buildRelevanceTerms(taskPrompt = '', targetFile = '') {
+  const rawTerms = [
+    ...(String(taskPrompt).match(/[A-Za-z_$][\w$-]{2,}/g) || []),
+    ...String(targetFile).split(/[\\/._-]/),
+  ];
+
+  return new Set(rawTerms.map(term => term.toLowerCase()).filter(term => term.length >= 3));
+}
+
+function filterAstEntries(entries = [], relevanceTerms, targetFile) {
+  if (!Array.isArray(entries) || entries.length === 0) return entries;
+
+  const targetBase = String(targetFile || '').split(/[\\/]/).pop()?.toLowerCase() || '';
+  const filtered = entries.filter(entry => {
+    const text = (typeof entry === 'string' ? entry : JSON.stringify(entry)).toLowerCase();
+    if (targetBase && text.includes(targetBase)) return true;
+    for (const term of relevanceTerms) {
+      if (text.includes(term)) return true;
+    }
+    return false;
+  });
+
+  const maxEntries = entries.length > 12 ? 12 : entries.length;
+  return filtered.length > 0 ? filtered.slice(0, 12) : entries.slice(0, maxEntries);
 }
 

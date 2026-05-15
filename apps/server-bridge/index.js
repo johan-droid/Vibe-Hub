@@ -69,6 +69,7 @@ import { createChildRunIdentity, createRootRunIdentity } from './orchestrator/ru
 import { fetchRunEventsForUser, fetchRunForUser, persistRun, persistRunEvent } from './orchestrator/run_store.js';
 import { createActionGrant, hashToolParams, verifyActionGrant } from './auth/action-grants.js';
 import { insertAgentActionGrant } from './db.js';
+import { applyFuzzyPatchFile, PatchFileError } from './orchestrator/patch-file.js';
 // ─── Express + HTTP server ────────────────────────────────────────────────────
 
 validateEnvironment();
@@ -1074,7 +1075,7 @@ wss.on('connection', async (ws, req) => {
 
     // ── 2. Security Sandbox ───────────────────────────────────────────
     if (name === 'security_sandbox') {
-      const { workspacePath, scriptPath, runtime, timeoutMs } = args;
+      const { workspacePath, scriptPath, runtime, timeoutMs, includePaths } = args;
       try {
         send({
           type: 'state_change',
@@ -1087,6 +1088,7 @@ wss.on('connection', async (ws, req) => {
           scriptPath,
           runtime,
           timeoutMs,
+          includePaths,
         }));
       } catch (err) {
         return JSON.stringify({
@@ -1113,7 +1115,28 @@ wss.on('connection', async (ws, req) => {
       }));
     }
 
-    // ── 4. Delegation (sub-agent recursion) ──────────────────────────
+    // ── 4. Backend File Patch Tool ────────────────────────────────────
+    if (name === 'patch_file') {
+      try {
+        return JSON.stringify(await applyFuzzyPatchFile(args));
+      } catch (err) {
+        if (err instanceof PatchFileError) {
+          return JSON.stringify({
+            success: false,
+            code: err.code,
+            error: err.message,
+            metadata: err.metadata || {},
+          });
+        }
+        return JSON.stringify({
+          success: false,
+          code: 'PATCH_FILE_FAILED',
+          error: err.message,
+        });
+      }
+    }
+
+    // ── 5. Delegation (sub-agent recursion) ──────────────────────────
     if (name === 'delegate_task') {
       onThought(`Delegating to ${args.expert}Expert: ${args.task}`);
       const parentRun = session.currentRunIdentity || createRootRunIdentity({ expert: 'manager' });
@@ -1142,7 +1165,7 @@ wss.on('connection', async (ws, req) => {
       }
     }
 
-    // ── 5. Auto-Sandbox for run_command ─────────────────────────────
+    // ── 6. Auto-Sandbox for run_command ─────────────────────────────
     // If the agent tries to run a script directly, force it into the sandbox.
     if (name === 'run_command' && args.command) {
       const scriptCommands = ['node', 'npm', 'python3', 'python', 'bun', 'sh', 'bash'];
@@ -1161,6 +1184,7 @@ wss.on('connection', async (ws, req) => {
             command: args.command,
             args: args.args,
             timeoutMs: args.timeoutMs || args.WaitMsBeforeAsync,
+            includePaths: args.includePaths,
           }));
         } catch (err) {
           send({ type: 'error', message: `Local Docker sandbox failed: ${err.message}` });
@@ -1173,7 +1197,7 @@ wss.on('connection', async (ws, req) => {
       }
     }
 
-    // ── 6. Backend Analysis Tools ─────────────────────────────────────
+    // ── 7. Backend Analysis Tools ─────────────────────────────────────
     if (name === 'analyze_ast') {
       try {
         const content = await onToolCall('read_file', { path: args.path });
@@ -1187,7 +1211,7 @@ wss.on('connection', async (ws, req) => {
       }
     }
 
-    // ── 7. Browser Automation Tools ───────────────────────────────────
+    // ── 8. Browser Automation Tools ───────────────────────────────────
     if (name.startsWith('browser_')) {
       try {
         switch (name) {
@@ -1207,7 +1231,7 @@ wss.on('connection', async (ws, req) => {
       }
     }
 
-    // ── 7. Client-Side VFS / WebContainer ────────────────────────────
+    // ── 9. Client-Side VFS / WebContainer ────────────────────────────
     // These tools run inside the browser sandbox (WebContainer API).
     // We forward the call over the WebSocket and await the browser's response.
     return await new Promise((resolve, reject) => {

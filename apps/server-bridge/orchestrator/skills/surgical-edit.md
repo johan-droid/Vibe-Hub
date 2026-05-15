@@ -63,7 +63,7 @@ READ → UNDERSTAND → TARGET → EDIT → VERIFY
 
 ## Anti-Patterns (NEVER DO)
 
-- ❌ Replacing the entire file content through `edit_file`
+- ❌ Replacing the entire file content through `patch_file`
 - ❌ Using search blocks that are too short (< 1 line) and match multiple places
 - ❌ Editing without reading first
 - ❌ Making multiple edits that overlap or conflict

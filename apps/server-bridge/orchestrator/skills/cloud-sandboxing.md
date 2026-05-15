@@ -8,7 +8,7 @@ Use this protocol when performing high-risk operations, heavy builds, or complex
 - **Full-Stack Verification**: Running tests that require external services (e.g., Docker, PostgreSQL, Redis) that aren't available in WebContainer.
 
 ## 2. Spawning a Sandbox
-1. Call `security_sandbox` with the relative `scriptPath`, runtime, workspace path, and timeout.
+1. Call `security_sandbox` with the relative `scriptPath`, runtime, workspace path, optional `includePaths`, and timeout.
 2. Keep execution inside the ephemeral local Docker container.
 3. The container must run with `--network none` and clean itself up after completion.
 4. Report stdout, stderr, exit code, and timeout state back to the user.
@@ -16,6 +16,7 @@ Use this protocol when performing high-risk operations, heavy builds, or complex
 ## 3. Local Execution
 - Use `security_sandbox` for generated code, test suites, linters, and formatters.
 - Use `run_command` only for commands that can run safely in the same local Docker policy.
+- Only requested files are copied into the sandbox. Add required non-secret fixtures through `includePaths`; never request `.env`, `.git`, credentials, keys, or token-like files.
 - Do not call GitHub Actions, Codespaces, or any cloud runner for validation.
 
 ## 4. Resource Limits

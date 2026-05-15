@@ -35,6 +35,19 @@ describe('tool schema validation', () => {
   });
 
   it('validates nested array/object schemas', () => {
+    expect(validateToolCallArguments('patch_file', {
+      path: 'src/App.jsx',
+      search_content: 'const oldValue = true;',
+      replace_content: 'const oldValue = false;',
+    })).toBe(true);
+
+    expect(() => validateToolCallArguments('patch_file', {
+      path: 'src/App.jsx',
+      StartLine: 10,
+      search_content: 'old',
+      replace_content: 'new',
+    })).toThrow(ToolSchemaError);
+
     expect(validateToolCallArguments('multi_replace_file_content', {
       TargetFile: 'src/App.jsx',
       ReplacementChunks: [{
@@ -56,6 +69,18 @@ describe('tool schema validation', () => {
   });
 
   it('enforces enum values', () => {
+    expect(validateToolCallArguments('security_sandbox', {
+      scriptPath: 'scripts/check.js',
+      runtime: 'node',
+      includePaths: ['fixtures/input.json'],
+    })).toBe(true);
+
+    expect(validateToolCallArguments('run_command', {
+      command: 'node',
+      args: ['--test', 'candidate.test.js'],
+      includePaths: ['candidate.js'],
+    })).toBe(true);
+
     expect(() => validateToolCallArguments('security_sandbox', {
       scriptPath: 'scripts/check.js',
       runtime: 'curl',

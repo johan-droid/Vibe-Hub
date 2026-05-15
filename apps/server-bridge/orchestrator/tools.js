@@ -19,7 +19,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: 'read_file',
-    description: 'Reads the content of a file. MUST be called before any edit_file call. Use start_line/end_line for large files.',
+    description: 'Reads the content of a file. MUST be called before any patch_file call. Use start_line/end_line for large files.',
     parameters: {
       type: 'OBJECT',
       properties: {
@@ -32,7 +32,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: 'create_file',
-    description: 'Creates a NEW file that does not exist yet. DO NOT use this to modify existing files — use edit_file instead.',
+    description: 'Creates a NEW file that does not exist yet. DO NOT use this to modify existing files; use patch_file instead.',
     parameters: {
       type: 'OBJECT',
       properties: {
@@ -43,8 +43,21 @@ export const AGENT_TOOLS = [
     },
   },
   {
+    name: 'patch_file',
+    description: 'Apply a fuzzy search-and-replace edit to an existing file. Provide enough search_content to be unique. No line numbers are needed.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        path: { type: 'STRING', description: 'Path to the file to edit.' },
+        search_content: { type: 'STRING', description: 'The block of code to replace. Include enough context to uniquely identify it; line numbers are not required.' },
+        replace_content: { type: 'STRING', description: 'The new content that should replace search_content.' },
+      },
+      required: ['path', 'search_content', 'replace_content'],
+    },
+  },
+  {
     name: 'replace_file_content',
-    description: 'Makes a SINGLE CONTIGUOUS block edit to a file. Use this for reliable line-range replacements instead of string matching.',
+    description: 'Legacy line-range edit tool. Prefer patch_file for modifications because it does not depend on brittle line numbers.',
     parameters: {
       type: 'OBJECT',
       properties: {
@@ -111,12 +124,13 @@ export const AGENT_TOOLS = [
   // === EXECUTION ===
   {
     name: 'run_command',
-    description: 'Runs build, test, and script commands in the local Docker sandbox with --network none.',
+    description: 'Runs build, test, and script commands in an isolated local Docker sandbox with --network none. Only explicit file arguments or includePaths are copied into the sandbox.',
     parameters: {
       type: 'OBJECT',
       properties: {
         command: { type: 'STRING', description: 'The command to execute.' },
         args: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Arguments.' },
+        includePaths: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Optional relative file paths to copy into the isolated sandbox. Directories and secret-like files are refused.' },
         WaitMsBeforeAsync: { type: 'NUMBER', description: 'Ms to wait before sending command to background. If command completes before this, returns output. If it runs longer, returns a CommandId.' }
       },
       required: ['command'],
@@ -394,7 +408,7 @@ export const AGENT_TOOLS = [
     name: 'security_sandbox',
     description: `Executes a script or test file inside a fully isolated Docker sandbox with no network access.
 Use this to run LLM-generated code, test suites, or scripts safely without risking the host machine.
-The sandbox is ephemeral — it starts, runs the script, streams output, then self-destructs.
+The sandbox is ephemeral — it copies only requested files into a temporary scratch directory, starts, runs the script, streams output, then self-destructs.
 
 WHEN TO USE:
   - Verify that generated code actually runs ("npm test", "node script.js")
@@ -403,7 +417,8 @@ WHEN TO USE:
 
 DO NOT USE for:
   - Commands that require network access (use the VFS + git tools instead)
-  - Installing global packages (the sandbox is read-only except /tmp)`,
+  - Installing global packages
+  - Reading repository secrets; .env, .git, credential, key, and token-like files are refused`,
     parameters: {
       type: 'OBJECT',
       properties: {
@@ -418,7 +433,12 @@ DO NOT USE for:
         },
         workspacePath: {
           type: 'STRING',
-          description: 'Absolute host path of the workspace to mount read-only. Defaults to the current project root.',
+          description: 'Absolute host path used only as the source for explicit file copies. It is never mounted into Docker. Defaults to the current project root.',
+        },
+        includePaths: {
+          type: 'ARRAY',
+          items: { type: 'STRING' },
+          description: 'Optional relative file paths to copy into the isolated sandbox alongside scriptPath. Directories and secret-like files are refused.',
         },
         timeoutMs: {
           type: 'NUMBER',

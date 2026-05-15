@@ -1,13 +1,15 @@
-import { TokenGovernor } from '../token-governor.js';
+import { TokenGovernor, callRoutedTextModel } from '../token-governor.js';
 
 export async function executeParallelSubTask(subTask, contractSchema) {
-    const modelConfig = await TokenGovernor.requestModel('worker', 'Groq Llama-3-70B');
-
+    const governor = new TokenGovernor();
     const systemPrompt = `You are a Parallel Worker. Build the following sub-task: ${subTask}. You MUST strictly follow this Contract Schema: ${JSON.stringify(contractSchema)}. Output the full content of the files you create/modify in a strict JSON map. Do not include markdown.`;
+    const userPrompt = `Sub-task: ${subTask}\nContract Schema: ${JSON.stringify(contractSchema)}`;
+    const modelOutput = await governor.getCompute('low', 'worker', (key, model, provider) => (
+        callRoutedTextModel(key, model, systemPrompt, userPrompt, { provider, jsonMode: true })
+    ));
 
-    // Logic to execute the task with the model
     return {
-        modelConfig,
+        modelOutput,
         systemPrompt,
         subTask,
         contractSchema

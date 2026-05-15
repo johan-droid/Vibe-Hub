@@ -146,6 +146,43 @@ describe('ModelService gateway', () => {
     });
   });
 
+  it('adds native JSON mode for OpenAI-compatible chat requests', () => {
+    const service = new ModelService({
+      SELINA_MODEL_PROVIDER: 'openai',
+      OPENAI_API_KEY: 'sk-secret-value',
+      OPENAI_MODEL: 'gpt-json-model',
+    });
+    const profile = service.selectProfile({ effortLevel: 'quick', domain: 'code' });
+
+    const request = service.buildOpenAIRequest({
+      profile,
+      messages: [{ role: 'user', content: 'Return JSON' }],
+      tools: [],
+      jsonMode: true,
+    });
+
+    expect(request.response_format).toEqual({ type: 'json_object' });
+  });
+
+  it('adds native JSON mode for Gemini generation configs and Responses requests', () => {
+    const service = new ModelService({
+      SELINA_MODEL_PROVIDER: 'openai',
+      OPENAI_API_KEY: 'sk-secret-value',
+      OPENAI_MODEL: 'gpt-json-model',
+    });
+    const profile = service.selectProfile({ effortLevel: 'quick', domain: 'code' });
+
+    const responsesRequest = service.buildOpenAIResponsesRequest({
+      profile,
+      instructions: 'Return JSON.',
+      input: [{ role: 'user', content: 'Ping' }],
+      tools: [],
+      jsonMode: true,
+    });
+
+    expect(responsesRequest.text).toEqual({ format: { type: 'json_object' } });
+  });
+
   it('sends NIM chat requests to NVIDIA with JSON accept headers', async () => {
     const service = new ModelService({
       SELINA_MODEL_PROVIDER: 'nim',
@@ -227,6 +264,45 @@ describe('ModelService gateway', () => {
       }),
     ]);
     expect(result.responseId).toBe('resp_test');
+  });
+
+  it('marks large Anthropic system prompts with ephemeral prompt caching', async () => {
+    const env = {
+      SELINA_MODEL_PROVIDER: 'anthropic',
+      ANTHROPIC_API_KEY: 'anthropic-secret',
+      ANTHROPIC_MODEL: 'claude-test',
+      SELINA_ANTHROPIC_CACHE_MIN_TOKENS: '1',
+    };
+    const auth = new AgentAuthManager({ env });
+    const service = new ModelService(env, auth);
+    const profile = service.selectProfile({ effortLevel: 'quick', domain: 'code' });
+    let captured = null;
+
+    service.fetchJsonWithAuth = async (provider, url, buildOptions) => {
+      captured = {
+        provider,
+        url,
+        options: buildOptions({ type: 'api-key', value: 'anthropic-redacted', expiresAt: null }),
+      };
+      return {
+        content: [{ type: 'text', text: 'ok' }],
+      };
+    };
+
+    await service.anthropicChat({
+      profile,
+      system: 'Stable org and AST context.',
+      messages: [{ role: 'user', content: 'new task' }],
+      tools: [],
+    });
+
+    expect(captured.provider).toBe('anthropic');
+    const body = JSON.parse(captured.options.body);
+    expect(body.system).toEqual([{
+      type: 'text',
+      text: 'Stable org and AST context.',
+      cache_control: { type: 'ephemeral' },
+    }]);
   });
 
   it('trims Gemini history within a token budget and starts on a user turn', () => {

@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AgentAuthManager, agentAuthManager, authToken, callWithAuthRetry } from '../auth/agent-auth.js';
+import { countTokens } from '../memory/tokenizer.js';
 
 const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
@@ -179,6 +180,16 @@ function contentToText(content) {
   return JSON.stringify(content ?? '');
 }
 
+function toAnthropicSystem(system, usePromptCache) {
+  if (!system) return undefined;
+  if (!usePromptCache) return system;
+  return [{
+    type: 'text',
+    text: system,
+    cache_control: { type: 'ephemeral' },
+  }];
+}
+
 function parseToolArgs(argumentsText) {
   if (!argumentsText) return {};
   if (typeof argumentsText === 'object') return argumentsText;
@@ -225,8 +236,7 @@ export class ModelService {
   }
 
   estimateTokens(input) {
-    const text = typeof input === 'string' ? input : JSON.stringify(input ?? '');
-    return Math.ceil(text.length / 4);
+    return countTokens(input);
   }
 
   selectProfile({ modelName = DEFAULT_GEMINI_MODEL, effortLevel = 'standard', domain = 'code', provider: providerOverride = null } = {}) {
@@ -334,6 +344,7 @@ export class ModelService {
     effortLevel = 'quick',
     domain = 'classifier',
     meta = {},
+    jsonMode = false,
   } = {}) {
     const primary = this.selectProfile({ modelName, effortLevel, domain, provider });
     const profiles = [primary, ...this.selectFallbackProfiles(primary)];
@@ -347,6 +358,7 @@ export class ModelService {
             model: candidate.model,
             systemInstruction: system,
             maxOutputTokens: candidate.maxOutputTokens,
+            responseMimeType: jsonMode ? 'application/json' : undefined,
           });
           const result = await this.withRetry(
             () => model.generateContent(prompt),
@@ -365,6 +377,7 @@ export class ModelService {
             system,
             messages: [{ role: 'user', content: prompt }],
             tools: [],
+            jsonMode,
           });
           return { content: result.content, profile: candidate };
         }
@@ -375,6 +388,7 @@ export class ModelService {
             instructions: system,
             input: [{ role: 'user', content: prompt }],
             tools: [],
+            jsonMode,
           });
           return { content: result.content, profile: candidate };
         }
@@ -383,7 +397,7 @@ export class ModelService {
           ...(system ? [{ role: 'system', content: system }] : []),
           { role: 'user', content: prompt },
         ];
-        const result = await this.openAICompatibleChat({ profile: candidate, messages, tools: [] });
+        const result = await this.openAICompatibleChat({ profile: candidate, messages, tools: [], jsonMode });
         return { content: result.content, profile: candidate };
       } catch (error) {
         lastError = error;
@@ -435,12 +449,17 @@ export class ModelService {
     return this.clients.get('gemini');
   }
 
-  getGeminiGenerativeModel({ model, tools, systemInstruction, maxOutputTokens }) {
+  getGeminiGenerativeModel({ model, tools, systemInstruction, maxOutputTokens, responseMimeType, responseSchema, cachedContent }) {
     return this.getGeminiClient().getGenerativeModel({
       model,
       tools,
       systemInstruction,
-      generationConfig: { maxOutputTokens },
+      cachedContent,
+      generationConfig: {
+        maxOutputTokens,
+        ...(responseMimeType ? { responseMimeType } : {}),
+        ...(responseSchema ? { responseSchema } : {}),
+      },
     });
   }
 
@@ -561,7 +580,7 @@ export class ModelService {
     }, profile, meta);
   }
 
-  buildOpenAIRequest({ profile, messages, tools }) {
+  buildOpenAIRequest({ profile, messages, tools, jsonMode = false, responseFormat = null }) {
     const body = {
       model: profile.model,
       messages,
@@ -570,6 +589,10 @@ export class ModelService {
       max_tokens: profile.maxOutputTokens,
       temperature: asFloat(this.env.SELINA_MODEL_TEMPERATURE, 0.2),
     };
+
+    if (responseFormat || jsonMode) {
+      body.response_format = responseFormat || { type: 'json_object' };
+    }
 
     if (profile.provider === 'nim') {
       body.stream = false;
@@ -582,7 +605,7 @@ export class ModelService {
     return body;
   }
 
-  buildOpenAIResponsesRequest({ profile, instructions, input, tools }) {
+  buildOpenAIResponsesRequest({ profile, instructions, input, tools, jsonMode = false }) {
     const body = {
       model: profile.model,
       input,
@@ -593,10 +616,11 @@ export class ModelService {
 
     if (instructions) body.instructions = instructions;
     if (tools?.length) body.tools = toOpenAIResponsesTools(tools);
+    if (jsonMode) body.text = { format: { type: 'json_object' } };
     return body;
   }
 
-  async openAICompatibleChat({ profile, messages, tools = [] }) {
+  async openAICompatibleChat({ profile, messages, tools = [], jsonMode = false, responseFormat = null }) {
     const providerConfig = {
       openai: {
         baseUrl: this.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
@@ -620,7 +644,7 @@ export class ModelService {
     const baseUrl = (providerConfig.baseUrl || '').replace(/\/$/, '');
     if (!baseUrl) throw new Error(`${profile.provider.toUpperCase()} base URL is missing`);
 
-    const body = this.buildOpenAIRequest({ profile, messages, tools });
+    const body = this.buildOpenAIRequest({ profile, messages, tools, jsonMode, responseFormat });
     const promptTokens = this.estimateTokens(messages);
 
     const data = await this.fetchJsonWithAuth(profile.provider, `${baseUrl}/chat/completions`, (auth) => ({
@@ -647,12 +671,12 @@ export class ModelService {
     };
   }
 
-  async openAIResponses({ profile, instructions, input, tools = [] }) {
+  async openAIResponses({ profile, instructions, input, tools = [], jsonMode = false }) {
     if (!this.authManager.hasProvider('openai')) throw new Error('OPENAI_API_KEY is missing');
     if (!profile.model) throw new Error('OPENAI_MODEL is missing');
 
     const baseUrl = (this.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-    const body = this.buildOpenAIResponsesRequest({ profile, instructions, input, tools });
+    const body = this.buildOpenAIResponsesRequest({ profile, instructions, input, tools, jsonMode });
     const promptTokens = this.estimateTokens({ instructions, input });
 
     const data = await this.fetchJsonWithAuth('openai', `${baseUrl}/responses`, (auth) => ({
@@ -673,28 +697,36 @@ export class ModelService {
     };
   }
 
-  async anthropicChat({ profile, system, messages, tools = [] }) {
+  async anthropicChat({ profile, system, messages, tools = [], jsonMode = false, promptCache = null }) {
     if (!this.authManager.hasProvider('anthropic')) throw new Error('ANTHROPIC_API_KEY is missing');
     if (!profile.model) throw new Error('ANTHROPIC_MODEL is missing');
 
     const baseUrl = (this.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com').replace(/\/$/, '');
     const promptTokens = this.estimateTokens({ system, messages });
+    const minCacheTokens = asInt(this.env.SELINA_ANTHROPIC_CACHE_MIN_TOKENS, 1024);
+    const usePromptCache = promptCache ?? (
+      this.env.SELINA_ANTHROPIC_PROMPT_CACHE !== 'false' &&
+      system &&
+      this.estimateTokens(system) >= minCacheTokens
+    );
+    const anthropicSystem = toAnthropicSystem(system, usePromptCache);
     const data = await this.fetchJsonWithAuth('anthropic', `${baseUrl}/v1/messages`, (auth) => ({
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': authToken(auth),
         'anthropic-version': this.env.ANTHROPIC_VERSION || '2023-06-01',
+        ...(this.env.ANTHROPIC_BETA ? { 'anthropic-beta': this.env.ANTHROPIC_BETA } : {}),
       },
       body: JSON.stringify({
         model: profile.model,
-        system,
+        ...(anthropicSystem ? { system: anthropicSystem } : {}),
         messages,
         tools: tools?.length ? toAnthropicTools(tools) : undefined,
         max_tokens: profile.maxOutputTokens,
         temperature: 0.2,
       }),
-    }), profile, { promptTokens });
+    }), profile, { promptTokens, promptCache: Boolean(usePromptCache), jsonMode });
 
     const blocks = data.content || [];
     return {
@@ -729,17 +761,3 @@ export class ModelService {
 }
 
 export const modelService = new ModelService(process.env, agentAuthManager);
-
-export class TokenGovernor {
-  requestModel(complexity, modelName) {
-    return {
-      generate: async (systemPrompt, userPrompt) => {
-        return JSON.stringify({
-          intent: "feature_request",
-          target_files: [],
-          complexity: "low"
-        });
-      }
-    };
-  }
-}

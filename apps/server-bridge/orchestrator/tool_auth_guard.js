@@ -23,6 +23,7 @@ const TOOL_POLICIES = new Map(Object.entries({
 
   create_file: { type: 'write', requireApproval: true },
   edit_file: { type: 'write', requireApproval: true },
+  patch_file: { type: 'write', requireApproval: true },
   replace_file_content: { type: 'write', requireApproval: true },
   multi_replace_file_content: { type: 'write', requireApproval: true },
   update_memory: { type: 'write', requireApproval: false },

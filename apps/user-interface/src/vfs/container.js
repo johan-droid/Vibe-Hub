@@ -6,6 +6,8 @@ import { getAgentLoop } from '../services/AgentLoop.js';
 
 const IGNORED_PATHS_REGEX = /(?:^|\/)(node_modules|\.git|dist|\.next|out|build)(?:\/|$)/;
 const MAX_SURGICAL_DELTA_CHARS = Number.parseInt(import.meta.env.VITE_SELINA_MAX_SURGICAL_DELTA_CHARS || '20000', 10);
+const PATCH_MIN_SCORE = 0.78;
+const PATCH_AMBIGUITY_MARGIN = 0.025;
 
 function assertCrossOriginIsolated() {
   if (globalThis.crossOriginIsolated) return;
@@ -28,11 +30,130 @@ function deltaTooLarge(deltaSize) {
   return deltaSize > MAX_SURGICAL_DELTA_CHARS;
 }
 
+function normalizePatchText(text) {
+  return String(text || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map(line => line.trim().replace(/[ \t]+/g, ' '))
+    .join('\n')
+    .trim();
+}
+
+function levenshteinDistance(left, right) {
+  if (left === right) return 0;
+  if (!left) return right.length;
+  if (!right) return left.length;
+
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  let current = new Array(right.length + 1);
+
+  for (let i = 1; i <= left.length; i += 1) {
+    current[0] = i;
+    const leftChar = left.charCodeAt(i - 1);
+    for (let j = 1; j <= right.length; j += 1) {
+      const substitutionCost = leftChar === right.charCodeAt(j - 1) ? 0 : 1;
+      current[j] = Math.min(
+        previous[j] + 1,
+        current[j - 1] + 1,
+        previous[j - 1] + substitutionCost,
+      );
+    }
+    [previous, current] = [current, previous];
+  }
+
+  return previous[right.length];
+}
+
+function patchSimilarity(left, right) {
+  if (left === right) return 1;
+  const longest = Math.max(left.length, right.length);
+  if (longest === 0) return 1;
+  return 1 - (levenshteinDistance(left, right) / longest);
+}
+
+function lineOffsets(content) {
+  const lines = content.split('\n');
+  const offsets = [];
+  let offset = 0;
+  for (const line of lines) {
+    offsets.push(offset);
+    offset += line.length + 1;
+  }
+  return { lines, offsets };
+}
+
+function findPatchBlock(content, searchContent) {
+  if (!searchContent || typeof searchContent !== 'string') {
+    throw new Error('patch_file search_content must be a non-empty string.');
+  }
+
+  const exactCount = content.split(searchContent).length - 1;
+  if (exactCount === 1) {
+    const startIndex = content.indexOf(searchContent);
+    const { offsets } = lineOffsets(content);
+    const startLine = offsets.filter(offset => offset <= startIndex).length;
+    const endLine = offsets.filter(offset => offset < startIndex + searchContent.length).length || startLine;
+    return {
+      startIndex,
+      endIndex: startIndex + searchContent.length,
+      startLine,
+      endLine,
+      score: 1,
+      exact: true,
+    };
+  }
+  if (exactCount > 1) {
+    throw new Error('patch_file search_content matched multiple exact blocks. Add more surrounding context.');
+  }
+
+  const normalizedSearch = normalizePatchText(searchContent);
+  const { lines, offsets } = lineOffsets(content);
+  const searchLineCount = Math.max(1, searchContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').length);
+  const slack = Math.max(2, Math.ceil(searchLineCount * 0.35));
+  const minLines = Math.max(1, searchLineCount - slack);
+  const maxLines = Math.max(minLines, searchLineCount + slack);
+  const candidates = [];
+
+  for (let start = 0; start < lines.length; start += 1) {
+    for (let count = minLines; count <= maxLines; count += 1) {
+      const end = start + count - 1;
+      if (end >= lines.length) break;
+
+      const candidateText = lines.slice(start, end + 1).join('\n');
+      const score = patchSimilarity(normalizedSearch, normalizePatchText(candidateText));
+      if (score >= PATCH_MIN_SCORE) {
+        const startIndex = offsets[start];
+        const endIndex = end === lines.length - 1 ? content.length : offsets[end + 1] - 1;
+        candidates.push({
+          startIndex,
+          endIndex,
+          startLine: start + 1,
+          endLine: end + 1,
+          score,
+          exact: false,
+        });
+      }
+    }
+  }
+
+  candidates.sort((left, right) => right.score - left.score);
+  if (candidates.length === 0) {
+    throw new Error('No sufficiently similar block found for patch_file search_content.');
+  }
+  if (candidates[1] && candidates[0].score - candidates[1].score <= PATCH_AMBIGUITY_MARGIN) {
+    throw new Error('patch_file search_content matched multiple similar blocks. Add more surrounding context.');
+  }
+
+  return candidates[0];
+}
+
 /**
  * VFS Container — Browser-Side WebContainer Executor (v3.0)
  * 
  * New tools:
- * - edit_file: Surgical search/replace editing
+ * - patch_file: Fuzzy search/replace editing
+ * - edit_file: Legacy exact search/replace editing
  * - grep_search: Text search across all files
  * - create_file: Renamed from write_file (for new files only)
  */
@@ -132,6 +253,10 @@ export class VFSContainer {
       case 'edit_file':
         await this.checkpoint(`AI Checkpoint: Before editing ${args.path}`);
         return await this.editFile(args.path, args.edits);
+
+      case 'patch_file':
+        await this.checkpoint(`AI Checkpoint: Patching ${args.path}`);
+        return await this.patchFile(args.path, args.search_content, args.replace_content);
 
       case 'replace_file_content':
         await this.checkpoint(`AI Checkpoint: Line replacement in ${args.TargetFile}`);
@@ -502,6 +627,56 @@ export class VFSContainer {
       length: content.length,
     });
     return { path, results };
+  }
+
+  /**
+   * Fuzzy search/replace patching for existing files.
+   */
+  async patchFile(path, searchContent, replaceContent) {
+    try {
+      const content = await this.assertFreshRead(path);
+      const match = findPatchBlock(content, searchContent);
+      const replacedContent = content.slice(match.startIndex, match.endIndex);
+      const totalDeltaSize = surgicalDeltaSize(replacedContent, replaceContent);
+
+      if (deltaTooLarge(totalDeltaSize)) {
+        return {
+          path,
+          rejected: true,
+          code: 'DELTA_TOO_LARGE',
+          results: [{
+            status: 'error',
+            message: `Surgical edit delta ${totalDeltaSize} exceeds cap ${MAX_SURGICAL_DELTA_CHARS}. Split the change into smaller validated patches.`,
+          }],
+        };
+      }
+
+      const nextContent = `${content.slice(0, match.startIndex)}${replaceContent}${content.slice(match.endIndex)}`;
+      await this.instance.fs.writeFile(path, nextContent);
+      this.readSnapshots.set(path, {
+        hash: await sha256Hex(nextContent),
+        readAt: Date.now(),
+        length: nextContent.length,
+      });
+
+      return {
+        path,
+        results: [{
+          status: 'ok',
+          message: `Patched lines ${match.startLine}-${match.endLine}`,
+          startLine: match.startLine,
+          endLine: match.endLine,
+          score: Number(match.score.toFixed(4)),
+          exact: match.exact,
+        }],
+      };
+    } catch (err) {
+      return {
+        path,
+        rejected: true,
+        results: [{ status: 'error', message: err.message }],
+      };
+    }
   }
 
   /**
