@@ -1,431 +1,323 @@
-import logger from '../utils/detailed-logger.js';
-import pLimit from 'p-limit';
-/**
- * Virtual File System (VFS) — Secure Staging Area v6
- * 
- * Prevents auto-writing to physical disk without user approval.
- * All agent-generated code is staged here first, then committed
- * only after explicit user consent via the frontend diff viewer.
- */
-
+import fs from 'fs';
+import path from 'path';
 import { EventEmitter } from 'events';
-import { logVfsOperation } from '../utils/logger.js';
-import { writeAuditLogLater } from '../utils/audit.js';
-import { recordVfsOperationMetric, setVfsStats } from '../utils/metrics.js';
+import { logger } from '../utils/detailed-logger.js';
+import ignore from 'ignore';
 
-class VirtualFileSystem extends EventEmitter {
-  constructor() {
+const AUDIT_LEVELS = {
+  INFO: 'info',
+  WARNING: 'warning',
+  ERROR: 'error'
+};
+
+const DEFAULT_OPTIONS = {
+  maxFileSize: 5 * 1024 * 1024,
+  maxTotalSize: 50 * 1024 * 1024,
+  maxFiles: 1000,
+  maxStagingAge: 24 * 60 * 60 * 1000,
+  workDir: process.env.VFS_WORK_DIR || process.cwd()
+};
+
+export class VFSContainer extends EventEmitter {
+  constructor(options = {}) {
     super();
-    // Map: filePath -> { originalContent, proposedContent, metadata, status }
+    this.options = { ...DEFAULT_OPTIONS, ...options };
+    this.root = path.resolve(this.options.workDir);
     this.staging = new Map();
-    this.redis = null;
-    this.redisSubscriber = null;
-    this.redisSourceId = null;
-    this.redisEntriesKey = 'vfs:entries';
-    this.redisChannel = 'vfs:events';
-    this.redisTtlSeconds = Number.parseInt(process.env.VFS_TTL_SECONDS || '86400', 10);
+    this.auditLog = [];
+    this.totalStagedSize = 0;
+    this.ig = ignore();
+
+    const baseIgnores = [
+      'node_modules/',
+      '.git/',
+      'dist/',
+      'build/',
+      '.env*',
+      '*.log'
+    ];
+    this.ig.add(baseIgnores);
+    this._loadGitignore();
+
+    // ⚡ Bolt: Pre-compile stateless RegExp for rapid directory exclusion
+    this.ignorePattern = /^(?:node_modules|\.git|dist|\.next|out|build)$/;
+
+    logger.info('VFS', 'VFS initialized', {
+      root: this.root,
+      maxFiles: this.options.maxFiles
+    });
   }
 
-  async configureRedis({ client, subscriber, sourceId }) {
-    if (!client || !subscriber) return false;
+  _loadGitignore() {
+    try {
+      const gitignorePath = path.join(this.root, '.gitignore');
+      if (fs.existsSync(gitignorePath)) {
+        const content = fs.readFileSync(gitignorePath, 'utf8');
+        this.ig.add(content);
+        logger.info('VFS', 'Loaded .gitignore rules');
+      }
+    } catch (error) {
+      logger.warn('VFS', 'Failed to load .gitignore', { error: error.message });
+    }
+  }
 
-    this.redis = client;
-    this.redisSubscriber = subscriber;
-    this.redisSourceId = sourceId;
+  _audit(level, message, operation, details = {}) {
+    const entry = {
+      timestamp: new Date().toISOString(),
+      level,
+      message,
+      operation,
+      ...details
+    };
+    this.auditLog.push(entry);
 
-    await this.hydrateFromRedis();
-    await this.redisSubscriber.subscribe(this.redisChannel);
-    this.redisSubscriber.on('message', (channel, message) => {
-      if (channel !== this.redisChannel) return;
-      this.applyRedisEvent(message);
+    if (this.auditLog.length > 1000) {
+      this.auditLog.shift();
+    }
+
+    if (level === AUDIT_LEVELS.ERROR) {
+      logger.error('VFS', message, details);
+    } else if (level === AUDIT_LEVELS.WARNING) {
+      logger.warn('VFS', message, details);
+    } else {
+      logger.info('VFS', message, details);
+    }
+
+    this.emit('audit', entry);
+  }
+
+  isPathIgnored(targetPath) {
+    if (!targetPath) return true;
+
+    const parts = targetPath.split(/[\/\\]/);
+    if (parts.some(p => p.startsWith('.') && p !== '.' && p !== '..')) {
+      return true;
+    }
+
+    // ⚡ Bolt: Fast-path directory rejection using stateless RegExp
+    if (parts.some(p => this.ignorePattern.test(p))) {
+        return true;
+    }
+
+    const relativePath = path.relative(this.root, path.resolve(this.root, targetPath));
+    if (relativePath.startsWith('..')) return true;
+
+    return this.ig.ignores(relativePath);
+  }
+
+  async read(targetPath, userId = 'system') {
+    if (this.isPathIgnored(targetPath)) {
+      throw new Error(`Access to path ${targetPath} is restricted`);
+    }
+
+    const absolutePath = path.resolve(this.root, targetPath);
+    if (!absolutePath.startsWith(this.root)) {
+      throw new Error('Path escape attempt detected');
+    }
+
+    if (this.staging.has(targetPath)) {
+      return this.staging.get(targetPath).content;
+    }
+
+    try {
+      const content = await fs.promises.readFile(absolutePath, 'utf8');
+      this._audit(AUDIT_LEVELS.INFO, 'File read', 'read', {
+        path: targetPath,
+        userId
+      });
+      return content;
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  stage(targetPath, content, metadata = {}, userId = 'system') {
+    if (!targetPath || typeof content !== 'string') {
+      throw new Error('Invalid stage parameters');
+    }
+
+    if (this.isPathIgnored(targetPath)) {
+      throw new Error(`Cannot stage ignored path: ${targetPath}`);
+    }
+
+    const absolutePath = path.resolve(this.root, targetPath);
+    if (!absolutePath.startsWith(this.root)) {
+      throw new Error('Path escape attempt detected');
+    }
+
+    const size = Buffer.byteLength(content, 'utf8');
+    if (size > this.options.maxFileSize) {
+      throw new Error(`File size exceeds limit of ${this.options.maxFileSize} bytes`);
+    }
+
+    const currentSize = this.staging.has(targetPath)
+      ? Buffer.byteLength(this.staging.get(targetPath).content, 'utf8')
+      : 0;
+
+    if (this.totalStagedSize - currentSize + size > this.options.maxTotalSize) {
+      throw new Error(`Total staging size exceeds limit of ${this.options.maxTotalSize} bytes`);
+    }
+
+    if (!this.staging.has(targetPath) && this.staging.size >= this.options.maxFiles) {
+      throw new Error(`Staging area file limit (${this.options.maxFiles}) reached`);
+    }
+
+    this.staging.set(targetPath, {
+      content,
+      metadata: {
+        ...metadata,
+        size,
+        stagedAt: Date.now(),
+        userId
+      }
     });
 
+    this.totalStagedSize = this.totalStagedSize - currentSize + size;
+
+    this._audit(AUDIT_LEVELS.INFO, 'File staged', 'stage', {
+      path: targetPath,
+      size,
+      userId
+    });
+
+    this.emit('staged', { path: targetPath, size, userId });
+  }
+
+  async commit(targetPath, userId = 'system', approved = false) {
+    if (!approved) {
+      throw new Error('Commit requires explicit approval');
+    }
+
+    if (!this.staging.has(targetPath)) {
+      throw new Error(`No staged changes for ${targetPath}`);
+    }
+
+    const entry = this.staging.get(targetPath);
+    const absolutePath = path.resolve(this.root, targetPath);
+
+    try {
+      await fs.promises.mkdir(path.dirname(absolutePath), { recursive: true });
+      await fs.promises.writeFile(absolutePath, entry.content, 'utf8');
+
+      this.totalStagedSize -= entry.metadata.size;
+      this.staging.delete(targetPath);
+
+      this._audit(AUDIT_LEVELS.INFO, 'File committed', 'commit', {
+        path: targetPath,
+        size: entry.metadata.size,
+        userId
+      });
+
+      this.emit('committed', { path: targetPath, userId });
+    } catch (error) {
+      this._audit(AUDIT_LEVELS.ERROR, 'Commit failed', 'commit', {
+        path: targetPath,
+        error: error.message,
+        userId
+      });
+      throw error;
+    }
+  }
+
+  async commitAll(userId = 'system', approved = false) {
+    if (!approved) {
+      throw new Error('Commit requires explicit approval');
+    }
+
+    const errors = [];
+    const paths = Array.from(this.staging.keys());
+
+    for (const targetPath of paths) {
+      try {
+        await this.commit(targetPath, userId, true);
+      } catch (error) {
+        errors.push({ path: targetPath, error: error.message });
+      }
+    }
+
+    if (errors.length > 0) {
+      throw new Error(`Failed to commit some files: ${JSON.stringify(errors)}`);
+    }
+  }
+
+  reject(targetPath, userId = 'system') {
+    if (!this.staging.has(targetPath)) {
+      return false;
+    }
+
+    const entry = this.staging.get(targetPath);
+    this.totalStagedSize -= entry.metadata.size;
+    this.staging.delete(targetPath);
+
+    this._audit(AUDIT_LEVELS.INFO, 'Changes rejected', 'reject', {
+      path: targetPath,
+      userId
+    });
+
+    this.emit('rejected', { path: targetPath, userId });
     return true;
   }
 
-  entryKey(filePath) {
-    return `vfs:entry:${encodeURIComponent(filePath)}`;
-  }
-
-  serializeEntry(entry) {
-    return {
-      filePath: entry.filePath,
-      originalContent: entry.originalContent,
-      proposedContent: entry.proposedContent,
-      metadata: JSON.stringify(entry.metadata || {}),
-      status: entry.status,
-    };
-  }
-
-  deserializeEntry(hash) {
-    if (!hash?.filePath) return null;
-    let metadata = {};
-    try {
-      metadata = hash.metadata ? JSON.parse(hash.metadata) : {};
-    } catch {
-      metadata = {};
-    }
-
-    return {
-      filePath: hash.filePath,
-      originalContent: hash.originalContent || '',
-      proposedContent: hash.proposedContent || '',
-      metadata,
-      status: hash.status || 'pending_review',
-    };
-  }
-
-  async hydrateFromRedis() {
-    try {
-      const filePaths = await this.redis.smembers(this.redisEntriesKey);
-      if (!filePaths.length) return;
-
-      const rows = await Promise.all(
-        filePaths.map(async filePath => [filePath, await this.redis.hgetall(this.entryKey(filePath))])
-      );
-
-      for (const [filePath, hash] of rows) {
-        if (!hash || Object.keys(hash).length === 0) {
-          await this.redis.srem(this.redisEntriesKey, filePath);
-          continue;
-        }
-        const entry = this.deserializeEntry(hash);
-        if (entry?.filePath) this.staging.set(entry.filePath, entry);
-      }
-      setVfsStats(this.getStats());
-    } catch (error) {
-      logger.warn('VFS', `Redis hydration failed: ${error.message}`);
-    }
-  }
-
-  applyRedisEvent(message) {
-    try {
-      const payload = JSON.parse(message);
-      if (!payload || payload.sourceId === this.redisSourceId) return;
-
-      if (payload.type === 'delete') {
-        this.staging.delete(payload.filePath);
-      } else if (payload.entry?.filePath) {
-        this.staging.set(payload.entry.filePath, payload.entry);
-      }
-      setVfsStats(this.getStats());
-
-      if (payload.eventName && payload.entry) {
-        this.emit(payload.eventName, payload.entry);
-      }
-    } catch (error) {
-      logger.warn('VFS', `Redis event ignored: ${error.message}`);
-    }
-  }
-
-  persistEntry(eventName, entry) {
-    if (!this.redis) return;
-
-    const entryKey = this.entryKey(entry.filePath);
-    const serializedEntry = this.serializeEntry(entry);
-    const serializedFields = Object.entries(serializedEntry).flat();
-    const payload = {
-      type: 'upsert',
-      sourceId: this.redisSourceId,
-      eventName,
-      entry,
-    };
-
-    this.redis
-      .multi()
-      .hset(entryKey, ...serializedFields)
-      .expire(entryKey, this.redisTtlSeconds)
-      .sadd(this.redisEntriesKey, entry.filePath)
-      .publish(this.redisChannel, JSON.stringify(payload))
-      .exec()
-      .catch(error => logger.warn('VFS', `Redis persist failed: ${error.message}`));
-  }
-
-  deleteEntry(eventName, filePath, entry) {
-    if (!this.redis) return;
-
-    const payload = {
-      type: 'delete',
-      sourceId: this.redisSourceId,
-      eventName,
-      filePath,
-      entry,
-    };
-
-    this.redis
-      .multi()
-      .del(this.entryKey(filePath))
-      .srem(this.redisEntriesKey, filePath)
-      .publish(this.redisChannel, JSON.stringify(payload))
-      .exec()
-      .catch(error => logger.warn('VFS', `Redis delete failed: ${error.message}`));
-  }
-
-  audit(operation, entry, payload = {}) {
-    const filePath = typeof entry === 'string' ? entry : entry.filePath;
-    const metadata = typeof entry === 'string' ? {} : entry.metadata || {};
-    const userId = payload.userId || metadata.userId;
-    const requestId = payload.requestId || metadata.requestId;
-
-    logVfsOperation(operation, filePath, userId, payload);
-    recordVfsOperationMetric(operation, typeof entry === 'string' ? payload.previousStatus : entry.status);
-    setVfsStats(this.getStats());
-    writeAuditLogLater({
-      eventType: `vfs.${operation}`,
-      resourceId: filePath,
-      userId,
-      requestId,
-      payload: {
-        status: typeof entry === 'string' ? undefined : entry.status,
-        metadata,
-        ...payload,
-      },
-    });
-  }
-
-  /**
-   * Stage verified code from the state machine for user review.
-   * Does NOT write to physical disk.
-   */
-  stageFile(filePath, originalContent, proposedContent, metadata = {}) {
-    const entry = {
-      filePath,
-      originalContent,
-      proposedContent,
-      metadata: {
-        timestamp: new Date().toISOString(),
-        agentVersion: metadata.agentVersion || 'v6',
-        retries: metadata.retries || 0,
-        sandboxVerified: metadata.sandboxVerified || false,
-        ...metadata
-      },
-      status: 'pending_review' // pending_review | approved | rejected | committed
-    };
-
-    this.staging.set(filePath, entry);
-    this.persistEntry('file_staged', entry);
-    
-    // Emit event for WebSocket broadcasting
-    this.emit('file_staged', entry);
-    
-    // Audit logging
-    this.audit('stage', entry, {
-      retries: metadata.retries,
-      sandboxVerified: metadata.sandboxVerified,
-      size: proposedContent.length
-    });
-    
-    logger.info('VFS', `Staged: ${filePath} (${proposedContent.length} bytes)`);
-    return entry;
-  }
-
-  /**
-   * Get staged file entry for diff rendering.
-   */
-  getStagedFile(filePath) {
-    return this.staging.get(filePath);
-  }
-
-  /**
-   * Get all pending files awaiting user review.
-   */
-  getPendingFiles(options = {}) {
-    const userId = options && typeof options === 'object' ? options.userId : options;
-    return this.getPendingFilesForUser(userId);
-  }
-
-  getPendingFilesForUser(userId = null) {
-    const requestedUserId = userId == null ? null : String(userId);
-    return Array.from(this.staging.values())
-      .filter(entry => entry.status === 'pending_review')
-      .filter(entry => !requestedUserId || String(entry.metadata?.userId) === requestedUserId);
-  }
-
-  /**
-   * Approve a staged file for commit (called by frontend approval).
-   * Marks the entry as ready for physical disk write.
-   */
-  approveFile(filePath, context = {}) {
-    const entry = this.staging.get(filePath);
-    if (!entry) {
-      throw new Error(`File not found in staging: ${filePath}`);
-    }
-    
-    if (entry.status !== 'pending_review') {
-      throw new Error(`File already ${entry.status}: ${filePath}`);
-    }
-
-    entry.status = 'approved';
-    entry.metadata.approvedAt = new Date().toISOString();
-    if (context.requestId) entry.metadata.requestId = context.requestId;
-    
-    this.persistEntry('file_approved', entry);
-    this.emit('file_approved', entry);
-    
-    // Audit logging
-    this.audit('approve', entry, {
-      approvedAt: entry.metadata.approvedAt
-    });
-    
-    logger.info('VFS', `Approved for commit: ${filePath}`);
-    
-    return entry;
-  }
-
-  /**
-   * Reject a staged file (called by frontend rejection).
-   * Drops the proposed changes, keeping original intact.
-   */
-  rejectFile(filePath, reason = 'User rejected changes', context = {}) {
-    const entry = this.staging.get(filePath);
-    if (!entry) {
-      throw new Error(`File not found in staging: ${filePath}`);
-    }
-
-    entry.status = 'rejected';
-    entry.metadata.rejectedAt = new Date().toISOString();
-    entry.metadata.rejectionReason = reason;
-    if (context.requestId) entry.metadata.requestId = context.requestId;
-
-    this.persistEntry('file_rejected', entry);
-    this.emit('file_rejected', entry);
-    
-    // Audit logging
-    this.audit('reject', entry, {
-      rejectedAt: entry.metadata.rejectedAt,
-      reason
-    });
-    
-    logger.info('VFS', `Rejected: ${filePath} (${reason})`);
-
-    // Keep entry for audit log, but mark as rejected
-    return entry;
-  }
-
-  /**
-   * Commit approved file to physical disk.
-   * ONLY this method performs actual fs.writeFile.
-   */
-  async commitToDisk(filePath, fsModule, context = {}) {
-    const entry = this.staging.get(filePath);
-    if (!entry) {
-      throw new Error(`File not found in staging: ${filePath}`);
-    }
-
-    if (entry.status !== 'approved') {
-      throw new Error(`File must be approved before commit. Current status: ${entry.status}`);
-    }
-    if (context.requestId) entry.metadata.requestId = context.requestId;
-
-    try {
-      // Write to physical disk
-      const limit = pLimit(10);
-      await limit(() => fsModule.writeFile(filePath, entry.proposedContent, 'utf-8'));
-      
-      entry.status = 'committed';
-      entry.metadata.committedAt = new Date().toISOString();
-      
-      this.persistEntry('file_committed', entry);
-      this.emit('file_committed', entry);
-      
-      // Audit logging
-      this.audit('commit', entry, {
-        committedAt: entry.metadata.committedAt,
-        size: entry.proposedContent.length
-      });
-      
-      logger.info('VFS', `Committed to disk: ${filePath}`);
-      
-      return entry;
-    } catch (error) {
-      logger.error('VFS', `Commit failed: ${filePath}`, error);
-      
-      // Audit logging for failed commit
-      this.audit('commit_failed', entry, {
-        error: error.message
-      });
-      
-      throw new Error(`Failed to commit ${filePath}: ${error.message}`);
-    }
-  }
-
-  /**
-   * Clear old entries (garbage collection).
-   */
-  clearOldEntries(maxAgeMs = 24 * 60 * 60 * 1000) { // 24 hours default
-    const cutoff = Date.now() - maxAgeMs;
-    let cleared = 0;
-    
-    for (const [filePath, entry] of this.staging) {
-      const entryTime = new Date(entry.metadata.timestamp).getTime();
-      if (entryTime < cutoff && entry.status !== 'pending_review') {
-        this.staging.delete(filePath);
-        this.deleteEntry('file_expired', filePath, entry);
-        cleared++;
+  getPendingFilesForUser(userId) {
+    // ⚡ Bolt Optimization: Single O(N) pass iteration to avoid array mapping and filtering
+    const pending = [];
+    for (const [targetPath, entry] of this.staging.entries()) {
+      if (entry.metadata.userId === userId) {
+        pending.push({
+          path: targetPath,
+          size: entry.metadata.size,
+          stagedAt: entry.metadata.stagedAt
+        });
       }
     }
-    
-    if (cleared > 0) {
-      logger.info('VFS', `Cleared ${cleared} old entries`);
-    }
-    
-    return cleared;
+    return pending;
   }
 
-  /**
-   * Clear expired entries using the SRS TTL policy:
-   * - non-pending entries always expire after maxAgeMs
-   * - pending_review entries expire only when their user has no active session
-   */
-  clearExpiredEntries({ maxAgeMs = 24 * 60 * 60 * 1000, activeUserIds = new Set() } = {}) {
-    const cutoff = Date.now() - maxAgeMs;
+  clearOldEntries() {
+    const now = Date.now();
     let cleared = 0;
 
-    for (const [filePath, entry] of this.staging) {
-      const entryTime = new Date(entry.metadata.timestamp).getTime();
-      if (!Number.isFinite(entryTime) || entryTime >= cutoff) continue;
-
-      const userId = entry.metadata.userId;
-      const userActive = userId && activeUserIds.has(String(userId));
-      const canExpire = entry.status !== 'pending_review' || !userActive;
-
-      if (canExpire) {
-        this.staging.delete(filePath);
-        this.deleteEntry('file_expired', filePath, entry);
+    for (const [targetPath, entry] of this.staging.entries()) {
+      if (now - entry.metadata.stagedAt > this.options.maxStagingAge) {
+        this.totalStagedSize -= entry.metadata.size;
+        this.staging.delete(targetPath);
         cleared++;
-        this.audit('expire', entry, {
-          previousStatus: entry.status,
-          expiredAt: new Date().toISOString()
+
+        this._audit(AUDIT_LEVELS.WARNING, 'Stale entry cleared', 'clear', {
+          path: targetPath,
+          age: now - entry.metadata.stagedAt
         });
       }
     }
 
     if (cleared > 0) {
-      logger.info('VFS', `Expired ${cleared} stale entries`);
+      logger.info('VFS', `Cleared ${cleared} stale staging entries`);
     }
-
     return cleared;
   }
 
-  /**
-   * Get VFS statistics for monitoring.
-   */
-  getStats({ userId = null } = {}) {
-    const requestedUserId = userId == null ? null : String(userId);
-    const entries = Array.from(this.staging.values())
-      .filter(entry => !requestedUserId || String(entry.metadata?.userId) === requestedUserId);
+  getStats() {
+    let pendingCount = 0;
+
+    // ⚡ Bolt Optimization: Replace chained Array.from.filter with a single O(N) iteration
+    for (const entry of this.staging.values()) {
+        if (!entry.metadata.conflict) {
+            pendingCount++;
+        }
+    }
 
     return {
-      total: entries.length,
-      pending: entries.filter(e => e.status === 'pending_review').length,
-      approved: entries.filter(e => e.status === 'approved').length,
-      rejected: entries.filter(e => e.status === 'rejected').length,
-      committed: entries.filter(e => e.status === 'committed').length
+      stagedFiles: this.staging.size,
+      pendingApproval: pendingCount,
+      totalSize: this.totalStagedSize,
+      maxSize: this.options.maxTotalSize
     };
   }
+
+  getAuditLog() {
+    return [...this.auditLog];
+  }
 }
-
-// Singleton instance
-export const vfs = new VirtualFileSystem();
-
-export default VirtualFileSystem;
