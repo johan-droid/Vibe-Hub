@@ -33,6 +33,7 @@ import { EditorTabs } from '../features/editor/components/EditorTabs';
 import { FileViewer } from '../features/editor/components/FileViewer';
 import ActivityFeed from '../features/swarm/components/ActivityFeed';
 import TerminalSessionsPanel from '../features/terminal/components/TerminalSessionsPanel';
+import ToolVisualizer from '../features/dashboard/components/ToolVisualizer';
 
 const DiffViewer = React.lazy(() => import('../features/editor/components/DiffViewer'));
 
@@ -57,6 +58,7 @@ export default function Workspace() {
     activeFilePath,
     openFiles,
     terminalPanelVisible,
+    toolGraph,
     toggleTerminalPanel,
   } = useStore();
 
@@ -172,15 +174,7 @@ export default function Workspace() {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex-1 flex items-center justify-center text-center">
-                        <div className="max-w-xs">
-                          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-surface-container-low text-on-surface-variant/20">
-                            <Layout size={32} />
-                          </div>
-                          <h3 className="text-xl font-black text-on-surface mb-2">No files open</h3>
-                          <p className="text-sm font-medium text-on-surface-variant/40">Select a file from the explorer or ask the assistant to generate code.</p>
-                        </div>
-                      </div>
+                      <ToolVisualizer toolGraph={toolGraph} experienceMode="professional" />
                     )}
                   </motion.div>
                 )}

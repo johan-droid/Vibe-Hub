@@ -4,11 +4,14 @@ import {
   Controls,
   MiniMap,
   ReactFlow,
+  ReactFlowProvider,
   Handle,
   Position,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { GitBranch, Network, ShieldAlert, Wrench } from 'lucide-react';
+import { CommandOrbNode } from './CommandOrbNode';
+
 
 const statusTone = {
   started: 'border-[#8DA2FF]/35 bg-[#8DA2FF]/10 text-[#B8C5FF]',
@@ -53,7 +56,7 @@ function ToolNode({ data }) {
   );
 }
 
-const nodeTypes = { tool: ToolNode };
+const nodeTypes = { tool: ToolNode, commandOrb: CommandOrbNode };
 
 function toFlowNodes(nodes = []) {
   return nodes.map((node, index) => ({
@@ -119,7 +122,8 @@ export default function ToolVisualizer({ toolGraph, experienceMode = 'profession
             </p>
           </div>
         ) : (
-          <ReactFlow
+          <ReactFlowProvider>
+            <ReactFlow
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
@@ -130,8 +134,21 @@ export default function ToolVisualizer({ toolGraph, experienceMode = 'profession
           >
             <Background color="rgba(255,255,255,0.08)" gap={18} />
             <Controls showInteractive={false} />
-            {experienceMode === 'professional' && <MiniMap pannable zoomable />}
+            <MiniMap
+              pannable
+              zoomable
+              className="!bg-[#0D1117]/80 !border-white/10 !rounded-lg !shadow-2xl backdrop-blur-xl"
+              maskColor="rgba(0, 0, 0, 0.5)"
+              nodeColor={(node) => {
+                if (node.type === 'commandOrb') return '#8DA2FF';
+                if (node.data?.status === 'completed') return '#43F3C5';
+                if (node.data?.status === 'failed') return '#FF6B6B';
+                if (node.data?.status === 'approval_required') return '#F7C35F';
+                return '#30363D';
+              }}
+            />
           </ReactFlow>
+          </ReactFlowProvider>
         )}
       </div>
     </div>
