@@ -32,6 +32,9 @@ function ThoughtSection({ thoughts }) {
   return (
     <div className="mb-6 w-full">
       <button
+        type="button"
+        aria-label="Toggle Reasoning Trace"
+        aria-expanded={isExpanded}
         onClick={() => setIsExpanded(!isExpanded)}
         className="group inline-flex items-center gap-3 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-on-surface-variant shadow-sm transition hover:bg-surface-container-low hover:text-on-surface"
       >
@@ -274,7 +277,7 @@ export default function ChatInterface({ onSend }) {
             />
             
             <div className="absolute bottom-3 right-3 flex items-center gap-2">
-               <button className="p-2.5 text-on-surface-variant/40 hover:text-primary hover:bg-primary/10 rounded-xl transition-all" title="Add Connector or Context">
+               <button type="button" aria-label="Add Connector or Context" className="p-2.5 text-on-surface-variant/40 hover:text-primary hover:bg-primary/10 rounded-xl transition-all" title="Add Connector or Context">
                 <Plus size={22} />
               </button>
               <Button 
