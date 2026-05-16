@@ -12,6 +12,9 @@
     "apps/user-interface",
     "apps/server-bridge"
   ],
+  "dependencies": {
+    "patch-package": "^8.0.1"
+  },
   "scripts": {
     "postinstall": "node scripts/run-patch-package.mjs",
     "dev:ui": "npm run dev --workspace=apps/user-interface",
@@ -27,7 +30,6 @@
   },
   "devDependencies": {
     "concurrently": "^9.1.0",
-    "patch-package": "^8.0.1",
     "vite": "^8.0.12"
   },
   "overrides": {

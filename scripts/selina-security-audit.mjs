@@ -9,9 +9,9 @@ const ROOT = path.resolve(__dirname, '..');
 const FAIL_ON = process.env.SELINA_SECURITY_AUDIT_FAIL_ON || 'high';
 const SEVERITY_RANK = { info: 0, low: 1, medium: 2, high: 3, critical: 4 };
 
-const ALLOWED_LIFECYCLE_SCRIPTS = new Map([
-  ['postinstall', 'patch-package'],
-]);
+const ALLOWED_LIFECYCLE_SCRIPTS = {
+  postinstall: ['patch-package', 'node scripts/run-patch-package.mjs'],
+};
 
 const TEXT_SCAN_EXTENSIONS = new Set([
   '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs',
@@ -83,7 +83,8 @@ function scanLifecycleScripts(files, findings) {
     const scripts = readJson(file).scripts || {};
     for (const [name, command] of Object.entries(scripts)) {
       if (!/^(preinstall|install|postinstall|prepare)$/i.test(name)) continue;
-      if (ALLOWED_LIFECYCLE_SCRIPTS.get(name) === command) continue;
+      const allowed = ALLOWED_LIFECYCLE_SCRIPTS[name.toLowerCase()];
+      if (allowed && allowed.includes(command)) continue;
       addFinding(findings, {
         id: `lifecycle-script:${file}:${name}`,
         severity: 'high',

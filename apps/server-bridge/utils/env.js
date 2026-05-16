@@ -55,6 +55,7 @@ export function validateEnvironment(env = process.env) {
   const effectiveEnv = { ...env };
 
   const parsed = envSchema.safeParse(effectiveEnv);
+
   if (!parsed.success) {
     const errorMsg = `Invalid environment configuration: ${parsed.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ')}`;
     logger.error('Env', errorMsg);
@@ -65,6 +66,9 @@ export function validateEnvironment(env = process.env) {
     nodeEnv: env.NODE_ENV || 'development',
     hasDatabaseUrl: !!env.DATABASE_URL,
     hasJwtSecret: !!env.JWT_SECRET,
+    hasCsrfSecret: !!env.CSRF_SECRET,
+    hasVibeMasterKey: !!env.VIBE_MASTER_KEY,
+    hasActionGrantSecret: !!env.SELINA_ACTION_GRANT_SECRET,
     hasUiOrigin: !!env.UI_ORIGIN,
     hasGeminiKey: !!env.GEMINI_API_KEY,
     hasNimKey: !!(env.NIM_API_KEY || env.NVIDIA_API_KEY || env.NVIDIA_NIM_API_KEY),
