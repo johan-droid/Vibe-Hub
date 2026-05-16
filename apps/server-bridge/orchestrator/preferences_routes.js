@@ -1,6 +1,5 @@
 import express from 'express';
 import { getUserPreferences, upsertUserPreference } from '../db.js';
-import { requireAuth } from '../auth/middleware.js';
 import { z } from 'zod';
 import { validateRequest } from '../utils/validation.js';
 
@@ -16,7 +15,7 @@ const preferenceUpdateSchema = z.object({
  * GET /api/v6/preferences
  * Fetch all preferences for the authenticated user
  */
-router.get('/', requireAuth, async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const preferences = await getUserPreferences(req.user.id);
     
@@ -36,7 +35,7 @@ router.get('/', requireAuth, async (req, res) => {
  * POST /api/v6/preferences
  * Update or create a specific preference type
  */
-router.post('/', requireAuth, validateRequest(preferenceUpdateSchema), async (req, res) => {
+router.post('/', validateRequest(preferenceUpdateSchema), async (req, res) => {
   try {
     const { preferenceType, content } = req.validatedBody;
     
@@ -60,7 +59,7 @@ router.post('/', requireAuth, validateRequest(preferenceUpdateSchema), async (re
  * POST /api/v6/preferences/bulk
  * Update multiple preferences at once
  */
-router.post('/bulk', requireAuth, async (req, res) => {
+router.post('/bulk', async (req, res) => {
   try {
     const { preferences } = req.body; // Expects { language: {...}, aesthetic: {...}, ... }
     

@@ -15,7 +15,7 @@ function formatZodIssues(error) {
 }
 
 // Helper for path validation (prevents directory traversal)
-const safePath = z.string()
+export const safePathSchema = z.string()
   .min(1, 'Path is required')
   .max(500, 'Path too long')
   .refine(
@@ -39,7 +39,7 @@ export const codeRequestSchema = z.object({
   userId: z.string()
     .min(1, 'User ID is required')
     .uuid('Invalid user ID format'),
-  targetFile: safePath,
+  targetFile: safePathSchema,
   effortLevel: z.enum(['quick', 'standard', 'deep']).optional().default('standard'),
   socketId: z.string()
     .min(1, 'Socket ID is required for real-time updates')
@@ -47,13 +47,13 @@ export const codeRequestSchema = z.object({
 
 // VFS commit request
 export const vfsCommitSchema = z.object({
-  filePath: safePath,
+  filePath: safePathSchema,
   approved: z.boolean()
 });
 
 // VFS file path query
 export const vfsFilePathSchema = z.object({
-  filePath: safePath
+  filePath: safePathSchema
 });
 
 // User preferences update
@@ -133,6 +133,7 @@ export function validateQuery(schema) {
 
 export default {
   codeRequestSchema,
+  safePathSchema,
   vfsCommitSchema,
   vfsFilePathSchema,
   userPreferencesSchema,

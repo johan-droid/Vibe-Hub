@@ -71,6 +71,7 @@ import { fetchRunEventsForUser, fetchRunForUser, persistRun, persistRunEvent } f
 import { createActionGrant, hashToolParams, verifyActionGrant } from './auth/action-grants.js';
 import { insertAgentActionGrant } from './db.js';
 import { applyFuzzyPatchFile, PatchFileError } from './orchestrator/patch-file.js';
+import { integrationRouter } from './integration/router.js';
 // ─── Express + HTTP server ────────────────────────────────────────────────────
 
 validateEnvironment();
@@ -204,8 +205,10 @@ const terminalLimiter = rateLimit({
 app.use('/api/auth/', authLimiter);
 app.use('/api/code', agentLimiter);
 app.use('/api/v6/code', agentLimiter);
+app.use('/api/v6/integration/code', agentLimiter);
 app.use('/api/fs/', vfsLimiter);
 app.use('/api/v6/fs/', vfsLimiter);
+app.use('/api/v6/integration/vfs/', vfsLimiter);
 app.use('/api/terminal/', terminalLimiter);
 app.use('/api/v6/terminal/', terminalLimiter);
 
@@ -307,6 +310,7 @@ app.get('/', (_req, res) => {
     health: '/health',
     readiness: '/ready',
     docs: '/api-docs',
+    integration: '/api/v6/integration',
   });
 });
 app.get('/swagger.json', (_req, res) => res.json(buildOpenApiSpec()));
@@ -629,6 +633,9 @@ async function handleCopilotChat(req, res) {
 
 app.post('/api/copilot/chat', requireAuth, handleCopilotChat);
 app.post('/api/v6/copilot/chat', requireAuth, handleCopilotChat);
+
+// ── Integration Facade (V6) ──────────────────────────────────────────────────
+app.use('/api/v6/integration', integrationRouter);
 
 // ─── WebSocket Server ─────────────────────────────────────────────────────────
 

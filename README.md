@@ -68,6 +68,7 @@ npm run release:gate
 - [Development Setup](docs/DEVELOPMENT_SETUP.md)
 - [Technical Architecture](docs/TECHNICAL_ARCHITECTURE.md)
 - [API Specification](docs/API_SPECIFICATION.md)
+- [Integration API Guide](docs/INTEGRATION_API_GUIDE.md)
 - [System Plan](docs/SYSTEM_PLAN.md)
 - [Software Requirements](docs/SRS.md)
 

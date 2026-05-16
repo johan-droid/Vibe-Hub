@@ -353,6 +353,7 @@ async function handleCodeRequest(req, res) {
     const io = req.app.get('io');
     const codeQueue = req.app.get('codeQueue');
     const retryState = getRetryState(userId);
+    const allowHeadlessExecution = req.allowHeadlessExecution === true;
 
     if (retryState.count >= MAX_CONSECUTIVE_ROLLBACKS) {
         return res.status(429).json({
@@ -363,7 +364,7 @@ async function handleCodeRequest(req, res) {
         });
     }
 
-    if (!socketId) {
+    if (!socketId && !allowHeadlessExecution) {
         return res.status(400).json({ error: "socketId is required", requestId: req.id });
     }
 
