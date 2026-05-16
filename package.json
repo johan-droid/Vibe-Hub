@@ -13,7 +13,7 @@
     "apps/server-bridge"
   ],
   "scripts": {
-    "postinstall": "patch-package",
+    "postinstall": "node scripts/run-patch-package.mjs",
     "dev:ui": "npm run dev --workspace=apps/user-interface",
     "dev:server": "npm run dev --workspace=apps/server-bridge",
     "dev": "npx concurrently -n UI,BRAIN -c cyan,magenta \"npm run dev:ui\" \"npm run dev:server\"",
