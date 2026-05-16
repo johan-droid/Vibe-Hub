@@ -161,15 +161,22 @@ export class VFSContainer extends EventEmitter {
       throw new Error(`Staging area file limit (${this.options.maxFiles}) reached`);
     }
 
-    this.staging.set(targetPath, {
+    const entry = {
+      filePath: targetPath,
+      path: targetPath,
+      originalContent: metadata.originalContent ?? '',
+      proposedContent: content,
       content,
+      status: metadata.status || 'pending_review',
       metadata: {
         ...metadata,
         size,
         stagedAt: Date.now(),
         userId
       }
-    });
+    };
+
+    this.staging.set(targetPath, entry);
 
     this.totalStagedSize = this.totalStagedSize - currentSize + size;
 
@@ -180,6 +187,116 @@ export class VFSContainer extends EventEmitter {
     });
 
     this.emit('staged', { path: targetPath, size, userId });
+    this.emit('file_staged', entry);
+    return entry;
+  }
+
+  stageFile(filePath, originalContent = '', proposedContent = '', metadata = {}) {
+    const userId = metadata.userId || 'system';
+    return this.stage(
+      filePath,
+      proposedContent,
+      {
+        ...metadata,
+        originalContent,
+        status: 'pending_review'
+      },
+      userId
+    );
+  }
+
+  getStagedFile(filePath) {
+    return this.staging.get(filePath) || null;
+  }
+
+  approveFile(filePath, options = {}) {
+    const entry = this._requireStagedEntry(filePath);
+    this._assertEntryOwner(entry, options.userId);
+
+    entry.status = 'approved';
+    entry.metadata = {
+      ...entry.metadata,
+      approvedAt: new Date().toISOString(),
+      approvedBy: options.userId || entry.metadata.userId
+    };
+
+    this._audit(AUDIT_LEVELS.INFO, 'File approved', 'approve', {
+      path: filePath,
+      userId: options.userId || entry.metadata.userId
+    });
+
+    this.emit('file_approved', entry);
+    return entry;
+  }
+
+  rejectFile(filePath, reason = 'Rejected', options = {}) {
+    const entry = this._requireStagedEntry(filePath);
+    this._assertEntryOwner(entry, options.userId);
+
+    entry.status = 'rejected';
+    entry.metadata = {
+      ...entry.metadata,
+      rejectedAt: new Date().toISOString(),
+      rejectedBy: options.userId || entry.metadata.userId,
+      rejectionReason: reason
+    };
+
+    this.totalStagedSize -= entry.metadata.size || 0;
+    this.staging.delete(filePath);
+
+    this._audit(AUDIT_LEVELS.INFO, 'File rejected', 'reject', {
+      path: filePath,
+      reason,
+      userId: options.userId || entry.metadata.userId
+    });
+
+    this.emit('file_rejected', entry);
+    this.emit('rejected', { path: filePath, userId: options.userId || entry.metadata.userId });
+    return entry;
+  }
+
+  async commitToDisk(filePath, fsModule = fs, options = {}) {
+    const entry = this._requireStagedEntry(filePath);
+    this._assertEntryOwner(entry, options.userId);
+
+    if (entry.status !== 'approved') {
+      throw new Error('File must be approved before commit');
+    }
+
+    const absolutePath = this._validatePath(filePath);
+    const writer = fsModule.promises || fsModule;
+
+    try {
+      await writer.mkdir(path.dirname(absolutePath), { recursive: true });
+      await writer.writeFile(absolutePath, entry.proposedContent ?? entry.content, 'utf8');
+
+      entry.status = 'committed';
+      entry.metadata = {
+        ...entry.metadata,
+        committedAt: new Date().toISOString(),
+        committedBy: options.userId || entry.metadata.userId
+      };
+
+      this.totalStagedSize -= entry.metadata.size || 0;
+      this.staging.delete(filePath);
+
+      this._audit(AUDIT_LEVELS.INFO, 'File committed', 'commit', {
+        path: filePath,
+        size: entry.metadata.size,
+        userId: options.userId || entry.metadata.userId
+      });
+
+      this.emit('file_committed', entry);
+      this.emit('committed', { path: filePath, userId: options.userId || entry.metadata.userId });
+      return entry;
+    } catch (error) {
+      this._audit(AUDIT_LEVELS.ERROR, 'Commit failed', 'commit', {
+        path: filePath,
+        error: error.message,
+        userId: options.userId || entry.metadata.userId
+      });
+      throw error;
+    }
   }
 
   async commit(targetPath, userId = 'system', approved = false) {
@@ -258,18 +375,33 @@ export class VFSContainer extends EventEmitter {
   }
 
   getPendingFilesForUser(userId) {
-    // ⚡ Bolt Optimization: Single O(N) pass iteration to avoid array mapping and filtering
     const pending = [];
     for (const [targetPath, entry] of this.staging.entries()) {
-      if (entry.metadata.userId === userId) {
+      if (entry.status === 'pending_review' && String(entry.metadata.userId) === String(userId)) {
         pending.push({
+          ...entry,
           path: targetPath,
+          filePath: targetPath,
           size: entry.metadata.size,
           stagedAt: entry.metadata.stagedAt
         });
       }
     }
     return pending;
+  }
+
+  getPendingFiles(options = {}) {
+    const userId = options.userId;
+    return Array.from(this.staging.entries())
+      .filter(([, entry]) => entry.status === 'pending_review')
+      .filter(([, entry]) => !userId || String(entry.metadata.userId) === String(userId))
+      .map(([targetPath, entry]) => ({
+        ...entry,
+        path: targetPath,
+        filePath: targetPath,
+        size: entry.metadata.size,
+        stagedAt: entry.metadata.stagedAt
+      }));
   }
 
   clearOldEntries() {
@@ -295,20 +427,31 @@ export class VFSContainer extends EventEmitter {
     return cleared;
   }
 
-  getStats() {
+  getStats(options = {}) {
     let pendingCount = 0;
+    let approvedCount = 0;
+    let totalCount = 0;
+    let totalSize = 0;
+    const userId = options.userId;
 
-    // ⚡ Bolt Optimization: Replace chained Array.from.filter with a single O(N) iteration
     for (const entry of this.staging.values()) {
-        if (!entry.metadata.conflict) {
-            pendingCount++;
-        }
+      if (userId && String(entry.metadata.userId) !== String(userId)) continue;
+
+      totalCount++;
+      totalSize += entry.metadata.size || 0;
+      if (entry.status === 'approved') approvedCount++;
+      if (entry.status === 'pending_review' && !entry.metadata.conflict) pendingCount++;
     }
 
     return {
-      stagedFiles: this.staging.size,
+      total: totalCount,
+      pending: pendingCount,
+      approved: approvedCount,
+      rejected: 0,
+      committed: 0,
+      stagedFiles: totalCount,
       pendingApproval: pendingCount,
-      totalSize: this.totalStagedSize,
+      totalSize: userId ? totalSize : this.totalStagedSize,
       maxSize: this.options.maxTotalSize
     };
   }
@@ -370,4 +513,50 @@ export class VFSContainer extends EventEmitter {
     }
     return current;
   }
+
+  async configureRedis({ client = null, subscriber = null, sourceId = null } = {}) {
+    this.redis = { client, subscriber, sourceId };
+    return { enabled: Boolean(client && subscriber), sourceId };
+  }
+
+  clearExpiredEntries({ maxAgeMs = this.options.maxStagingAge } = {}) {
+    const now = Date.now();
+    let cleared = 0;
+
+    for (const [targetPath, entry] of this.staging.entries()) {
+      const ageMs = now - (entry.metadata.stagedAt || now);
+      const ownerId = entry.metadata.userId == null ? null : String(entry.metadata.userId);
+
+      if (ageMs > maxAgeMs) {
+        this.totalStagedSize -= entry.metadata.size || 0;
+        this.staging.delete(targetPath);
+        cleared++;
+
+        this._audit(AUDIT_LEVELS.WARNING, 'Expired staged file cleared', 'clear_expired', {
+          path: targetPath,
+          ageMs,
+          userId: ownerId
+        });
+      }
+    }
+
+    return cleared;
+  }
+
+  _requireStagedEntry(filePath) {
+    const entry = this.staging.get(filePath);
+    if (!entry) {
+      throw new Error(`File not found in staging: ${filePath}`);
+    }
+    return entry;
+  }
+
+  _assertEntryOwner(entry, userId) {
+    if (!userId) return;
+    if (String(entry.metadata.userId) !== String(userId)) {
+      throw new Error('Commit unauthorized for staged file');
+    }
+  }
 }
+
+export const vfs = new VFSContainer();
