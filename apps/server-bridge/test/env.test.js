@@ -74,4 +74,18 @@ describe('Environment validation', () => {
     expect(() => validateEnvironment(env))
       .toThrow('Missing required production environment variables: OPENAI_API_KEY');
   });
+
+  it('accepts DeepSeek as a selected production coding provider', () => {
+    const env = {
+      ...productionBaseEnv,
+      SELINA_MODEL_PROVIDER: 'deepseek',
+      NIM_API_KEY: '',
+      DEEPSEEK_API_KEY: 'deepseek-key-for-tests',
+    };
+
+    const parsed = validateEnvironment(env);
+
+    expect(parsed.SELINA_MODEL_PROVIDER).toBe('deepseek');
+    expect(parsed.DEEPSEEK_API_KEY).toBe('deepseek-key-for-tests');
+  });
 });

@@ -244,9 +244,16 @@ class LLMClient {
 
 export function extractCodePayload(text) {
   const rawCode = String(text || '').trim();
-  const regex = /^```[a-z]*\n([\s\S]*?)\n```/gm;
-  const matches = [...rawCode.matchAll(regex)];
-  return matches.length > 0 ? matches[0][1] : rawCode;
+  const lines = rawCode.split(/\r?\n/);
+  if (!/^```[\w-]*\s*$/.test(lines[0] || '')) return rawCode;
+
+  for (let index = lines.length - 1; index > 0; index -= 1) {
+    if (lines[index].trim() === '```') {
+      return lines.slice(1, index).join('\n').trimEnd();
+    }
+  }
+
+  return rawCode;
 }
 
 export default new LLMClient();

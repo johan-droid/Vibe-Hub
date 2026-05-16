@@ -118,264 +118,96 @@ Vibe-Hub is a SaaS-grade agentic coding platform that leverages deterministic st
 | | express-rate-limit | 7.5.0 | Rate limiting |
 | | Zod | 3.25.0 | Schema validation |
 | | bcryptjs | 2.4.3 | Password hashing |
-| **Data** | PostgreSQL | 16.x | Primary database |
-| | pgvector | 0.8.0 | Vector similarity |
-| **Sandbox** | Docker Engine | 25.x | Container runtime |
-| | Alpine Linux | 3.19 | Container OS |
-| **AI** | @google/generative-ai | 0.21.0 | Gemini API |
-| | Tree-sitter | 0.22.4 | AST parsing |
+# Vibe-Hub Technical Architecture Overview
 
----
+**Document Version:** 6.2
+**Last Updated:** 2026-05-16
 
-## 3. Core Components
+## 1. Executive Summary
 
-### 3.1 State Machine Orchestration (XState)
+Vibe-Hub is a two-workspace monorepo. `apps/server-bridge` owns orchestration, auth, memory, MCP, and the approval-gated file pipeline. `apps/user-interface` owns the React workspace that surfaces prompts, diffs, terminal output, and agent state.
 
-**Location:** `orchestrator/state_machine.js`
+The current architecture is built around four hard boundaries:
 
-The orchestration engine uses XState to enforce deterministic execution with failure recovery.
+1. Deterministic orchestration in `apps/server-bridge/orchestrator/state_machine.js`.
+2. Approval-gated writes in `apps/server-bridge/vfs/container.js`.
+3. Isolated execution in `apps/server-bridge/sandbox/docker_executor.js`.
+4. User review and commit flows in `apps/user-interface/src/features/editor/components/DiffViewer.jsx` and the surrounding workspace UI.
 
-**State Machine Specification:**
+## 2. Current System Shape
 
-```
-States:
-  idle ──START_TASK──► loading_contexts ──done──► parsing_ast ──done──► drafting_code
-                                                                                │
-                                                                                │ error
-                                                                                ▼
-  fatal_failure ◄──error──┐                                            ┌─────► rollback
-        ▲                 │                                            │          │
-        │                 │ error                                       │          │ always
-        │                 │                                             │          ▼
-        │        ┌────────┴────────┐                                    │   drafting_code
-        │        │   evaluating    │────────────────────────────────────┘   (retries < 3)
-        │        │    _failure     │ error (retries >= 3)
-        │        └─────────────────┘
-        │                │ success
-        │                ▼
-        │           sandboxing
-        │           │ success
-        │           ▼
-        └───── success (VFS staging)
+```text
+UI (React/Vite)
+  -> HTTP + Socket.io
+Server bridge (Express)
+  -> XState orchestration
+  -> AST / memory / MCP / repo / auth
+  -> VFS staging
+  -> Docker sandbox
+  -> PostgreSQL + Redis-backed coordination when enabled
 ```
 
-**Context Schema:**
-```javascript
-{
-  retries: 0,              // Current retry count
-  maxRetries: 3,           // Maximum retries before rollback
-  astGraph: null,          // Parsed AST structure
-  generatedCode: null,     // LLM output
-  sandboxError: null,      // Error from Docker execution
-  orgContext: null,        // Organizational constraints
-  userContext: null,       // User preferences
-  taskPrompt: null,       // Original user request
-  targetFile: null        // File being modified
-}
-```
+### Key runtime files
 
-### 3.2 Virtual File System (VFS)
+- `apps/server-bridge/index.js` - Express bootstrap and route registration.
+- `apps/server-bridge/orchestrator/router.js` - orchestration, VFS, repo, and MCP handlers.
+- `apps/server-bridge/orchestrator/state_machine.js` - state transitions and rollback behavior.
+- `apps/server-bridge/vfs/container.js` - in-memory staging container and audit trail.
+- `apps/server-bridge/auth/routes.js` - auth and session routes.
+- `apps/server-bridge/orchestrator/chat_routes.js` - chat sessions and messages.
+- `apps/server-bridge/orchestrator/preferences_routes.js` - workspace preferences.
+- `apps/user-interface/src/pages/Workspace.jsx` - main workspace shell.
 
-**Location:** `vfs/container.js`
+### Current technology profile
 
-The VFS provides a secure staging layer between agent-generated code and physical disk writes.
+| Layer | Current stack |
+| --- | --- |
+| Frontend | React 19, Vite 8, Zustand 5, Socket.io client 4.8, Playwright, Vitest |
+| Backend | Node.js 22, Express 4.19, Socket.io 4.8, XState 5.31, Zod 3.25, Winston 3.17 |
+| Data | PostgreSQL, pgvector, Redis-backed queues/adapters when enabled |
+| Execution | Docker sandbox with network isolation and filesystem containment |
 
-**Data Model:**
-```javascript
-Entry {
-  filePath: string,           // Absolute or relative path
-  originalContent: string,    // Content before modification
-  proposedContent: string,    // Agent-generated code
-  metadata: {
-    timestamp: ISOString,    // Staging time
-    userId: UUID,             // Approving user
-    retries: number,         // Generation attempts
-    sandboxVerified: boolean // Passed Docker test
-  },
-  status: 'pending_review' | 'approved' | 'rejected' | 'committed'
-}
-```
+## 3. Component Boundaries
 
-**Security Guarantees:**
-1. **No Auto-Commit:** Files remain in memory until explicit approval
-2. **Audit Trail:** Every operation logged with requestId and userId
-3. **Path Validation:** Zod schemas prevent path traversal attacks
-4. **Immutable Original:** Original content preserved for diff/rollback
+### 3.1 UI layer
 
-### 3.3 Docker Sandbox
+The UI is organized by feature under `apps/user-interface/src/features/` rather than by generic shared folders. Important surfaces include:
 
-**Location:** `sandbox/docker_executor.js`
+- `features/editor/components/DiffViewer.jsx` for approval review.
+- `features/dashboard/components/AgentStatusBar.jsx` and `ActivityFeed.jsx` for live orchestration state.
+- `features/chat/components/ChatInterface.jsx` for prompt and session interactions.
+- `features/terminal/components/TerminalSessionsPanel.jsx` for terminal session visibility.
 
-**Execution Profile:**
-```bash
-docker run \
-  --rm \                          # Auto-cleanup
-  --network none \                 # Air-gapped
-  --memory 256m \                  # Memory ceiling
-  --cpus 0.5 \                     # CPU throttling
-  --pids-limit 50 \                # Fork bomb protection
-  --read-only \                    # Immutable filesystem
-  -v "${filePath}:/app/exec.js" \  # Bind mount only
-  -w /app \
-  node:18-alpine \
-  node exec.js
-```
+### 3.2 Server bridge layer
 
-**Security Model:**
-- Offline execution (no external network)
-- Resource quotas prevent DoS
-- 10-second timeout kills infinite loops
-- Ephemeral containers (no persistence)
+The server bridge is the only place where orchestration, auth, sandboxing, and persistence meet. That separation is deliberate:
 
----
+- `org_core/` captures immutable organizational constraints.
+- `user_env/` captures mutable user preferences.
+- `orchestrator/` is the integration point that is allowed to read from both.
 
-## 4. API Specification
+### 3.3 Request lifecycle
 
-### 4.1 Authentication
+1. The UI submits a prompt to `POST /api/code` or `POST /api/v6/code`.
+2. The server validates auth, readiness, CSRF, idempotency, and the request schema.
+3. The XState machine loads contexts, parses the target file, and drafts code.
+4. The sandbox executes the proposed code in Docker.
+5. On success, the VFS stages the file and emits `file_staged`.
+6. The user reviews the diff and either approves or rejects the staged file.
+7. Approval commits the file to disk through the VFS container.
 
-**OAuth Flow:**
-1. `GET /api/auth/google` → Redirect to Google
-2. Google callback → `POST /api/auth/google/callback` → JWT token
-3. Subsequent requests: `Authorization: Bearer <token>`
+## 4. Security and Reliability
 
-### 4.2 Rate Limiting Tiers
+- The VFS refuses path escapes, hidden path traversal, and oversized staging sets.
+- The sandbox isolates execution with `--network none` and resource limits.
+- Auth uses session lifecycle routes rather than a bare token-only model.
+- Audit logs are retained for VFS and orchestration decisions.
 
-| Endpoint | Window | Limit | Purpose |
-|----------|--------|-------|---------|
-| Global | 15 min | 100 req | General protection |
-| /api/* | 1 min | 30 req | API protection |
-| /api/code | 1 min | 5 req | LLM cost control |
+## 5. Operational Notes
 
-### 4.3 Key Endpoints
-
-#### POST /api/code
-Initiates AI code generation with full orchestration.
-
-**Request Body (Zod validated):**
-```json
-{
-  "prompt": "Create a factorial function with error handling",
-  "userId": "550e8400-e29b-41d4-a716-446655440000",
-  "targetFile": "src/utils/math.js",
-  "socketId": "socket_abc123xyz"
-}
-```
-
-**Success Response:**
-```json
-{
-  "success": true,
-  "message": "Agent completed successfully",
-  "data": {
-    "code": "function factorial(n) { ... }",
-    "astGraph": { "imports": [], "exports": ["factorial"] },
-    "retries": 0,
-    "stagedFile": {
-      "filePath": "src/utils/math.js",
-      "status": "pending_review"
-    }
-  }
-}
-```
-
-#### POST /api/fs/commit
-Commits approved VFS changes to disk.
-
-**Request:**
-```json
-{
-  "filePath": "src/utils/math.js",
-  "approved": true
-}
-```
-
-**Security:** Requires prior `approveFile()` call in VFS.
-
----
-
-## 5. Security Architecture
-
-### 5.1 Defense in Depth
-
-```
-┌────────────────────────────────────────┐
-│  Layer 1: Network (HTTPS/WSS only)       │
-├────────────────────────────────────────┤
-│  Layer 2: Gateway (Rate limiting)        │
-├────────────────────────────────────────┤
-│  Layer 3: Application (Helmet, CORS)   │
-├────────────────────────────────────────┤
-│  Layer 4: Input (Zod validation)         │
-├────────────────────────────────────────┤
-│  Layer 5: Execution (Docker isolation)  │
-├────────────────────────────────────────┤
-│  Layer 6: Data (VFS approval gate)       │
-└────────────────────────────────────────┘
-```
-
-### 5.2 Security Controls
-
-| Threat | Control | Implementation |
-|--------|---------|----------------|
-| Injection | Input validation | Zod schemas, path sanitization |
-| XSS | Content Security Policy | Helmet CSP headers |
-| CSRF | SameSite cookies | Strict/None with secure |
-| DoS | Rate limiting | express-rate-limit tiers |
-| Data leak | VFS approval | Explicit user consent |
-| Privilege escalation | Docker isolation | --network none, --read-only |
-
----
-
-## 6. Testing Strategy
-
-### 6.1 Test Coverage
-
-| Component | Test File | Lines | Coverage |
-|-----------|-----------|-------|----------|
-| State Machine | `test/state-machine.test.js` | 250+ | All 7 states, transitions, guards |
-| VFS | `test/vfs.test.js` | 200+ | Stage, approve, reject, commit |
-| API | `test/api.test.js` | 150+ | Endpoints + security |
-
-### 6.2 Test Execution
-
-```bash
-# Run all tests
-cd apps/server-bridge && npm test
-
-# With UI
-cd apps/server-bridge && npm run test:ui
-
-# Coverage report
-npm test -- --coverage
-```
-
----
-
-## 7. Deployment Architecture
-
-### 7.1 Render.com Configuration
-
-```yaml
-# render.yaml
-services:
-  - type: web
-    name: vibe-hub-api
-    runtime: node
-    buildCommand: npm install
-    startCommand: node index.js
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: DATABASE_URL
-        fromDatabase:
-          name: vibe-hub-db
-          property: connectionString
-```
-
-### 7.2 Environment Variables
-
-```
-# Required
+- The current workspace scripts should be treated as the source of truth over older examples.
+- The current route aliases include both `/api/*` and `/api/v6/*` for the code and VFS surfaces where present.
+- When this document references code paths, those paths are intended to resolve exactly in the workspace.
 NODE_ENV=production
 PORT=3001
 DATABASE_URL=postgresql://...

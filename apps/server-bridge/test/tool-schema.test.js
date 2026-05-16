@@ -73,12 +73,14 @@ describe('tool schema validation', () => {
       scriptPath: 'scripts/check.js',
       runtime: 'node',
       includePaths: ['fixtures/input.json'],
+      provider: 'docker-local',
     })).toBe(true);
 
     expect(validateToolCallArguments('run_command', {
       command: 'node',
       args: ['--test', 'candidate.test.js'],
       includePaths: ['candidate.js'],
+      sandboxProvider: 'docker-local',
     })).toBe(true);
 
     expect(() => validateToolCallArguments('security_sandbox', {

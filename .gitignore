@@ -9,8 +9,9 @@ coverage/
 junit.xml
 playwright-report/
 test-results/
+.nyc_output/
 
-# Production
+# Production / Build
 build/
 dist/
 dist-ssr/
@@ -18,6 +19,7 @@ dist-ssr/
 out/
 .vercel/
 .render/
+.output/
 
 # Cache and Tooling
 .vite/
@@ -25,6 +27,10 @@ out/
 .eslintcache
 *.tsbuildinfo
 .cache/
+.npm
+.yarn-integrity
+.codex-logs/
+.Jules/
 
 # Logs
 logs/
@@ -39,12 +45,19 @@ lerna-debug.log*
 .env*
 *.env
 *.env.local
+!.env.example
 
 # OS files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 *.tmp
 *.bak
+*.sw?
 
 # IDEs and Editors
 .vscode/
@@ -53,13 +66,43 @@ Thumbs.db
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
 *.patch
 *.diff
+.history/
+*.sublime-project
+*.sublime-workspace
+
+# Python (Common artifacts)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv
+venv/
+ENV/
+python-venv/
 
 # Vibe Hub Specific
-# (Add any project-specific ignore patterns here)
 apps/server-bridge/scratch/rollouts/
+scratch/
+scratch.js
 
 # Documentation and archive files
 docs/archive/
@@ -67,13 +110,7 @@ docs/consolidated/
 *.md.bak
 *.md.tmp
 
-# Development artifacts
-scratch.js
-*.swp
-*.swo
-
 # Temporary files
 temp/
 tmp/
-.DS_Store
-Thumbs.db
+

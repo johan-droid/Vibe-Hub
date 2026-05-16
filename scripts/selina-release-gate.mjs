@@ -28,6 +28,8 @@ function dockerAvailable() {
 
 try {
   run('Production sanitation', npm, ['run', 'sanitize']);
+  run('Agentic security audit', npm, ['run', 'security:audit']);
+  run('Security regression tests', npm, ['run', 'test:security']);
   run('UI build', npm, ['run', 'build', '--workspace=apps/user-interface']);
   run('UI lint', npm, ['run', 'lint', '--workspace=apps/user-interface']);
   run('UI unit tests', npm, ['run', 'test:unit', '--workspace=apps/user-interface']);

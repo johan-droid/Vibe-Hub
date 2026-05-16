@@ -1,51 +1,51 @@
-Migration from Neon (or other Postgres) to Supabase
+# Migration to Supabase
 
-Overview
+This guide covers moving the Vibe-Hub database from Neon or another Postgres host into Supabase and then wiring the repository to the new connection strings.
 
-This document describes steps to migrate an existing Postgres database (Neon or similar) to a Supabase project and update the project configuration.
+## Preconditions
 
-Preconditions
+- You need administrative access to both the source database and the Supabase project.
+- Install `pg_dump`, `pg_restore`, and `psql` locally.
+- Take a backup before you start.
+- Validate the migration in a staging environment before touching production secrets.
 
-- You must have admin access to the source database (Neon) and the Supabase project (owner or SQL editor access).
-- Install `pg_dump`, `pg_restore`, and `psql` (Postgres client tools).
-- Backup your data and test the migration in a staging environment first.
+## Current repository inputs
 
-High-level steps
+- `apps/server-bridge/.env.example` contains the server-side database and auth template.
+- `apps/user-interface/.env.example` contains the frontend API base settings.
+- `apps/server-bridge/db-migrate.js` is the migration entrypoint to review if schema changes need to be replayed after the dump and restore.
 
-1. Create a Supabase project and note the connection string.
-2. Enable required extensions in Supabase (vector/pgcrypto) via the SQL editor or psql as project owner.
-3. Dump the source DB using `pg_dump` in custom format.
-4. Restore into Supabase using `pg_restore`.
-5. Update app environment (`DATABASE_URL`, `DATABASE_SSL_MODE`) to the Supabase connection string and `sslmode=require`.
-6. Run application migrations and tests against Supabase.
-7. Rotate credentials and update secrets in your deployment provider.
+## Recommended flow
 
-Commands (example)
+1. Create the Supabase project and copy the Postgres connection details.
+2. Enable the Supabase-required extensions from the SQL editor as the project owner.
+3. Dump the source database with `pg_dump` in custom format.
+4. Restore into Supabase with `pg_restore` using `--no-owner` and `--no-privileges`.
+5. Update `apps/server-bridge/.env` so `DATABASE_URL` points at Supabase and `DATABASE_SSL_MODE` matches your TLS mode.
+6. Update any deployment secrets that reference the old database.
+7. Run the repo validation commands and a backend test pass.
 
-# Dump source DB to file (requires network access and credentials)
-pg_dump --format=custom --no-owner --no-privileges --dbname="postgresql://neon_user:NEON_PASS@neon-host:5432/neon_db" --file=neon.dump
+## Example commands
 
-# Enable extensions on Supabase (via SQL Editor or psql with owner)
+```bash
+pg_dump --format=custom --no-owner --no-privileges --dbname="postgresql://source_user:source_pass@source-host:5432/source_db" --file=vibe-hub.dump
+
 psql "postgresql://supabase_owner:SUPABASE_PASS@project.supabase.co:5432/postgres" -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;"
 psql "postgresql://supabase_owner:SUPABASE_PASS@project.supabase.co:5432/postgres" -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
-# Restore into Supabase
-pg_restore --no-owner --no-privileges --dbname="postgresql://supabase_user:SUPABASE_PASS@project.supabase.co:5432/postgres" --clean neon.dump
+pg_restore --no-owner --no-privileges --dbname="postgresql://supabase_user:SUPABASE_PASS@project.supabase.co:5432/postgres" --clean vibe-hub.dump
+```
 
-Important notes
+## Post-migration checks
 
-- Extensions: Supabase may not allow creating some extensions from non-owner roles. Use the SQL Editor in the Supabase dashboard as the project owner to enable `vector`/`pgcrypto`.
-- Roles & ownership: We restore without owners to avoid permission issues; re-create any required roles in Supabase as needed.
-- Secrets: rotate all keys that were present in the repo or environment after migration.
-- Application compatibility: ensure `DATABASE_SSL_MODE` is set to `require` or `verify-full` depending on your Supabase TLS configuration. Update `DATABASE_SSL_CA` only if required.
+- Confirm the server bridge starts with the new `DATABASE_URL`.
+- Confirm the VFS and auth flows still work end to end.
+- Run `npm run validate` from the root and `npm --workspace=apps/server-bridge run test`.
+- Verify the frontend still points at the correct API origin through `apps/user-interface/.env.local`.
 
-App changes made
+## Important notes
 
-- `apps/server-bridge/.env.example` updated to Supabase connection placeholder.
-- Added `scripts/migrate-neon-to-supabase.sh` for a straightforward dump/restore workflow.
-- Added this document explaining the migration steps.
-
-If you want, I can:
-- Run a dry-run script (needs credentials and temporary access),
-- Prepare a GitHub Action for periodic backups or one-off migration,
-- Or perform history cleanup if you want me to purge previously committed secrets.
+- Supabase extension creation often requires owner-level access in the dashboard.
+- Restoring without owners avoids permission mismatches.
+- Rotate secrets after the migration is complete.
+- Keep `DATABASE_SSL_MODE=require` or `verify-full` depending on your setup.

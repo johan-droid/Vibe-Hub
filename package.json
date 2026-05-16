@@ -21,6 +21,8 @@
     "start:server": "npm run start --workspace=apps/server-bridge",
     "validate": "node --check apps/server-bridge/index.js && node --check apps/server-bridge/orchestrator/index.js && node --check apps/server-bridge/orchestrator/skill-loader.js",
     "sanitize": "node scripts/selina-sanitize.mjs",
+    "security:audit": "node scripts/selina-security-audit.mjs",
+    "test:security": "npm test --workspace=apps/server-bridge -- --run test/security-audit.test.js test/security-regression.test.js",
     "release:gate": "node scripts/selina-release-gate.mjs"
   },
   "devDependencies": {

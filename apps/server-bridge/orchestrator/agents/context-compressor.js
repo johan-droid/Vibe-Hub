@@ -1,4 +1,4 @@
-import { countTokens } from '../../memory/tokenizer.js';
+import { chunkTextByTokenBudget } from '../../memory/tokenizer.js';
 import { TokenGovernor, callRoutedTextModel } from '../token-governor.js';
 
 const MAP_CHUNK_TOKEN_BUDGET = 1800;
@@ -15,8 +15,8 @@ export class ContextCompressor {
 
   async minifyContext(rawCode, userIntent, errorLogs) {
     const chunks = [
-      ...chunkTextByLines('errorLogs', errorLogs, this.mapChunkTokenBudget),
-      ...chunkTextByLines('rawCode', rawCode, this.mapChunkTokenBudget),
+      ...chunkTextByTokenBudget('errorLogs', errorLogs, this.mapChunkTokenBudget),
+      ...chunkTextByTokenBudget('rawCode', rawCode, this.mapChunkTokenBudget),
     ];
 
     if (chunks.length === 0) {
@@ -103,45 +103,6 @@ export class ContextCompressor {
       nextStep: 'Inspect the newest log evidence alongside the listed relevant areas.',
     });
   }
-}
-
-function chunkTextByLines(source, text, tokenBudget) {
-  const normalized = typeof text === 'string' ? text.trim() : '';
-  if (!normalized) return [];
-
-  const lines = normalized.split(/\r?\n/);
-  const chunks = [];
-  let currentLines = [];
-  let currentStartLine = 1;
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    const candidateLines = [...currentLines, line];
-    const candidateText = candidateLines.join('\n');
-
-    if (currentLines.length > 0 && countTokens(candidateText) > tokenBudget) {
-      chunks.push(buildChunk(source, currentStartLine, index, currentLines));
-      currentLines = [line];
-      currentStartLine = index + 1;
-      continue;
-    }
-
-    currentLines = candidateLines;
-  }
-
-  if (currentLines.length > 0) {
-    chunks.push(buildChunk(source, currentStartLine, lines.length, currentLines));
-  }
-
-  return chunks;
-}
-
-function buildChunk(source, startLine, endLine, lines) {
-  return {
-    source,
-    label: `${source}:${startLine}-${endLine}`,
-    text: lines.join('\n'),
-  };
 }
 
 function parseJsonObject(text, fallback) {

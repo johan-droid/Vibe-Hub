@@ -1,0 +1,95 @@
+{
+  "target": "vibe-hub",
+  "threatModel": "multi-tenant-saas",
+  "regressionSuites": [
+    "auth-boundary",
+    "tool-auth",
+    "sandbox",
+    "vfs-paths",
+    "model-memory",
+    "workflow-supply-chain",
+    "frontend-xss"
+  ],
+  "findings": [
+    {
+      "id": "SQA-001",
+      "severity": "high",
+      "subsystem": "model-memory",
+      "attack_path": "Oversized or malformed model context could break token budgeting, prune recent conversation state, or truncate generated code containing fence-like content.",
+      "evidence": [
+        "Backend baseline previously failed context-memory, llm-client, and models tests for tokenizer, pruning, compression, code-fence extraction, and Gemini history trimming."
+      ],
+      "impact": "Agent may crash on context overflow, lose critical instructions, or execute syntactically broken generated code.",
+      "fix_plan": "Use real tokenizer counts, preserve anchored system and recent turns, isolate compressor tests, extract fenced payloads from the final closing fence, and preserve valid Gemini user/model history pairs.",
+      "tests": [
+        "apps/server-bridge/test/context-memory.test.js",
+        "apps/server-bridge/test/llm-client.test.js",
+        "apps/server-bridge/test/models.test.js"
+      ],
+      "status": "fixed"
+    },
+    {
+      "id": "ARCH-001",
+      "severity": "high",
+      "subsystem": "model-memory",
+      "attack_path": "The requested brain system existed as disconnected agent components, so future agent runs could bypass triage, static analysis, context compression, sandbox validation, ledger fallback, or sync-node ground truth routing.",
+      "evidence": [
+        "Worker agents still called the stale TokenGovernor.requestModel shim and no single orchestration module enforced the diagrammed route."
+      ],
+      "impact": "Agentic runs could crash on LLM compute, skip safety gates, or produce parallel-worker code against hallucinated contracts.",
+      "fix_plan": "Add BrainSystemOrchestrator as the auditable route entrypoint, move worker compute calls to TokenGovernor.getCompute, preserve low-edit and high-feature paths, and derive shared contracts from sync-node ground truth.",
+      "tests": [
+        "apps/server-bridge/test/brain-system.test.js",
+        "apps/server-bridge/test/worker-orchestrator.test.js",
+        "npm run security:audit"
+      ],
+      "status": "fixed"
+    },
+    {
+      "id": "SEC-001",
+      "severity": "high",
+      "subsystem": "workflow-supply-chain",
+      "attack_path": "Release gates lacked a repo-wide agentic security audit for tracked secret files, risky lifecycle scripts, workflow privilege escalation, and known backdoor primitives.",
+      "evidence": [
+        "Existing release gate ran sanitation, tests, builds, dependency audit, and Docker smoke without a dedicated workflow/secret/backdoor scanner."
+      ],
+      "impact": "A supply-chain backdoor or accidentally tracked secret could reach CI or deployment before being detected.",
+      "fix_plan": "Add scripts/selina-security-audit.mjs and wire it into package scripts and release gate.",
+      "tests": [
+        "apps/server-bridge/test/security-audit.test.js",
+        "npm run security:audit"
+      ],
+      "status": "fixed"
+    },
+    {
+      "id": "SEC-002",
+      "severity": "medium",
+      "subsystem": "frontend-xss",
+      "attack_path": "Model, markdown, and terminal outputs are rendered in the browser and should be continuously tested with hostile strings.",
+      "evidence": [
+        "UI uses markdown/code/terminal rendering surfaces fed by agent and tool output."
+      ],
+      "impact": "A malicious dependency, tool, or model response could attempt script injection or misleading terminal control sequences.",
+      "fix_plan": "Add browser/UI tests with malicious markdown, code fences, HTML payloads, and terminal escape/control text.",
+      "tests": [
+        "apps/user-interface security regression tests"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "SEC-003",
+      "severity": "medium",
+      "subsystem": "auth-boundary",
+      "attack_path": "Socket and WebSocket identity flows need explicit regression tests proving client-supplied user or run identifiers cannot cross tenant boundaries.",
+      "evidence": [
+        "Frontend Socket.IO client can emit a join payload with a userId; backend authorization must remain server-authenticated."
+      ],
+      "impact": "If backend room joining ever trusts client-supplied identity, another tenant's job stream could be observed.",
+      "fix_plan": "Add negative tests for unauthenticated WebSocket prompts, forged run IDs, and client-supplied room joins.",
+      "tests": [
+        "apps/server-bridge/test/security-regression.test.js"
+      ],
+      "status": "open"
+    }
+  ]
+}

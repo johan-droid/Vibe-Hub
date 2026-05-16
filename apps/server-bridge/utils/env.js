@@ -2,7 +2,7 @@ import { z } from 'zod';
 import logger from './detailed-logger.js';
 
 const optionalUrl = z.string().url().or(z.literal('')).optional();
-const optionalProvider = z.enum(['gemini', 'openai', 'qwen', 'nim', 'anthropic']).or(z.literal('')).optional();
+const optionalProvider = z.enum(['gemini', 'openai', 'qwen', 'deepseek', 'nim', 'anthropic']).or(z.literal('')).optional();
 
 const envSchema = z.object({
   NODE_ENV: z.string().optional(),
@@ -19,6 +19,7 @@ const envSchema = z.object({
   OPENAI_API_MODE: z.enum(['responses', 'chat']).optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   QWEN_API_KEY: z.string().optional(),
+  DEEPSEEK_API_KEY: z.string().optional(),
   NIM_API_KEY: z.string().optional(),
   NVIDIA_API_KEY: z.string().optional(),
   NVIDIA_NIM_API_KEY: z.string().optional(),
@@ -31,6 +32,7 @@ const PROVIDER_ENV_KEYS = {
   gemini: 'GEMINI_API_KEY',
   openai: 'OPENAI_API_KEY',
   qwen: 'QWEN_API_KEY',
+  deepseek: 'DEEPSEEK_API_KEY',
   nim: 'NIM_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
 };
@@ -43,6 +45,7 @@ function configuredProviderFromEnv(env = {}) {
   if (env.NIM_API_KEY || env.NVIDIA_API_KEY || env.NVIDIA_NIM_API_KEY) return 'nim';
   if (env.OPENAI_API_KEY) return 'openai';
   if (env.QWEN_API_KEY) return 'qwen';
+  if (env.DEEPSEEK_API_KEY) return 'deepseek';
   if (env.ANTHROPIC_API_KEY) return 'anthropic';
   if (env.GEMINI_API_KEY || env.LLM_API_KEY) return 'gemini';
   return 'nim';

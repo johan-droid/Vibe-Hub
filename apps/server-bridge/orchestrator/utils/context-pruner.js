@@ -101,12 +101,9 @@ function findRecentWindowStart(messages, recentUserTurns) {
 function trimHistoryToBudget(messages, tokenBudget, anchorCount, preservedPrefixCount) {
     const pruned = [...messages];
 
-    while (pruned.length > preservedPrefixCount && totalTokens(pruned) > tokenBudget) {
-        removeOldestExchange(pruned, preservedPrefixCount);
-    }
-
-    while (pruned.length > anchorCount + 1 && totalTokens(pruned) > tokenBudget) {
+    while (pruned.length > anchorCount + 1 && totalTokens(pruned) > tokenBudget && preservedPrefixCount > anchorCount) {
         pruned.splice(anchorCount, 1);
+        preservedPrefixCount -= 1;
     }
 
     return pruned;
@@ -135,21 +132,6 @@ function createSummaryMessage(summary, shapeHint) {
 
 function totalTokens(messages) {
     return messages.reduce((sum, message) => sum + countMessageTokens(message), 0);
-}
-
-function removeOldestExchange(messages, startIndex) {
-    if (messages.length <= startIndex) return;
-
-    let endIndex = startIndex + 1;
-    while (endIndex < messages.length && !isUserLikeMessage(messages[endIndex])) {
-        endIndex += 1;
-    }
-
-    messages.splice(startIndex, endIndex - startIndex);
-}
-
-function isSystemMessage(message) {
-    return message?.role === 'system';
 }
 
 function isUserLikeMessage(message) {

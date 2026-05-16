@@ -63,8 +63,13 @@ ${minifiedContext}
 Ledger of Past Failures:
 ${JSON.stringify(pastFailures, null, 2)}`;
 
-    const model = await governor.requestModel('high', 'planner');
-    const plannerOutput = await model(systemPrompt, userPrompt, { maxOutputTokens: 4096 });
+    const plannerOutput = await governor.getCompute('high', 'planner', (key, model, provider) => (
+      callRoutedTextModel(key, model, systemPrompt, userPrompt, {
+        provider,
+        maxOutputTokens: 4096,
+        jsonMode: true
+      })
+    ));
 
     try {
       const parsed = JSON.parse(plannerOutput);

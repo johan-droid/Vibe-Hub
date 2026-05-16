@@ -9,11 +9,15 @@ export class KeyRotator {
     constructor() {
         this.keys = {
             groq: splitKeys(process.env.GROQ_KEYS || process.env.GROQ_API_KEY),
+            qwen: splitKeys(process.env.QWEN_KEYS || process.env.QWEN_API_KEY),
+            deepseek: splitKeys(process.env.DEEPSEEK_KEYS || process.env.DEEPSEEK_API_KEY),
             nim: splitKeys(process.env.NVIDIA_NIM_KEYS || process.env.NIM_API_KEY || process.env.NVIDIA_NIM_API_KEY || process.env.NVIDIA_API_KEY),
             gemini: splitKeys(process.env.GEMINI_KEYS || process.env.GEMINI_API_KEY)
         };
         this.currentIndex = {
             groq: 0,
+            qwen: 0,
+            deepseek: 0,
             nim: 0,
             gemini: 0
         };

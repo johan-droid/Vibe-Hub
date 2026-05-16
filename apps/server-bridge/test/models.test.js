@@ -71,6 +71,63 @@ describe('ModelService gateway', () => {
     expect(JSON.stringify(diagnostics)).not.toContain('nvapi-secret-value');
   });
 
+  it('selects DeepSeek as an OpenAI-compatible coding provider', () => {
+    const service = new ModelService({
+      SELINA_MODEL_PROVIDER: 'deepseek',
+      DEEPSEEK_API_KEY: 'deepseek-secret-value',
+      DEEPSEEK_MODEL: 'deepseek-coder-test',
+    });
+
+    const profile = service.selectProfile({ effortLevel: 'standard', domain: 'code' });
+
+    expect(profile).toMatchObject({
+      provider: 'deepseek',
+      apiMode: 'chat',
+      model: 'deepseek-coder-test',
+    });
+    expect(service.providerKind(profile)).toBe('openai-compatible');
+    expect(service.providerStatus().deepseek).toMatchObject({
+      configured: true,
+      baseUrl: 'https://api.deepseek.com/v1',
+    });
+    expect(JSON.stringify(service.diagnostics())).not.toContain('deepseek-secret-value');
+  });
+
+  it('sends DeepSeek chat requests to the configured OpenAI-compatible endpoint', async () => {
+    const service = new ModelService({
+      SELINA_MODEL_PROVIDER: 'deepseek',
+      DEEPSEEK_API_KEY: 'deepseek-secret-value',
+      DEEPSEEK_MODEL: 'deepseek-coder-test',
+    });
+    const profile = service.selectProfile({ effortLevel: 'quick', domain: 'code' });
+    let captured = null;
+
+    service.fetchJsonWithAuth = async (provider, url, buildOptions) => {
+      captured = {
+        provider,
+        url,
+        options: buildOptions({ type: 'api-key', value: 'deepseek-redacted', expiresAt: null }),
+      };
+      return {
+        choices: [{ message: { content: 'ok' } }],
+        usage: { total_tokens: 3 },
+      };
+    };
+
+    const result = await service.openAICompatibleChat({
+      profile,
+      messages: [{ role: 'user', content: 'Ping' }],
+      tools: [],
+    });
+
+    expect(result.content).toBe('ok');
+    expect(captured.provider).toBe('deepseek');
+    expect(captured.url).toBe('https://api.deepseek.com/v1/chat/completions');
+    expect(JSON.parse(captured.options.body)).toMatchObject({
+      model: 'deepseek-coder-test',
+    });
+  });
+
   it('infers Gemini when no provider is explicit and only Gemini is configured', () => {
     const service = new ModelService({
       GEMINI_API_KEY: 'gemini-secret-value',

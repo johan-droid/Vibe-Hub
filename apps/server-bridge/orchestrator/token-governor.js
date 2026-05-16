@@ -11,7 +11,9 @@ export class TokenGovernor {
         }
 
         if (requiredRole === 'worker') {
-            return this.rotator.executeWithRotation('groq', (key) => apiCallFn(key, 'llama3-70b', 'groq'));
+            const workerProvider = normalizeWorkerProvider(process.env.SELINA_CODING_MODEL_PROVIDER || process.env.SELINA_WORKER_PROVIDER || 'groq');
+            const workerModel = workerModelForProvider(workerProvider);
+            return this.rotator.executeWithRotation(workerProvider, (key) => apiCallFn(key, workerModel, workerProvider));
         }
 
         if (taskComplexity === 'low') {
@@ -106,7 +108,25 @@ function isProviderUnavailable(error, provider) {
 function inferProvider(model) {
     if (model.startsWith('gemini')) return 'gemini';
     if (model.includes('nemotron')) return 'nim';
+    if (model.includes('qwen')) return 'qwen';
+    if (model.includes('deepseek')) return 'deepseek';
     return 'groq';
+}
+
+function normalizeWorkerProvider(provider) {
+    const normalized = String(provider || 'groq').trim().toLowerCase();
+    if (['qwen', 'deepseek', 'groq'].includes(normalized)) return normalized;
+    return 'groq';
+}
+
+function workerModelForProvider(provider) {
+    if (provider === 'qwen') {
+        return process.env.QWEN_CODER_MODEL || process.env.QWEN_MODEL || 'qwen/qwen2.5-coder-32b-instruct';
+    }
+    if (provider === 'deepseek') {
+        return process.env.DEEPSEEK_CODER_MODEL || process.env.DEEPSEEK_MODEL || 'deepseek-coder';
+    }
+    return process.env.GROQ_WORKER_MODEL || 'llama3-70b';
 }
 
 async function callGeminiGenerateContent(key, model, request) {
@@ -134,7 +154,11 @@ async function callOpenAICompatibleChat(key, model, systemPrompt, userPrompt, op
     const provider = options.provider || inferProvider(model);
     const baseUrl = provider === 'nim'
         ? (process.env.NVIDIA_NIM_BASE_URL || process.env.NIM_BASE_URL || 'https://integrate.api.nvidia.com/v1')
-        : (process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1');
+        : provider === 'qwen'
+            ? (process.env.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1')
+            : provider === 'deepseek'
+                ? (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1')
+                : (process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1');
 
     const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',

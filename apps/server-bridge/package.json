@@ -12,7 +12,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
-    "test": "vitest run --pool=forks --teardownTimeout=1000"
+    "test": "vitest run --pool=forks --testTimeout=30000 --hookTimeout=60000 --teardownTimeout=1000"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",

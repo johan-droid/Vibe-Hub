@@ -18,6 +18,7 @@ import { createChildRunIdentity, createRootRunIdentity, withRunExpert } from './
 import { resolveExpertProfile } from './expert-routing.js';
 import { persistRun, persistRunStatus } from './run_store.js';
 import { modelService } from './models.js';
+import { BrainSystemOrchestrator } from './brain-system.js';
 
 
 /**
@@ -51,6 +52,7 @@ export class AgentOrchestrator {
     this.packageJson = null;
     this.userId = null;
     this.projectName = 'default';
+    this.brainSystem = new BrainSystemOrchestrator();
   }
 
   setUser(userId) {
@@ -128,6 +130,23 @@ export class AgentOrchestrator {
     } catch (err) {
       // Pre-scan partial failure
     }
+  }
+
+  async handleBrainSystemPrompt(prompt, options = {}) {
+    return this.brainSystem.run(prompt, {
+      userId: this.userId,
+      taskId: options.taskId,
+      workspacePath: options.workspacePath || process.cwd(),
+      rawCode: options.rawCode,
+      errorLogs: options.errorLogs,
+      sandboxScriptPath: options.sandboxScriptPath,
+      sandboxCommand: options.sandboxCommand,
+      sandboxArgs: options.sandboxArgs,
+      sandboxProvider: options.sandboxProvider,
+      includePaths: options.includePaths,
+      timeoutMs: options.timeoutMs,
+      executeParallelTask: options.executeParallelTask,
+    });
   }
 
   /**

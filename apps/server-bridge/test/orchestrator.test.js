@@ -13,5 +13,7 @@ describe('AgentOrchestrator', () => {
     const orchestrator = new AgentOrchestrator();
     expect(orchestrator.context).toBeDefined();
     expect(Array.isArray(orchestrator.context.history)).toBe(true);
+    expect(orchestrator.brainSystem).toBeDefined();
+    expect(typeof orchestrator.handleBrainSystemPrompt).toBe('function');
   });
 });

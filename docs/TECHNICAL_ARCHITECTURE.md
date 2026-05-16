@@ -30,6 +30,38 @@
 - `find_by_name` for file discovery
 - `node --check` for syntax validation
 
+## Current Implementation Snapshot
+
+This section reflects the code that exists in the current workspace, not a generic target architecture.
+
+### Primary Runtime Entry Points
+
+- [apps/server-bridge/index.js](../apps/server-bridge/index.js) starts the Express server, registers routes, and attaches Socket.io.
+- [apps/server-bridge/orchestrator/state_machine.js](../apps/server-bridge/orchestrator/state_machine.js) contains the XState orchestration logic used for code runs.
+- [apps/server-bridge/orchestrator/router.js](../apps/server-bridge/orchestrator/router.js) handles code execution, VFS commit, repo linking, and MCP calls.
+- [apps/server-bridge/vfs/container.js](../apps/server-bridge/vfs/container.js) stores staged file proposals before approval.
+- [apps/server-bridge/sandbox/docker_executor.js](../apps/server-bridge/sandbox/docker_executor.js) runs sandboxed execution paths.
+- [apps/server-bridge/auth/routes.js](../apps/server-bridge/auth/routes.js) exposes the current authentication and session lifecycle endpoints.
+- [apps/server-bridge/orchestrator/chat_routes.js](../apps/server-bridge/orchestrator/chat_routes.js) and [apps/server-bridge/orchestrator/preferences_routes.js](../apps/server-bridge/orchestrator/preferences_routes.js) provide V6 chat and preference routes.
+
+### Current Route Families
+
+- `POST /api/code` and `POST /api/v6/code` start the agent orchestration flow.
+- `POST /api/fs/commit` and `POST /api/v6/fs/commit` commit approved VFS changes.
+- `GET /api/fs/pending` and `GET /api/v6/fs/pending` list staged files.
+- `GET /api/fs/stats` and `GET /api/v6/fs/stats` summarize VFS activity.
+- `POST /api/v6/repos/link` and `GET /api/v6/repos/list` handle repository linking and enumeration.
+- `GET /api/v6/mcp/tools`, `GET /api/v6/mcp/servers`, `GET /api/v6/mcp/diagnostics`, and `POST /api/v6/mcp/call` cover MCP integration.
+- `GET /api/v6/chat/sessions` and `GET /api/v6/preferences` expose user-facing workspace state.
+- `POST /api/auth/refresh`, `POST /api/auth/handoff`, `GET /api/auth/status`, `POST /api/auth/logout`, `POST /api/auth/logout-all`, `GET /api/auth/sessions`, `POST /api/auth/sessions/:id/revoke`, and `GET /api/auth/history` cover session lifecycle.
+
+### Current Version Profile
+
+- Node.js 22.x from the root and workspace `package.json` files.
+- React 19.2.x and Vite 8.x in `apps/user-interface`.
+- Express 4.19.x, Socket.io 4.8.x, and XState 5.31.x in `apps/server-bridge`.
+- PostgreSQL-backed persistence and Redis-backed coordination where enabled by environment variables.
+
 ---
 
 ## Table of Contents

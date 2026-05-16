@@ -177,7 +177,7 @@ async function copyRequestedFile({ sourceRoot, sandboxRoot, relativePath }) {
   await fs.copyFile(sourcePath, targetPath);
 }
 
-async function createIsolatedSandboxWorkspace({ workspacePath, requestedPaths = [] }) {
+export async function createIsolatedSandboxWorkspace({ workspacePath, requestedPaths = [] }) {
   const sourceRoot = resolveWorkspacePath(workspacePath);
   const sandboxRoot = await fs.mkdtemp(path.join(os.tmpdir(), SANDBOX_DIR_PREFIX));
   const copiedPaths = uniquePaths(requestedPaths);
@@ -213,7 +213,7 @@ async function cleanupContainer(containerName) {
   }
 }
 
-async function cleanupSandboxWorkspace(sandboxRoot) {
+export async function cleanupSandboxWorkspace(sandboxRoot) {
   if (!sandboxRoot) return;
   await fs.rm(sandboxRoot, { recursive: true, force: true }).catch(() => null);
 }

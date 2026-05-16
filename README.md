@@ -1,107 +1,80 @@
 <div align="center">
-  <!-- Place your banner image here -->
-  <img src="docs/assets/selina-banner.png" alt="Selina Banner" width="100%" />
+  <img src="docs/assets/selina-banner.png" alt="Vibe-Hub Banner" width="100%" />
 
-  # Selina
+  # Vibe-Hub
 
-  **A High-Tier, Autonomous AI Coding Assistant and MOE**
+  **An autonomous coding workspace with deterministic orchestration, a guarded VFS, and a React-based control surface**
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-  [![Build Status](https://img.shields.io/github/actions/workflow/status/your-org/selina/ci.yml?branch=main)](https://github.com/your-org/selina/actions)
-  [![Version](https://img.shields.io/github/package-json/v/your-org/selina)](https://github.com/your-org/selina/releases)
-  [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
-
+  [![Node](https://img.shields.io/badge/node-22.x-brightgreen)](https://nodejs.org/)
+  [![npm](https://img.shields.io/badge/npm-%3E%3D10-orange)](https://www.npmjs.com/)
 </div>
 
-## 🌌 Overview
+## Overview
 
-**Selina** is a professional, multi-agent AI software engineer designed to operate autonomously. By leveraging a sophisticated Mixture of Experts (MOE) architecture and integrating directly into your development workflow via the Model Context Protocol (MCP), Selina goes beyond simple code suggestions. She plans, edits, isolates code testing in secure environments, and refines complex software architectures.
+Vibe-Hub is a workspace for AI-assisted software development. The repository is split into two production workspaces: `apps/server-bridge` for orchestration, auth, sandboxing, memory, and MCP integration; and `apps/user-interface` for the React/Vite frontend that surfaces diffs, agent state, and review flows.
 
-Whether you're bootstrapping a new microservice, tracking down elusive bugs, or generating highly interactive frontend UI, Selina serves as an unyielding core developer in your team.
+The current implementation centers on four boundaries:
 
----
+- deterministic orchestration in `apps/server-bridge/orchestrator/state-machine.js` and `apps/server-bridge/orchestrator/router.js`
+- approval-gated writes in `apps/server-bridge/vfs/container.js`
+- isolated execution in `apps/server-bridge/sandbox/docker_executor.js`
+- user-facing review and control in `apps/user-interface/src/features/`
 
-## ✨ Core Features
+## What This Repository Provides
 
-- **Multi-Agent Swarm (MOE):** Specialized agents orchestrate tasks including project planning, code generation, debugging, security auditing, and git management.
-- **Native MCP Capabilities:** Dynamically queries external systems, connects to cloud databases, and retrieves system context effortlessly using the Model Context Protocol.
-- **Secure Sandboxed Execution:** Automatically runs testing routines inside an isolated Docker sandbox to guarantee generated code safety and stability.
-- **Persistent Neural Memory:** Backed by PostgreSQL and `pgvector`, Selina recalls previous structural decisions, architectural patterns, and solutions to avoid repetitive mistakes.
-- **Real-Time Workspace Synchronization:** Interfaces gracefully with a React Flow-based frontend, delivering transparent feedback and visualization of her decision-making directed acyclic graph (DAG).
-- **Human-in-the-Loop VFS:** Staged file changes reside in an in-memory Virtual File System (VFS) to await developer approval or modification before final persistence.
+- code-generation requests routed through the server bridge and XState orchestration
+- a Virtual File System that stages proposed changes before disk writes
+- authenticated API surfaces for auth, code runs, VFS review, chat history, preferences, repo linking, and MCP tool calls
+- a frontend workspace with editor, diff, terminal, dashboard, and agent-status surfaces
+- test coverage for backend orchestration, security checks, and UI integration paths
 
----
+## Repository Layout
 
-## 🛠 Architecture & Tech Stack
+- `apps/server-bridge/` - backend server, orchestration, auth, memory, sandbox, MCP, and VFS
+- `apps/user-interface/` - frontend workspace built with React and Vite
+- `docs/` - product, architecture, setup, and technical reference docs
+- `scripts/` - maintenance, security, and release-gate utilities
+- `tests/` - load and validation tooling
 
-Selina operates on a multi-tiered architecture structured for performance and deep context retention:
+## Development Commands
 
-- **AI Orchestration (`apps/server-bridge`):** Built on Node.js (v18+) and Express, orchestrating multiple LLM providers (NIM, Groq, Gemini) with a highly concurrent task manager and an XState state machine.
-- **Frontend Dashboard (`apps/user-interface`):** A responsive, accessible React 18 / Vite SPA managed with Zustand and styled with Tailwind CSS (Material 3 Dark Mode base).
-- **Real-time Protocol:** Communicates via low-latency WebSockets (`socket.io`), streaming thoughts, console outputs, and AST parsing states dynamically.
-- **Database & Semantic Indexing:** PostgreSQL, leveraging `pgvector` equipped with `hnsw` indexes for instantaneous retrieval of code patterns and organizational constraints.
-
----
-
-## 🚀 Getting Started
-
-Follow these steps to deploy Selina locally.
-
-### 1. Prerequisites
-- **Node.js** v20.x
-- **npm** v10+
-- **PostgreSQL** (with the `pgvector` extension)
-- **Docker** (Required for the execution sandbox)
-- **Redis** (Required for orchestration and session state)
-
-### 2. Installation
-
-Clone the repository and install dependencies:
+The root `package.json` exposes the primary workflows:
 
 ```bash
-git clone https://github.com/your-org/selina.git
-cd selina
 npm ci
+npm run dev
+npm run dev:ui
+npm run dev:server
+npm run build:ui
+npm run start:server
+npm run validate
+npm run sanitize
+npm run security:audit
+npm run test:security
+npm run release:gate
 ```
 
-*(Note: Selina uses npm workspaces to manage monorepo dependencies. The `postinstall` script will automatically apply necessary patches).*
+## Environment Expectations
 
-### 3. Configuration
+- Node.js 22.x
+- npm 10 or newer
+- Postgres for persistence and memory features
+- Docker for sandboxed execution paths
+- workspace-specific environment variables configured through the server bridge loader
 
-Set up your environment variables. Start by copying the template file:
+## Documentation Entry Points
 
-```bash
-cp .env.example apps/server-bridge/.env
-```
+- [Development Setup](docs/DEVELOPMENT_SETUP.md)
+- [Technical Architecture](docs/TECHNICAL_ARCHITECTURE.md)
+- [API Specification](docs/API_SPECIFICATION.md)
+- [System Plan](docs/SYSTEM_PLAN.md)
+- [Software Requirements](docs/SRS.md)
 
-Edit `apps/server-bridge/.env` to include your specific API keys, database URLs, and desired AI provider settings:
+## Contributing
 
-```env
-DATABASE_URL=postgresql://user:pass@localhost:5432/selina
-REDIS_URL=redis://localhost:6379
-SELINA_MODEL_PROVIDER=nim
-```
+Start with the architecture and setup docs before making changes. The most important rule in this repository is that orchestration, sandboxing, and approval-gated writes stay separated and testable.
 
-### 4. Quickstart Usage
+## License
 
-Launch the entire stack using concurrently:
-
-```bash
-npx concurrently -n UI,BRAIN -c cyan,magenta "npm run dev:ui" "npm run dev:server"
-```
-
-This will spin up:
-- The Selina Core Server Bridge on `http://localhost:3001`
-- The User Interface on `http://localhost:5173`
-
-Navigate to the UI origin to interface with Selina.
-
----
-
-## 🤝 Contributing
-
-We welcome community contributions! Please review our [Contribution Guidelines](CONTRIBUTING.md) to understand our workflow, how to report bugs, and the process for submitting Pull Requests.
-
-## 📄 License
-
-This project is licensed under the [MIT License](LICENSE).
+Licensed under MIT.

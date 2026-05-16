@@ -21,7 +21,12 @@ export class WorkerOrchestrator {
      * Phase 1 (Sync): Sequential execution to establish ground truth
      * Phase 2 (Parallel): Parallel execution consuming Phase 1 output
      */
-    static async runPhasedExecution(phasedPlan, { executeTask = executeParallelSubTask, returnGroundTruth = false } = {}) {
+    static async runPhasedExecution(phasedPlan, {
+        executeTask = executeParallelSubTask,
+        returnGroundTruth = false,
+        onSyncComplete = null,
+        onParallelComplete = null,
+    } = {}) {
         const results = [];
         const groundTruth = {
             syncOutputs: [],
@@ -44,11 +49,17 @@ export class WorkerOrchestrator {
                     groundTruth.syncOutputs.push({ task, output: parsed, raw: res.modelOutput });
                     mergeGroundTruth(groundTruth, parsed);
                 }
+                if (typeof onSyncComplete === 'function') {
+                    await onSyncComplete({ groundTruth, results: [...results], phase });
+                }
             } else {
                 // PARALLEL BATCH: Consume established ground truth
                 const batchPromises = tasks.map(task => executeTask(task, groundTruth));
                 const batchResults = await Promise.all(batchPromises);
                 results.push(...batchResults);
+                if (typeof onParallelComplete === 'function') {
+                    await onParallelComplete({ groundTruth, results: batchResults, phase });
+                }
             }
         }
 

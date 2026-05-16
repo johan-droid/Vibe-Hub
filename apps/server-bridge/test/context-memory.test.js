@@ -1,10 +1,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { countTokens, tokenize } from '../memory/tokenizer.js';
+import {
+  chunkTextByTokenBudget,
+  countTokens,
+  fitTextToTokenBudget,
+  getTokenizerCacheStats,
+  resetTokenizerCache,
+  tokenize,
+} from '../memory/tokenizer.js';
+import { TokenBudgetBroker } from '../memory/token-budget-broker.js';
 import { ContextPruner } from '../orchestrator/utils/context-pruner.js';
 import { ContextCompressor } from '../orchestrator/agents/context-compressor.js';
 import { TokenGovernor } from '../orchestrator/token-governor.js';
 
 describe('memory tokenizer', () => {
+  afterEach(() => {
+    resetTokenizerCache();
+  });
+
   it('uses a real tokenizer instead of the length-divided heuristic', () => {
     const sample = 'const x = 1;';
     expect(countTokens(sample)).toBe(6);
@@ -19,6 +31,53 @@ describe('memory tokenizer', () => {
 
     expect(countTokens(message)).toBeGreaterThan(0);
     expect(tokenize(message)).toHaveLength(countTokens(message));
+  });
+
+  it('caches repeated token counts and exposes cache telemetry', () => {
+    resetTokenizerCache();
+
+    expect(countTokens('repeatable context block')).toBeGreaterThan(0);
+    expect(countTokens('repeatable context block')).toBeGreaterThan(0);
+
+    expect(getTokenizerCacheStats()).toMatchObject({
+      hits: 1,
+      misses: 1,
+      size: 1,
+    });
+  });
+
+  it('fits text and chunks large inputs by token budget', () => {
+    const source = Array.from({ length: 80 }, (_, index) => `const value${index} = compute(${index});`).join('\n');
+    const fitted = fitTextToTokenBudget(source, 50);
+    const chunks = chunkTextByTokenBudget('rawCode', source, 30);
+
+    expect(fitted.truncated).toBe(true);
+    expect(fitted.tokens).toBeLessThanOrEqual(50);
+    expect(fitted.text).toContain('token-budget-trimmed');
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every(chunk => chunk.tokenEstimate <= 30)).toBe(true);
+  });
+});
+
+describe('TokenBudgetBroker', () => {
+  it('plans layer budgets and trims compressor inputs before model compression', () => {
+    const broker = new TokenBudgetBroker({
+      rawCodeBudget: 60,
+      errorLogBudget: 30,
+      highComplexityContextTokens: 100000,
+    });
+    const rawCode = Array.from({ length: 100 }, (_, index) => `function f${index}() { return ${index}; }`).join('\n');
+    const errorLogs = Array.from({ length: 50 }, (_, index) => `Error line ${index}`).join('\n');
+
+    const plan = broker.planBrainRun({ userPrompt: 'Fix this bug', rawCode, errorLogs });
+    const prepared = broker.prepareCompressorInput({ rawCode, errorLogs });
+
+    expect(plan.complexityHint).toBe('low');
+    expect(prepared.report.savedTokens).toBeGreaterThan(0);
+    expect(prepared.report.rawCode.tokens).toBeLessThanOrEqual(60);
+    expect(prepared.report.errorLogs.tokens).toBeLessThanOrEqual(30);
+    expect(prepared.rawCode).toContain('token-budget-trimmed');
+    expect(prepared.errorLogs).toContain('token-budget-trimmed');
   });
 });
 

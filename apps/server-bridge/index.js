@@ -57,10 +57,11 @@ import { modelService }          from './orchestrator/models.js';
 import { listSkillGraph }        from './orchestrator/skill-graph.js';
 import { vfs }                   from './vfs/container.js';
 import { browserAutomator }      from './vfs/browser_automator.js';
-import { SandboxExecutor }        from './sandbox/docker_executor.js';
+import { SandboxProviderRouter }   from './sandbox/providers.js';
 import { approvalEngine }         from './auth/approval-engine.js';
 import { authorizeToolCall, ToolAuthError } from './orchestrator/tool_auth_guard.js';
 import { AGENT_TOOLS } from './orchestrator/tools.js';
+import { executeHelperTool, isHelperTool } from './orchestrator/helper-tools.js';
 import { mcpManager } from './mcp/MCPManager.js';
 import { ToolSchemaError, validateToolCallArguments } from './orchestrator/tool_schema.js';
 import { buildExpertDiagnostics } from './orchestrator/expert-routing.js';
@@ -79,6 +80,7 @@ const server = createServer(app);
 const port   = process.env.PORT || 3001;
 const instanceId = uuid();
 const redisClients = createRedisClients();
+const sandboxProviders = new SandboxProviderRouter();
 const isProd = process.env.NODE_ENV === 'production';
 const parseLimit = (value, fallback) => {
   const parsed = Number.parseInt(value, 10);
@@ -1078,15 +1080,16 @@ wss.on('connection', async (ws, req) => {
 
     // ── 2. Security Sandbox ───────────────────────────────────────────
     if (name === 'security_sandbox') {
-      const { workspacePath, scriptPath, runtime, timeoutMs, includePaths } = args;
+      const { workspacePath, scriptPath, runtime, timeoutMs, includePaths, provider } = args;
       try {
         send({
           type: 'state_change',
           state: 'sandboxing',
-          message: 'Running in local Docker sandbox with network disabled.',
+          message: `Running in isolated sandbox provider: ${provider || process.env.SELINA_SANDBOX_PROVIDER || 'docker-local'}.`,
         });
 
-        return JSON.stringify(await SandboxExecutor.executeLocalDockerSandbox({
+        return JSON.stringify(await sandboxProviders.executeScript({
+          provider,
           workspacePath,
           scriptPath,
           runtime,
@@ -1115,6 +1118,13 @@ wss.on('connection', async (ws, req) => {
         description: args.description || args.aesthetic || args.selina,
         designTokens: args.designTokens,
         count: args.count,
+      }));
+    }
+
+    // ── 3b. Read-only Helper Tool Pack ───────────────────────────────
+    if (isHelperTool(name)) {
+      return JSON.stringify(await executeHelperTool(name, args, {
+        workspacePath: args.workspacePath || process.cwd(),
       }));
     }
 
@@ -1182,7 +1192,8 @@ wss.on('connection', async (ws, req) => {
             message: 'Running command in local Docker sandbox with network disabled.',
           });
 
-          return JSON.stringify(await SandboxExecutor.executeLocalDockerCommand({
+          return JSON.stringify(await sandboxProviders.executeCommand({
+            provider: args.sandboxProvider,
             workspacePath: args.workspacePath,
             command: args.command,
             args: args.args,

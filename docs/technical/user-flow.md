@@ -2,21 +2,27 @@
 
 ```mermaid
 flowchart TD
-    A[User accesses IDE] --> B[Enter prompt / code request]
-    B --> C{Agent orchestrates}
-    C --> D[Parsing AST]
-    D --> E[Drafting Code via Native Gemini SDK]
-    E --> F[Triggering GitHub Actions Sandbox]
-    F --> G{Execution Success?}
-    G -- No --> H[Evaluate Failure]
-    H --> |Retries < 3| E
-    H --> |Retries >= 3| I[Rollback & Override]
-    I --> E
-    G -- Yes --> J[File Staged in VFS]
-    J --> K[DiffViewer Displays Red/Green Diff]
-    K --> L{User Decision}
-    L -- Reject --> M[Drop from VFS]
-    L -- Approve --> N[Write to Disk via /api/fs/commit]
-    N --> O[Completion]
+    A[Open Workspace] --> B[Enter prompt and target file]
+    B --> C[POST /api/code or /api/v6/code]
+    C --> D[Orchestrator loads context]
+    D --> E[Parse AST]
+    E --> F[Draft code]
+    F --> G[Run Docker sandbox]
+    G --> H{Sandbox passed?}
+    H -- No --> I[Retry or rollback]
+    I --> F
+    H -- Yes --> J[Stage file in VFS]
+    J --> K[Show diff in DiffViewer]
+    K --> L{User decision}
+    L -- Reject --> M[Remove staged file]
+    L -- Approve --> N[POST /api/fs/commit or /api/v6/fs/commit]
+    N --> O[Commit to disk]
     M --> O
 ```
+
+## Experience Notes
+
+- The user stays in the workspace the whole time; there is no hidden commit path.
+- The diff review step is the explicit approval gate.
+- Rejected changes disappear from the staged queue.
+- Approved changes pass through the VFS container before they touch disk.

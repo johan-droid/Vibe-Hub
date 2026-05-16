@@ -1,6 +1,20 @@
 # AI Agent Development Guide for Vibe-Hub
 
-This document provides comprehensive guidance for AI agents when working with the Vibe-Hub codebase. It is specifically designed to enable effective vibecoding sessions without requiring full codebase uploads.
+This document provides guidance for AI agents working in the current Vibe-Hub workspace. The active repository uses the `apps/server-bridge` and `apps/user-interface` workspaces, Node.js 22.x, and the root scripts in `package.json`.
+
+## Current Workspace Facts
+
+- Server bridge entrypoint: `apps/server-bridge/index.js`
+- Orchestrator: `apps/server-bridge/orchestrator/state_machine.js` and `apps/server-bridge/orchestrator/router.js`
+- VFS container: `apps/server-bridge/vfs/container.js`
+- UI workspace: `apps/user-interface/src/`
+- Root commands: `npm run dev`, `npm run validate`, `npm run security:audit`, `npm run test:security`, `npm run release:gate`
+
+## Usage Notes
+
+- Prefer the workspace-specific scripts over invented root commands.
+- Treat `/api/code`, `/api/fs/*`, `/api/v6/chat/*`, `/api/v6/preferences/*`, and `/api/v6/mcp/*` as the current high-value surfaces.
+- Keep the org and user context boundaries isolated unless you are editing the orchestrator.
 
 ## Quick Reference for AI Agents
 

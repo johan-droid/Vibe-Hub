@@ -5,6 +5,8 @@ import { countTokens } from '../memory/tokenizer.js';
 const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 const DEFAULT_QWEN_MODEL = 'qwen/qwen2.5-coder-32b-instruct';
+const DEFAULT_DEEPSEEK_MODEL = 'deepseek-coder';
+const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1';
 const DEFAULT_NIM_MODEL = 'meta/llama-4-maverick-17b-128e-instruct';
 const DEFAULT_NIM_BASE_URL = 'https://integrate.api.nvidia.com/v1';
 const DEFAULT_ANTHROPIC_MODEL = 'claude-3-5-haiku-latest';
@@ -13,12 +15,13 @@ const DEFAULT_RETRIES = 2;
 const DEFAULT_RETRY_AFTER_CAP_MS = 8_000;
 const DEFAULT_HISTORY_BUDGET = 24_000;
 const AUDIT_LIMIT = 250;
-const SUPPORTED_PROVIDERS = Object.freeze(['gemini', 'openai', 'qwen', 'nim', 'anthropic']);
+const SUPPORTED_PROVIDERS = Object.freeze(['gemini', 'openai', 'qwen', 'deepseek', 'nim', 'anthropic']);
 
 function configuredProviderFromEnv(env = {}) {
   if (env.NIM_API_KEY || env.NVIDIA_API_KEY || env.NVIDIA_NIM_API_KEY) return 'nim';
   if (env.OPENAI_API_KEY) return 'openai';
   if (env.QWEN_API_KEY) return 'qwen';
+  if (env.DEEPSEEK_API_KEY) return 'deepseek';
   if (env.ANTHROPIC_API_KEY) return 'anthropic';
   if (env.GEMINI_API_KEY || env.LLM_API_KEY) return 'gemini';
   return 'nim';
@@ -245,6 +248,7 @@ export class ModelService {
       gemini: this.env.GEMINI_MODEL || this.env.SELINA_MODEL || modelName || DEFAULT_GEMINI_MODEL,
       openai: this.env.OPENAI_MODEL || this.env.SELINA_MODEL || DEFAULT_OPENAI_MODEL,
       qwen: this.env.QWEN_MODEL || this.env.SELINA_MODEL || DEFAULT_QWEN_MODEL,
+      deepseek: this.env.DEEPSEEK_MODEL || this.env.DEEPSEEK_CODER_MODEL || this.env.SELINA_MODEL || DEFAULT_DEEPSEEK_MODEL,
       nim: this.env.NIM_MODEL || this.env.NVIDIA_NIM_MODEL || this.env.SELINA_MODEL || DEFAULT_NIM_MODEL,
       anthropic: this.env.ANTHROPIC_MODEL || this.env.SELINA_MODEL || DEFAULT_ANTHROPIC_MODEL,
     }[provider] || modelName;
@@ -318,7 +322,12 @@ export class ModelService {
       qwen: {
         configured: this.authManager.hasProvider('qwen'),
         model: this.env.QWEN_MODEL || DEFAULT_QWEN_MODEL,
-        baseUrl: this.env.QWEN_BASE_URL || null,
+        baseUrl: this.env.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      },
+      deepseek: {
+        configured: this.authManager.hasProvider('deepseek'),
+        model: this.env.DEEPSEEK_MODEL || this.env.DEEPSEEK_CODER_MODEL || DEFAULT_DEEPSEEK_MODEL,
+        baseUrl: this.env.DEEPSEEK_BASE_URL || DEFAULT_DEEPSEEK_BASE_URL,
       },
       nim: {
         configured: this.authManager.hasProvider('nim'),
@@ -470,7 +479,8 @@ export class ModelService {
     for (let i = history.length - 1; i >= 0; i--) {
       const turn = history[i];
       const tokens = this.estimateTokens(turn);
-      if (kept.length > 0 && total + tokens > budgetTokens) break;
+      const needsLeadingUser = kept.length > 0 && kept[0].role !== 'user';
+      if (kept.length > 0 && !needsLeadingUser && total + tokens > budgetTokens) break;
       kept.unshift(turn);
       total += tokens;
     }
@@ -627,7 +637,11 @@ export class ModelService {
         headerName: 'Authorization',
       },
       qwen: {
-        baseUrl: this.env.QWEN_BASE_URL,
+        baseUrl: this.env.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        headerName: 'Authorization',
+      },
+      deepseek: {
+        baseUrl: this.env.DEEPSEEK_BASE_URL || DEFAULT_DEEPSEEK_BASE_URL,
         headerName: 'Authorization',
       },
       nim: {
@@ -743,7 +757,7 @@ export class ModelService {
   }
 
   providerKind(profile) {
-    if (profile.provider === 'qwen' || profile.provider === 'openai' || profile.provider === 'nim') return 'openai-compatible';
+    if (profile.provider === 'qwen' || profile.provider === 'deepseek' || profile.provider === 'openai' || profile.provider === 'nim') return 'openai-compatible';
     if (profile.provider === 'anthropic') return 'anthropic';
     return 'gemini';
   }
@@ -753,6 +767,7 @@ export class ModelService {
       gemini: this.authManager.getBearerToken('gemini'),
       openai: this.authManager.getBearerToken('openai'),
       qwen: this.authManager.getBearerToken('qwen'),
+      deepseek: this.authManager.getBearerToken('deepseek'),
       nim: this.authManager.getBearerToken('nim'),
       anthropic: this.authManager.getBearerToken('anthropic'),
     }[provider];

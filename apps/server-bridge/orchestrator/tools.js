@@ -1,4 +1,5 @@
 import { SchemaType as Type } from '@google/generative-ai';
+import { HELPER_AGENT_TOOLS } from './helper-tools.js';
 
 /**
  * Tool Definitions for Gemini Agents - Selina Brain v3.0
@@ -131,6 +132,7 @@ export const AGENT_TOOLS = [
         command: { type: 'STRING', description: 'The command to execute.' },
         args: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Arguments.' },
         includePaths: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Optional relative file paths to copy into the isolated sandbox. Directories and secret-like files are refused.' },
+        sandboxProvider: { type: 'STRING', enum: ['docker-local', 'e2b-vibekit'], description: 'Optional sandbox provider for script commands. Defaults to docker-local.' },
         WaitMsBeforeAsync: { type: 'NUMBER', description: 'Ms to wait before sending command to background. If command completes before this, returns output. If it runs longer, returns a CommandId.' }
       },
       required: ['command'],
@@ -444,6 +446,11 @@ DO NOT USE for:
           type: 'NUMBER',
           description: 'Maximum execution time in milliseconds (1000–60000). Defaults to 10000. Lower for simple scripts.',
         },
+        provider: {
+          type: 'STRING',
+          enum: ['docker-local', 'e2b-vibekit'],
+          description: 'Optional sandbox provider. Defaults to docker-local. e2b-vibekit is opt-in and must be configured server-side.',
+        },
       },
       required: ['scriptPath'],
     },
@@ -533,5 +540,6 @@ DO NOT USE for:
       },
       required: ['path'],
     },
-  }
+  },
+  ...HELPER_AGENT_TOOLS
 ];

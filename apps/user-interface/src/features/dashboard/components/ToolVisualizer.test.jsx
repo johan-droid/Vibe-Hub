@@ -13,6 +13,7 @@ vi.mock('@xyflow/react', () => ({
       {children}
     </div>
   ),
+  ReactFlowProvider: ({ children }) => <div data-testid="react-flow-provider">{children}</div>,
   Handle: () => null,
   Position: { Left: 'left', Right: 'right' },
 }));

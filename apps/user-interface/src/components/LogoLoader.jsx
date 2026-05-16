@@ -93,7 +93,7 @@ export function FullPageLoader({
       
       {/* Footer watermark */}
       <motion.div
-        className="absolute bottom-8 text-[10px] font-mono tracking-[0.4em] text-white/30"
+        className="absolute bottom-8 text-[10px] font-mono tracking-[0.4em] text-white/65"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 2 }}

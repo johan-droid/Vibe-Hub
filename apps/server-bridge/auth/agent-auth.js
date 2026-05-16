@@ -2,6 +2,7 @@ const PROVIDER_CREDENTIALS = Object.freeze({
   gemini: ['GEMINI_API_KEY', 'LLM_API_KEY'],
   openai: ['OPENAI_API_KEY'],
   qwen: ['QWEN_API_KEY'],
+  deepseek: ['DEEPSEEK_API_KEY'],
   nim: ['NIM_API_KEY', 'NVIDIA_API_KEY', 'NVIDIA_NIM_API_KEY'],
   anthropic: ['ANTHROPIC_API_KEY'],
   ui_variant: ['UI_VARIANT_API_KEY', 'OPENAI_API_KEY'],

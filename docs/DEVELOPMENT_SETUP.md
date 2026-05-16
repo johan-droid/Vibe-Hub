@@ -12,20 +12,28 @@
 
 **Essential Commands for AI Agents:**
 ```bash
-# Start development environment
+# Install dependencies
+npm ci
+
+# Start the full workspace (UI + server bridge)
 npm run dev
 
-# Validate syntax after changes
-node --check <file>
+# Start each workspace independently
+npm run dev:ui
+npm run dev:server
 
-# Run tests
-npm run test
+# Validate the server bridge entrypoints and security tooling
+npm run validate
+npm run security:audit
+npm run test:security
 
-# Check linting
-npm run lint
+# Build and test the UI workspace
+npm run build:ui
+npm --workspace=apps/user-interface run test
+npm --workspace=apps/user-interface run lint
 
-# Build for production
-npm run build
+# Run the backend test suite
+npm --workspace=apps/server-bridge run test
 ```
 
 **Critical Development Rules for AI Agents:**
@@ -34,6 +42,12 @@ npm run build
 - ❌ NEVER import between `org_core/` and `user_env/`
 - ✅ Use Docker sandbox for all code execution
 - ✅ Follow V6 architecture isolation
+- ✅ Use the root workspace scripts in `package.json` instead of invented `db:*` or `lint` root commands
+
+**Current environment files:**
+- Copy `apps/server-bridge/.env.example` to `apps/server-bridge/.env`
+- Copy `apps/user-interface/.env.example` to `apps/user-interface/.env.local`
+- Copy the root `.env.example` only if you need repository-wide defaults for local tooling
 
 **AI Agent File Navigation:**
 ```bash
@@ -67,13 +81,9 @@ list_dir DirectoryPath="apps/server-bridge/src/orchestrator"
 ### 1.1 One-Command Setup
 
 ```bash
-# Clone and setup in one command
-curl -sSL https://raw.githubusercontent.com/your-org/vibe-hub/main/scripts/setup.sh | bash
-
-# Or manually:
-git clone https://github.com/your-org/vibe-hub.git
+git clone <repo-url>
 cd vibe-hub
-npm run setup
+npm ci
 npm run dev
 ```
 
@@ -82,7 +92,8 @@ npm run dev
 Open your browser and navigate to:
 - **Frontend**: http://localhost:5173
 - **Backend API**: http://localhost:3001/health
-- **API Documentation**: http://localhost:3001/docs
+- **Auth status**: http://localhost:3001/api/auth/status
+- **VFS pending files**: http://localhost:3001/api/fs/pending
 
 ---
 
@@ -162,34 +173,35 @@ ls -la
 ### 3.2 Environment Setup
 
 ```bash
-# Copy environment template
-cp .env.example .env.local
+# Copy the server bridge template
+cp apps/server-bridge/.env.example apps/server-bridge/.env
 
-# Edit environment file
-nano .env.local
+# Copy the frontend template
+cp apps/user-interface/.env.example apps/user-interface/.env.local
+
+# Optional root defaults for local tooling
+cp .env.example .env
 ```
 
-**Required `.env.local` configuration:**
+**Server bridge configuration:**
 ```bash
-# Application
-NODE_ENV=development
 PORT=3001
-
-# Database
-DATABASE_URL=postgresql://vibehub:dev_password@localhost:5432/vibehub_dev
-REDIS_URL=redis://localhost:6379
-
-# Authentication (get from OAuth providers)
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-JWT_SECRET=your-jwt-secret-at-least-32-characters
-
-# LLM Provider
-GEMINI_API_KEY=your-gemini-api-key
-
-# Frontend
+NODE_ENV=development
+DATABASE_URL=postgresql://user:password@localhost:5432/vibe_hub
+REDIS_URL=redis://localhost:6379/0
 UI_ORIGIN=http://localhost:5173
-CORS_ORIGIN=http://localhost:5173
+JWT_SECRET=change_me_to_a_random_string
+CSRF_SECRET=change_me_to_a_different_random_string
+GEMINI_API_KEY=
+SELINA_MODEL_PROVIDER=nim
+```
+
+**Frontend configuration:**
+```bash
+VITE_API_BASE=http://localhost:3001
+VITE_WS_BASE=ws://localhost:3001
+VITE_API_URL=http://localhost:3001
+VITE_TEST_MODE=false
 ```
 
 ### 3.3 Database Setup
@@ -245,19 +257,24 @@ npm run dev:docker  # With Docker services
 ### 4.2 Development Scripts
 
 ```bash
-# Available npm scripts
-npm run dev              # Start full development stack
-npm run build            # Build for production
-npm run test             # Run all tests
-npm run test:watch       # Run tests in watch mode
-npm run lint             # Run ESLint
-npm run lint:fix         # Fix linting issues
-npm run format           # Format code with Prettier
-npm run db:migrate       # Run database migrations
-npm run db:seed          # Seed development data
-npm run db:reset         # Reset database
-npm run env:check        # Validate environment
-npm run setup            # Complete project setup
+# Root workspace scripts
+npm run dev
+npm run dev:ui
+npm run dev:server
+npm run build:ui
+npm run start:server
+npm run validate
+npm run sanitize
+npm run security:audit
+npm run test:security
+npm run release:gate
+
+# Workspace scripts
+npm --workspace=apps/user-interface run build
+npm --workspace=apps/user-interface run test
+npm --workspace=apps/user-interface run test:e2e
+npm --workspace=apps/user-interface run lint
+npm --workspace=apps/server-bridge run test
 ```
 
 ### 4.3 AI Agent Development Workflow
@@ -324,25 +341,25 @@ curl -H "Authorization: Bearer <token>" http://localhost:3001/api/vfs/pending
 ```
 vibe-hub/
 ├── apps/
-│   ├── user-interface/          # React frontend
+│   ├── user-interface/          # React frontend workspace
 │   │   ├── src/
-│   │   │   ├── components/      # UI components
-│   │   │   ├── pages/          # Page components
-│   │   │   ├── hooks/          # Custom hooks
-│   │   │   ├── store/          # State management
-│   │   │   └── services/       # API clients
-│   │   ├── public/             # Static assets
+│   │   │   ├── features/        # Domain-specific UI slices
+│   │   │   ├── components/     # Shared UI building blocks
+│   │   │   ├── pages/          # Route-level views
+│   │   │   ├── hooks/          # Client-side state and effects
+│   │   │   ├── services/       # API and socket clients
+│   │   │   └── store/          # Zustand stores
+│   │   ├── e2e/                # Playwright tests
 │   │   └── package.json
-│   └── server-bridge/          # Node.js backend
-│       ├── src/
-│       │   ├── org_core/       # Organizational constraints
-│       │   ├── user_env/       # User preferences
-│       │   ├── orchestrator/   # Integration logic
-│       │   ├── memory/         # Data access
-│       │   ├── sandbox/        # Code execution
-│       │   ├── vfs/           # Virtual file system
-│       │   ├── auth/          # Authentication
-│       │   └── utils/         # Utilities
+│   └── server-bridge/          # Node.js backend workspace
+│       ├── orchestrator/       # Routing, state machine, tools, jobs
+│       ├── auth/               # OAuth, sessions, guards
+│       ├── vfs/                # Approval-gated file staging
+│       ├── sandbox/            # Docker execution helpers
+│       ├── memory/             # Semantic memory and AST graphing
+│       ├── mcp/                # MCP client and manager
+│       ├── org_core/           # Org-wide constraints
+│       ├── user_env/           # User preferences
 │       └── package.json
 ├── docs/                      # Documentation
 ├── scripts/                   # Build and deployment scripts
@@ -355,67 +372,40 @@ vibe-hub/
 
 ```
 apps/user-interface/src/
-├── components/
-│   ├── Dashboard.jsx           # Main layout
-│   ├── AgentStatusBar.jsx     # Agent status bar
-│   ├── IntentChatPanel.jsx    # Chat interface
-│   ├── CodeCanvas.jsx         # Diff viewer
-│   ├── ActivityFeed.jsx       # Activity log
-│   ├── PeekTerminal.jsx       # Terminal strip
-│   └── AgentActionOverlay.jsx # Task overlay
-├── pages/
-│   ├── Dashboard.jsx           # Dashboard page
-│   ├── AuthCallback.jsx        # OAuth callback
-│   ├── Login.jsx              # Login page
-│   └── LandingPage.jsx        # Landing page
-├── hooks/
-│   ├── useAgent.js            # Agent interaction
-│   ├── useStore.js            # Zustand store
-│   └── useJobResumption.js    # Session persistence
-├── store/
-│   └── useStore.js            # Global state
-├── services/
-│   └── api.js                 # API client
-├── context/
-│   └── ThemeContext.jsx       # Theme provider
-└── styles/
-    └── globals.css            # Global styles
+├── features/
+│   ├── dashboard/components/   # Agent dashboard, activity feed, status bar
+│   ├── editor/components/      # Diff viewer, file tree, terminal, tabs
+│   ├── chat/components/        # Prompt and session surfaces
+│   ├── terminal/components/    # Terminal sessions panel
+│   └── security/components/    # Security audit views
+├── components/                 # Shared shells, loaders, and animations
+├── pages/                      # Landing, login, auth callback, workspace
+├── hooks/                      # Socket, theme, and session hooks
+├── store/                      # Zustand stores and IndexedDB helpers
+├── services/                   # API and websocket clients
+└── styles/                     # Global styles
 ```
 
 ### 5.3 Backend Structure
 
 ```
-apps/server-bridge/src/
-├── org_core/                   # Immutable constraints
-│   ├── context_builder.js     # CI/CD, deployment rules
-│   ├── ci_cd_templates/       # Workflow templates
-│   └── global_linting/        # Code standards
+apps/server-bridge/
+├── index.js                    # Express bootstrap and route registration
+├── orchestrator/               # Routing, state machine, tools, jobs
+│   ├── state_machine.js        # XState orchestration
+│   ├── router.js               # Code, VFS, MCP, repo, job handlers
+│   ├── chat_routes.js          # Chat session routes
+│   ├── preferences_routes.js   # User preference routes
+│   ├── skill-graph.js          # Prompt-to-expert routing
+│   └── tool_schema.js          # MCP tool validation
+├── auth/                       # OAuth, session, and authorization logic
+├── vfs/                        # In-memory staging layer
+├── sandbox/                    # Docker execution helpers
+├── memory/                     # AST graphing and semantic memory
+├── mcp/                        # MCP client and manager
+├── org_core/                   # Global constraints
 ├── user_env/                   # User preferences
-│   ├── context_builder.js     # Language, themes
-│   └── locales/               # Translations
-├── orchestrator/               # Integration layer
-│   ├── state_machine.js       # XState orchestration
-│   ├── router.js              # API routes
-│   └── websocket.js           # Socket.io handlers
-├── memory/                     # Data access
-│   ├── loader.js              # Semantic graph builder
-│   ├── database.js            # PostgreSQL client
-│   └── vector_store.js        # pgvector operations
-├── sandbox/                    # Code execution
-│   ├── docker_executor.js     # Container management
-│   └── github_actions.js      # Workflow integration
-├── vfs/                        # Virtual file system
-│   ├── container.js           # VFS main class
-│   ├── diff_engine.js         # Change tracking
-│   └── audit_logger.js        # Decision tracking
-├── auth/                       # Security
-│   ├── oauth.js               # Google/GitHub OAuth
-│   ├── jwt.js                 # Token management
-│   └── session.js             # Session handling
-└── utils/                      # Utilities
-    ├── logger.js              # Winston logging
-    ├── validation.js          # Zod schemas
-    └── security.js            # XSS protection
+└── utils/                      # Logging, validation, metrics, security
 ```
 
 ---
@@ -441,26 +431,20 @@ tests/
 ### 6.2 Running Tests
 
 ```bash
-# Run all tests
-npm run test
+# Run the backend suite
+npm --workspace=apps/server-bridge run test
 
-# Run unit tests only
-npm run test:unit
+# Run the frontend suite
+npm --workspace=apps/user-interface run test
 
-# Run integration tests only
-npm run test:integration
+# Run the frontend E2E suite
+npm --workspace=apps/user-interface run test:e2e
 
-# Run e2e tests only
-npm run test:e2e
+# Run the backend security regression subset
+npm run test:security
 
-# Run tests in watch mode
-npm run test:watch
-
-# Generate coverage report
-npm run test:coverage
-
-# Run specific test file
-npm test -- tests/unit/backend/state-machine.test.js
+# Validate the orchestrator entrypoints
+npm run validate
 ```
 
 ### 6.3 Writing Tests

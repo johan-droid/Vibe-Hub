@@ -64,7 +64,7 @@ describe('V6 architecture invariants', () => {
     expect(LanguageEnforcer.validateLanguage('fr')).toBe('en');
   });
 
-  it('keeps cloud execution tools disabled in favor of the local Docker sandbox', async () => {
+  it('keeps privileged cloud execution disabled while sandbox execution goes through the provider router', async () => {
     const toolsSource = await fs.readFile(path.join(SERVER_ROOT, 'orchestrator', 'tools.js'), 'utf-8');
     const indexSource = await fs.readFile(path.join(SERVER_ROOT, 'index.js'), 'utf-8');
     const stateMachineSource = await fs.readFile(path.join(SERVER_ROOT, 'orchestrator', 'state_machine.js'), 'utf-8');
@@ -73,7 +73,7 @@ describe('V6 architecture invariants', () => {
     expect(toolsSource).toMatch(/name:\s*'github_trigger_workflow'[\s\S]*Disabled by Selina V6 local-Docker-only execution policy/);
     expect(indexSource).toMatch(/case 'github_create_codespace':[\s\S]*code:\s*'LOCAL_DOCKER_ONLY'/);
     expect(indexSource).toMatch(/case 'github_trigger_workflow':[\s\S]*code:\s*'LOCAL_DOCKER_ONLY'/);
-    expect(indexSource).toMatch(/name === 'security_sandbox'[\s\S]*SandboxExecutor\.executeLocalDockerSandbox/);
+    expect(indexSource).toMatch(/name === 'security_sandbox'[\s\S]*sandboxProviders\.executeScript/);
     expect(stateMachineSource).toMatch(/executeGeneratedCodeInLocalDocker/);
     expect(stateMachineSource).toMatch(/SandboxExecutor\.executeLocalDockerSandbox/);
   });
@@ -86,7 +86,7 @@ describe('V6 architecture invariants', () => {
       path.join(SERVER_ROOT, 'memory', 'embeddings.js'),
       path.join(SERVER_ROOT, 'creative', 'generate-ui-variant.js'),
     ];
-    const forbidden = /process\.env\.(GEMINI_API_KEY|OPENAI_API_KEY|QWEN_API_KEY|ANTHROPIC_API_KEY|LLM_API_KEY|UI_VARIANT_API_KEY)/;
+    const forbidden = /process\.env\.(GEMINI_API_KEY|OPENAI_API_KEY|QWEN_API_KEY|DEEPSEEK_API_KEY|ANTHROPIC_API_KEY|LLM_API_KEY|UI_VARIANT_API_KEY)/;
 
     for (const file of checkedFiles) {
       const source = await fs.readFile(file, 'utf-8');

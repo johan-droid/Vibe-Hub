@@ -23,10 +23,24 @@
 - Session management via PostgreSQL
 
 **WebSocket Events for AI Agents:**
-- `agent_status` - State machine transitions
-- `file_staged` - VFS updates
-- `terminal_output` - Execution results
-- `error` - Failure notifications
+- `agent_status` - State machine transitions emitted by the orchestrator
+- `file_staged` - VFS updates broadcast from the server bridge
+- `github_workflow_completed` - GitHub webhook completion signal
+
+---
+
+## Current Route Map
+
+The current server entrypoint exposes these route families:
+
+- Authentication: `/api/auth/*` and the current session lifecycle routes in `apps/server-bridge/auth/routes.js`
+- Orchestration: `/api/code`, `/api/v6/code`, and `/api/code/jobs/:jobId`
+- VFS: `/api/fs/commit`, `/api/fs/pending`, `/api/fs/stats` and their `/api/v6/*` aliases where present
+- Repository management: `/api/v6/repos/link`, `/api/v6/repos/list`
+- MCP: `/api/v6/mcp/tools`, `/api/v6/mcp/servers`, `/api/v6/mcp/diagnostics`, `/api/v6/mcp/call`
+- Chat: `/api/v6/chat/sessions` and nested message routes
+- Preferences: `/api/v6/preferences` and `/api/v6/preferences/bulk`
+- GitHub webhook: `/api/github/webhook` and `/api/v6/github/webhook`
 
 ---
 
@@ -46,102 +60,30 @@
 
 ### 1.1 Google OAuth
 
-#### Initiate OAuth Flow
-```http
-GET /api/auth/google
-```
+The current auth implementation is session-oriented rather than token-demo oriented. The important endpoints are:
 
-**Query Parameters:**
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| returnOrigin | string | Yes | URL to redirect after authentication |
+- `POST /api/auth/refresh` refreshes access tokens from cookies.
+- `POST /api/auth/handoff` exchanges an OAuth handoff code for authenticated cookies and session metadata.
+- `GET /api/auth/status` returns a bootstrap-safe status response for the current session.
+- `POST /api/auth/logout` revokes the current session.
+- `POST /api/auth/logout-all` revokes all sessions for the current user.
+- `GET /api/auth/sessions` lists active sessions.
+- `POST /api/auth/sessions/:id/revoke` revokes a specific non-current session.
+- `GET /api/auth/history` returns the user auth history.
 
-**Response:** `302 Redirect` to Google OAuth
+Example bootstrap response:
 
-#### OAuth Callback
-```http
-GET /api/auth/google/callback
-```
-
-**Query Parameters:**
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| code | string | Yes | Authorization code from Google |
-| state | string | Yes | CSRF protection state |
-
-**Response:** `302 Redirect` to returnOrigin with handoff code
-
-#### Exchange Handoff Code
-```http
-POST /api/auth/handoff
-```
-
-**Request Body:**
-```json
-{
-  "code": "euVvKG-vcKMWRrXswK4S6-_Op8-sj1udxEt1yAXVYPY"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "authenticated": true,
-  "accessToken": "eyJhbGciOiJIUzI1NiIs...",
-  "user": {
-    "id": "0dca22ce-aa21-4fda-88f0-8004fddf8feb",
-    "name": "ASHUTOSH SAHOO",
-    "email": "sahooashutosh2022@gmail.com",
-    "provider": "google",
-    "avatarUrl": "https://lh3.googleusercontent.com/..."
-  },
-  "sessionId": "fe9cafb6-645c-42ab-bb2b-6113549a785f"
-}
-```
-
-### 1.2 Session Management
-
-#### Get Authentication Status
-```http
-GET /api/auth/status
-```
-
-**Headers:**
-| Header | Value |
-|--------|-------|
-| Authorization | Bearer {accessToken} |
-
-**Response:**
 ```json
 {
   "success": true,
   "authenticated": true,
   "user": {
-    "id": "0dca22ce-aa21-4fda-88f0-8004fddf8feb",
-    "email": "sahooashutosh2022@gmail.com",
-    "name": "ASHUTOSH SAHOO",
+    "id": "user_123",
+    "email": "dev@example.com",
+    "name": "Developer",
     "provider": "google"
   },
-  "sessionId": "fe9cafb6-645c-42ab-bb2b-6113549a785f"
-}
-```
-
-#### Logout
-```http
-POST /api/auth/logout
-```
-
-**Headers:**
-| Header | Value |
-|--------|-------|
-| Authorization | Bearer {accessToken} |
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Logged out successfully"
+  "sessionId": "session_123"
 }
 ```
 
@@ -151,9 +93,10 @@ POST /api/auth/logout
 
 ### 2.1 Agent Orchestration
 
-#### Send User Prompt (AI Agent Entry Point)
+#### Start Code Run
 ```http
-POST /api/agent/prompt
+POST /api/code
+POST /api/v6/code
 ```
 
 **Headers:**
@@ -165,120 +108,39 @@ POST /api/agent/prompt
 **Request Body:**
 ```json
 {
-  "message": "Create a dark mode toggle component",
-  "context": {
-    "language": "en",
-    "effort": "standard",
-    "projectPath": "/src/components"
-  },
-  "socketId": "socket_123"
+  "prompt": "Create a dark mode toggle component",
+  "targetFile": "apps/user-interface/src/features/editor/components/DiffViewer.jsx",
+  "socketId": "socket_123",
+  "effortLevel": "standard"
 }
 ```
-
-**AI Agent Context Parameters:**
-- `language`: Must be 'en', 'hi', or 'or' (language lock enforced)
-- `effort`: 'minimal', 'standard', or 'thorough'
-- `projectPath`: Target directory for changes
 
 **Response:**
 ```json
 {
   "success": true,
-  "sessionId": "agent_loop_abc123",
-  "status": "started",
-  "message": "Agent started processing your request"
-}
-```
-
-**AI Agent Flow:**
-1. Triggers XState machine `START_TASK` event
-2. Enters `loading_contexts` state
-3. Begins deterministic orchestration
-
-#### Get Agent Status
-```http
-GET /api/agent/status
-```
-
-**Headers:**
-| Header | Value |
-|--------|-------|
-| Authorization | Bearer {accessToken} |
-
-**Query Parameters:**
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| sessionId | string | No | Specific agent session ID |
-
-**Response:**
-```json
-{
-  "success": true,
-  "status": {
-    "sessionId": "agent_loop_abc123",
-    "currentStatus": "sandboxing",
-    "progress": 0.75,
-    "message": "Testing generated code in sandbox",
-    "history": [
-      {
-        "timestamp": "2026-05-07T00:30:00Z",
-        "status": "parsing_ast",
-        "message": "Analyzing code structure"
-      },
-      {
-        "timestamp": "2026-05-07T00:30:15Z",
-        "status": "drafting_code",
-        "message": "Generating dark mode component"
-      }
-    ],
-    "retries": 1,
-    "maxRetries": 3
+  "data": {
+    "success": true,
+    "code": "...",
+    "retries": 0,
+    "stagedFile": { "filePath": "..." }
   }
 }
 ```
 
-#### Stop Agent Execution
+**Flow:**
+1. Request passes auth, readiness, CSRF, idempotency, and schema validation.
+2. `apps/server-bridge/orchestrator/state_machine.js` drives the run.
+3. `apps/server-bridge/vfs/container.js` stages the result on success.
+4. `agent_status` and `file_staged` events stream state to the UI.
+
+#### Check Code Job Status
 ```http
-POST /api/agent/stop
+GET /api/code/jobs/:jobId
+GET /api/v6/code/jobs/:jobId
 ```
 
-**Headers:**
-| Header | Value |
-|--------|-------|
-| Authorization | Bearer {accessToken} |
-
-**Request Body:**
-```json
-{
-  "sessionId": "agent_loop_abc123"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Agent execution stopped"
-}
-```
-
-#### Reset Agent State
-```http
-POST /api/agent/reset
-```
-
-**Headers:**
-| Header | Value |
-|--------|-------|
-| Authorization | Bearer {accessToken} |
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Agent state reset successfully"
-}
-```
+This is only available when a queue-backed worker is enabled. If the queue is not configured, the route returns `404`.
 
 ---
 
@@ -286,113 +148,19 @@ POST /api/agent/reset
 
 ### 3.1 File Management for AI Agents
 
-#### Get Pending Files (VFS Staging Area)
+#### Get Pending Files
 ```http
-GET /api/vfs/pending
+GET /api/fs/pending
+GET /api/v6/fs/pending
 ```
 
-**Headers:**
-| Header | Value |
-|--------|-------|
-| Authorization | Bearer {accessToken} |
+The response is the staged file list maintained by the VFS container. Each entry includes the original content, proposed content, metadata, and review status.
 
-**Response:**
-```json
-{
-  "success": true,
-  "files": [
-    {
-      "id": "file_123",
-      "filePath": "src/components/DarkModeToggle.jsx",
-      "status": "staged",
-      "originalContent": "// Original file content",
-      "proposedContent": "// New file content with dark mode",
-      "diff": {
-        "additions": [
-          {
-            "line": 5,
-            "content": "const [isDark, setIsDark] = useState(false);"
-          }
-        ],
-        "deletions": [
-          {
-            "line": 3,
-            "content": "console.log('Hello World');"
-          }
-        ]
-      },
-      "metadata": {
-        "createdAt": "2026-05-07T00:30:00Z",
-        "retries": 1,
-        "sandboxPassed": true,
-        "size": 2048
-      }
-    }
-  ]
-}
-```
-
-**AI Agent VFS Workflow:**
-1. Files are staged in memory, not on disk
-2. `sandboxPassed: true` indicates Docker testing succeeded
-3. `retries` shows generation attempts
-4. User approval required before commit
-
-#### Get File Diff
-```http
-GET /api/vfs/diff/:fileId
-```
-
-**Headers:**
-| Header | Value |
-|--------|-------|
-| Authorization | Bearer {accessToken} |
-
-**Path Parameters:**
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| fileId | string | File identifier |
-
-**Response:**
-```json
-{
-  "success": true,
-  "file": {
-    "id": "file_123",
-    "filePath": "src/components/DarkModeToggle.jsx",
-    "diff": {
-      "unified": "@@ -3,7 +3,8 @@\n-console.log('Hello World');\n+const [isDark, setIsDark] = useState(false);\n+const toggleDarkMode = () => setIsDark(!isDark);",
-      "additions": [
-        {
-          "line": 5,
-          "content": "const [isDark, setIsDark] = useState(false);",
-          "explanation": "Added dark mode state hook"
-        },
-        {
-          "line": 6,
-          "content": "const toggleDarkMode = () => setIsDark(!isDark);",
-          "explanation": "Added toggle function"
-        }
-      ],
-      "deletions": [
-        {
-          "line": 3,
-          "content": "console.log('Hello World');",
-          "explanation": "Removed debug statement"
-        }
-      ]
-    },
-    "syntaxHighlighting": {
-      "language": "javascript",
-      "theme": "material-dark"
-    }
-  }
-}
-```
-
-#### Commit Approved Changes (AI Agent Final Step)
+#### Commit Approved Changes
 ```http
 POST /api/vfs/commit
+POST /api/fs/commit
+POST /api/v6/fs/commit
 ```
 
 **Headers:**
@@ -404,8 +172,8 @@ POST /api/vfs/commit
 **Request Body:**
 ```json
 {
-  "fileIds": ["file_123", "file_456"],
-  "commitMessage": "Add dark mode toggle component"
+  "filePath": "apps/user-interface/src/features/editor/components/DiffViewer.jsx",
+  "approved": true
 }
 ```
 
@@ -413,59 +181,8 @@ POST /api/vfs/commit
 ```json
 {
   "success": true,
-  "committed": [
-    {
-      "fileId": "file_123",
-      "filePath": "src/components/DarkModeToggle.jsx",
-      "status": "committed"
-    },
-    {
-      "fileId": "file_456",
-      "filePath": "src/styles/dark-mode.css",
-      "status": "committed"
-    }
-  ],
-  "message": "Successfully committed 2 files"
-}
-```
-
-**AI Agent Commit Process:**
-1. Only files with user approval can be committed
-2. VFS validates file integrity before disk write
-3. Audit log records all commit operations
-4. Semantic index updated for future searches
-
-#### Reject Staged Changes
-```http
-POST /api/vfs/reject
-```
-
-**Headers:**
-| Header | Value |
-|--------|-------|
-| Authorization | Bearer {accessToken} |
-| Content-Type | application/json |
-
-**Request Body:**
-```json
-{
-  "fileIds": ["file_123"],
-  "reason": "Implementation needs improvement"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "rejected": [
-    {
-      "fileId": "file_123",
-      "filePath": "src/components/DarkModeToggle.jsx",
-      "status": "rejected"
-    }
-  ],
-  "message": "Rejected 1 file"
+  "message": "committed",
+  "filePath": "apps/user-interface/src/features/editor/components/DiffViewer.jsx"
 }
 ```
 
@@ -473,33 +190,11 @@ POST /api/vfs/reject
 
 #### Get VFS Stats
 ```http
-GET /api/vfs/stats
+GET /api/fs/stats
+GET /api/v6/fs/stats
 ```
 
-**Headers:**
-| Header | Value |
-|--------|-------|
-| Authorization | Bearer {accessToken} |
-
-**Response:**
-```json
-{
-  "success": true,
-  "stats": {
-    "totalFiles": 5,
-    "stagedFiles": 3,
-    "committedFiles": 2,
-    "rejectedFiles": 0,
-    "totalSize": 10240,
-    "lastActivity": "2026-05-07T00:30:00Z",
-    "sessionStats": {
-      "currentSession": "agent_loop_abc123",
-      "filesInSession": 3,
-      "retriesInSession": 1
-    }
-  }
-}
-```
+The stats payload summarizes staged, approved, rejected, and committed files, optionally scoped to the current user.
 
 ---
 

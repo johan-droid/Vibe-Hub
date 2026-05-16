@@ -4,6 +4,13 @@ import { TokenGovernor, callRoutedTextModel } from '../orchestrator/token-govern
 const MANAGED_ENV_KEYS = [
   'GROQ_KEYS',
   'GROQ_API_KEY',
+  'SELINA_CODING_MODEL_PROVIDER',
+  'QWEN_KEYS',
+  'QWEN_API_KEY',
+  'QWEN_MODEL',
+  'DEEPSEEK_KEYS',
+  'DEEPSEEK_API_KEY',
+  'DEEPSEEK_MODEL',
   'NVIDIA_NIM_KEYS',
   'NIM_API_KEY',
   'NVIDIA_NIM_API_KEY',
@@ -53,6 +60,44 @@ describe('TokenGovernor', () => {
       key: 'groq-key',
       model: 'llama3-70b',
       provider: 'groq'
+    });
+  });
+
+  it('can route worker compute through Qwen coder when configured', async () => {
+    process.env.SELINA_CODING_MODEL_PROVIDER = 'qwen';
+    process.env.QWEN_KEYS = 'qwen-key';
+    process.env.QWEN_MODEL = 'qwen-coder-test';
+    const governor = new TokenGovernor();
+
+    const result = await governor.getCompute('low', 'worker', async (key, model, provider) => ({
+      key,
+      model,
+      provider
+    }));
+
+    expect(result).toEqual({
+      key: 'qwen-key',
+      model: 'qwen-coder-test',
+      provider: 'qwen'
+    });
+  });
+
+  it('can route worker compute through DeepSeek coder when configured', async () => {
+    process.env.SELINA_CODING_MODEL_PROVIDER = 'deepseek';
+    process.env.DEEPSEEK_KEYS = 'deepseek-key';
+    process.env.DEEPSEEK_MODEL = 'deepseek-coder-test';
+    const governor = new TokenGovernor();
+
+    const result = await governor.getCompute('low', 'worker', async (key, model, provider) => ({
+      key,
+      model,
+      provider
+    }));
+
+    expect(result).toEqual({
+      key: 'deepseek-key',
+      model: 'deepseek-coder-test',
+      provider: 'deepseek'
     });
   });
 

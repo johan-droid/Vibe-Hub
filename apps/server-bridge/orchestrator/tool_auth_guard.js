@@ -20,6 +20,13 @@ const TOOL_POLICIES = new Map(Object.entries({
   github_detect_conflicts: { type: 'readonly' },
   github_get_codeql_alerts: { type: 'readonly' },
   design_research: { type: 'readonly' },
+  helper_git_status_summary: { type: 'readonly' },
+  helper_validate_json: { type: 'readonly' },
+  helper_scan_secret_strings: { type: 'readonly' },
+  helper_check_gitignore: { type: 'readonly' },
+  helper_run_pytest: { type: 'write', requireApproval: true },
+  helper_run_ruff: { type: 'write', requireApproval: true },
+  helper_run_semgrep: { type: 'write', requireApproval: true },
 
   create_file: { type: 'write', requireApproval: true },
   edit_file: { type: 'write', requireApproval: true },

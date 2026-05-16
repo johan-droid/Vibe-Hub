@@ -43,6 +43,14 @@ npm run build
 - `node --check` for syntax validation
 - `read_file` for code analysis
 
+## Current Implementation Snapshot
+
+- The current code path starts in `apps/server-bridge/index.js`.
+- Orchestration is handled by `apps/server-bridge/orchestrator/state_machine.js` and `apps/server-bridge/orchestrator/router.js`.
+- VFS staging and approval live in `apps/server-bridge/vfs/container.js`.
+- Auth, chat, and preferences are routed through `apps/server-bridge/auth/routes.js`, `apps/server-bridge/orchestrator/chat_routes.js`, and `apps/server-bridge/orchestrator/preferences_routes.js`.
+- The UI review surface is in `apps/user-interface/src/features/editor/components/DiffViewer.jsx` and the surrounding workspace features.
+
 ---
 
 ## 1. AI Agent Development Architecture

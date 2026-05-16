@@ -43,6 +43,14 @@ npm run build
 - `node --check` for syntax validation
 - `read_file` for code analysis
 
+## Current Implementation Snapshot
+
+- Current server routes are registered in `apps/server-bridge/index.js`.
+- The orchestration entrypoint is `apps/server-bridge/orchestrator/state_machine.js`.
+- Approval-gated writes are implemented in `apps/server-bridge/vfs/container.js`.
+- Current API families include `/api/code`, `/api/fs/*`, `/api/v6/chat/*`, `/api/v6/preferences/*`, `/api/v6/mcp/*`, and `/api/auth/*`.
+- The UI workspace is organized under `apps/user-interface/src/features/`.
+
 ---
 
 ## Table of Contents
