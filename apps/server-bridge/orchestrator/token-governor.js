@@ -152,7 +152,7 @@ function validateCheapModelResult(result, options = {}) {
   }
 
   // Reject generic error messages or placeholders
-  if (text.toLowerCase().includes('i cannot answer') || text.toLowerCase().includes('todo')) {
+  if (text.toLowerCase().includes('i cannot answer') || /to\s*do/.test(text.toLowerCase())) {
     return false;
   }
 
