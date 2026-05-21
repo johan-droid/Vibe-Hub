@@ -1,4 +1,5 @@
 import logger from '../utils/detailed-logger.js';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { setTraceUser } from '../utils/tracing.js';
 import { verifyExternalJwt, isExternalJwtConfigured } from './external-jwt.js';
@@ -15,6 +16,7 @@ const AUTH_COOKIES = {
   access: 'selina_access_token',
   session: 'selina_session',
   refresh: 'selina_refresh',
+  device: 'selina_device_id',
 };
 
 function isSecureCookie() {
@@ -92,6 +94,15 @@ function readRefreshToken(req) {
   return cookies[AUTH_COOKIES.refresh];
 }
 
+function readDeviceCookie(req) {
+  const cookies = req?.cookies || parseCookies(req?.headers?.cookie || '');
+  return cookies[AUTH_COOKIES.device] || null;
+}
+
+function issueDeviceCookieValue() {
+  return crypto.randomBytes(24).toString('base64url');
+}
+
 function normalizeUser(session) {
   return {
     id: session.userId,
@@ -147,7 +158,7 @@ export async function authenticateFromHeaders(headers = {}, explicitAccessToken 
 /**
  * Set authentication cookies with security flags
  */
-export function setAuthCookies(res, { accessToken, refreshToken, sessionToken }) {
+export function setAuthCookies(res, { accessToken, refreshToken, sessionToken, deviceId }) {
   const secure = isSecureCookie();
   const sameSite = 'strict';
 
@@ -182,6 +193,16 @@ export function setAuthCookies(res, { accessToken, refreshToken, sessionToken })
       path: '/',
     });
   }
+
+  if (deviceId) {
+    res.cookie(AUTH_COOKIES.device, deviceId, {
+      httpOnly: true,
+      secure,
+      sameSite,
+      maxAge: 365 * 24 * 60 * 60 * 1000,
+      path: '/',
+    });
+  }
 }
 
 /**
@@ -194,6 +215,21 @@ export function clearAuthCookies(res) {
   res.clearCookie(AUTH_COOKIES.access, { path: '/', secure, sameSite });
   res.clearCookie(AUTH_COOKIES.session, { path: '/', secure, sameSite });
   res.clearCookie(AUTH_COOKIES.refresh, { path: '/', secure, sameSite });
+}
+
+export function ensureDeviceCookie(req, res) {
+  const existingDeviceId = readDeviceCookie(req);
+  if (existingDeviceId) return existingDeviceId;
+
+  const deviceId = issueDeviceCookieValue();
+  res.cookie(AUTH_COOKIES.device, deviceId, {
+    httpOnly: true,
+    secure: isSecureCookie(),
+    sameSite: 'strict',
+    maxAge: 365 * 24 * 60 * 60 * 1000,
+    path: '/',
+  });
+  return deviceId;
 }
 
 /**
@@ -260,6 +296,7 @@ export async function optionalAuth(req, res, next) {
  */
 export async function handleRefreshToken(req, res) {
   const refreshToken = readRefreshToken(req) || req.body?.refreshToken;
+  const deviceId = readDeviceCookie(req);
 
   if (!refreshToken) {
     clearAuthCookies(res);
@@ -272,7 +309,8 @@ export async function handleRefreshToken(req, res) {
     // Set new cookies
     setAuthCookies(res, {
       accessToken: result.accessToken,
-      refreshToken: result.refreshToken
+      refreshToken: result.refreshToken,
+      deviceId,
     });
 
     return res.json({

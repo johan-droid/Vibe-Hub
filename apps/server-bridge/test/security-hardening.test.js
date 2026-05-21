@@ -205,6 +205,24 @@ describe('Zero-trust identity, session fingerprinting, client Proof-of-Work, and
     const fingerprint3 = computeCompoundFingerprint(req3);
     expect(fingerprint3).not.toBe(fingerprint1); // Should mismatch!
 
+    const req4 = {
+      headers: {
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'x-device-id': 'device-xyz-123'
+      },
+      socket: { remoteAddress: '::1' }
+    };
+
+    const req5 = {
+      headers: {
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'x-device-id': 'device-xyz-123'
+      },
+      socket: { remoteAddress: '127.0.0.1' }
+    };
+
+    expect(computeCompoundFingerprint(req4)).toBe(computeCompoundFingerprint(req5));
+
     // Verify session cleanup registration and trigger callback
     let sessionCleanedUp = false;
     let secondaryCleanupTriggered = false;

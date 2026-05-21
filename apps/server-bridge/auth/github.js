@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { upsertUser } from '../db.js';
 import { createSession } from './session.js';
-import { setAuthCookies } from './middleware.js';
+import { ensureDeviceCookie, setAuthCookies } from './middleware.js';
 import {
   createOAuthHandoff,
   createOAuthState,
@@ -32,16 +32,19 @@ async function finalizeGithubSignIn({ req, res, returnOrigin, profile, logMode =
     providerId: String(profile.id),
   });
 
+  const deviceId = ensureDeviceCookie(req, res);
   const session = await createSession({
     userId: user.id,
     provider: 'github',
     req,
+    deviceId,
   });
 
   setAuthCookies(res, {
     accessToken: session.accessToken,
     refreshToken: session.refreshToken,
     sessionToken: session.sessionToken,
+    deviceId: session.deviceId,
   });
 
   const userPayload = {

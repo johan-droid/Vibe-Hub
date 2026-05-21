@@ -34,6 +34,7 @@ const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'test' ||
 const SESSION_EXPIRY_DAYS = parseInt(process.env.SESSION_EXPIRY_DAYS || '30', 10);
 const REFRESH_TOKEN_EXPIRY_DAYS = parseInt(process.env.REFRESH_TOKEN_EXPIRY_DAYS || '90', 10);
 const MAX_CONCURRENT_SESSIONS = parseInt(process.env.MAX_CONCURRENT_SESSIONS || '10', 10);
+const DEVICE_COOKIE_NAME = 'selina_device_id';
 export const ACCESS_TOKEN_TTL_SECONDS = Math.max(
   60,
   Math.min(parseInt(process.env.ACCESS_TOKEN_TTL_SECONDS || '240', 10), 299),
@@ -111,27 +112,109 @@ export function triggerFingerprintMismatchCleanup(sessionId) {
   }
 }
 
-export function computeCompoundFingerprint(req) {
+function parseCookies(header = '') {
+  try {
+    return Object.fromEntries(
+      String(header)
+        .split(';')
+        .map(part => part.trim())
+        .filter(Boolean)
+        .map(part => {
+          const index = part.indexOf('=');
+          if (index === -1) return [part, ''];
+          return [part.slice(0, index), decodeURIComponent(part.slice(index + 1))];
+        })
+    );
+  } catch {
+    return {};
+  }
+}
+
+function readFingerprintDeviceId(req, { legacy = false, explicitDeviceId = null } = {}) {
+  if (explicitDeviceId) return explicitDeviceId;
+
+  const headerDeviceId = req?.headers?.['x-device-id'];
+  if (headerDeviceId) return headerDeviceId;
+  if (legacy) return 'no-device-id';
+
+  const cookieDeviceId = req?.cookies?.[DEVICE_COOKIE_NAME]
+    || parseCookies(req?.headers?.cookie || '')[DEVICE_COOKIE_NAME];
+
+  return cookieDeviceId || 'no-device-id';
+}
+
+function normalizeLoopbackAddress(ip = '') {
+  const normalized = String(ip || '').trim();
+  if (!normalized) return '0.0.0.0';
+  if (normalized === '::1' || normalized === '[::1]') return '127.0.0.1';
+  if (normalized.startsWith('::ffff:')) return normalized.slice('::ffff:'.length);
+  return normalized;
+}
+
+function bucketIpForFingerprint(ip, { legacy = false } = {}) {
+  const rawIp = String(ip || '').trim() || '0.0.0.0';
+  const normalized = legacy ? rawIp : normalizeLoopbackAddress(rawIp);
+
+  if (legacy) {
+    if (normalized.includes('.')) {
+      return normalized.split('.').slice(0, 3).join('.');
+    }
+    if (normalized.includes(':')) {
+      return normalized.split(':').slice(0, 4).join(':');
+    }
+    return '0.0.0.0';
+  }
+
+  if (normalized === '127.0.0.1' || normalized === 'localhost') {
+    return 'loopback';
+  }
+
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(normalized)) {
+    const octets = normalized.split('.').map(part => Number.parseInt(part, 10));
+    if (octets[0] === 169 && octets[1] === 254) return '169.254';
+    return `${octets[0]}.${octets[1]}.${octets[2]}`;
+  }
+
+  if (normalized.includes(':')) {
+    const compact = normalized.toLowerCase();
+    if (compact === '::1') return 'loopback';
+    if (compact.startsWith('fe80')) return 'fe80';
+    return compact.split(':').slice(0, 4).join(':');
+  }
+
+  return '0.0.0.0';
+}
+
+function computeFingerprintVariant(req, { legacy = false, explicitDeviceId = null } = {}) {
   if (!req) return 'no-req-fingerprint';
   const ip = getClientIp(req);
-  let ipRange = '0.0.0.0';
-  if (ip.includes('.')) {
-    ipRange = ip.split('.').slice(0, 3).join('.'); // first 3 octets (/24)
-  } else if (ip.includes(':')) {
-    ipRange = ip.split(':').slice(0, 4).join(':'); // first 4 segments (/64)
-  }
+  const ipRange = bucketIpForFingerprint(ip, { legacy });
   const ua = req.headers['user-agent'] || '';
-  const deviceId = req.headers['x-device-id'] || 'no-device-id';
+  const deviceId = readFingerprintDeviceId(req, { legacy, explicitDeviceId });
   const hmacDeviceId = crypto.createHmac('sha256', JWT_SECRET).update(deviceId).digest('hex');
   const rawFingerprint = `${ipRange}|${ua}|${hmacDeviceId}`;
   return crypto.createHash('sha256').update(rawFingerprint).digest('hex');
 }
 
+export function computeCompoundFingerprint(req, explicitDeviceId = null) {
+  return computeFingerprintVariant(req, { explicitDeviceId });
+}
+
+function computeLegacyCompoundFingerprint(req) {
+  return computeFingerprintVariant(req, { legacy: true });
+}
+
+function fingerprintMatchesRequest(storedFingerprint, req) {
+  if (!storedFingerprint || !req) return true;
+  if (storedFingerprint === computeCompoundFingerprint(req)) return true;
+  return storedFingerprint === computeLegacyCompoundFingerprint(req);
+}
+
 /**
  * Generate device fingerprint from request headers
  */
-export function generateDeviceFingerprint(req) {
-  return computeCompoundFingerprint(req);
+export function generateDeviceFingerprint(req, explicitDeviceId = null) {
+  return computeCompoundFingerprint(req, explicitDeviceId);
 }
 
 async function revokeSessionForFingerprintMismatch(session, req) {
@@ -194,7 +277,7 @@ export function getClientIp(req) {
 /**
  * Create a new session for a user
  */
-export async function createSession({ userId, provider, req, deviceFingerprint = null }) {
+export async function createSession({ userId, provider, req, deviceFingerprint = null, deviceId = null }) {
   // Check concurrent session limit
   const activeSessions = await countActiveUserSessions(userId);
   if (activeSessions >= MAX_CONCURRENT_SESSIONS) {
@@ -221,7 +304,8 @@ export async function createSession({ userId, provider, req, deviceFingerprint =
   const refreshTokenHash = hashToken(refreshToken);
   
   const deviceInfo = extractDeviceInfo(req);
-  const fingerprint = deviceFingerprint || generateDeviceFingerprint(req);
+  const effectiveDeviceId = deviceId || readFingerprintDeviceId(req);
+  const fingerprint = deviceFingerprint || generateDeviceFingerprint(req, effectiveDeviceId);
   const ipAddress = getClientIp(req);
   
   const expiresAt = new Date();
@@ -272,6 +356,7 @@ export async function createSession({ userId, provider, req, deviceFingerprint =
     accessToken,
     refreshToken,
     sessionToken,
+    deviceId: effectiveDeviceId,
     sessionId: session.id,
     expiresAt
   };
@@ -314,8 +399,7 @@ export async function validateAccessTokenSession(token, req) {
 
   // Enforce fingerprint verification if req is provided
   if (req && session.device_fingerprint) {
-    const incomingFingerprint = computeCompoundFingerprint(req);
-    if (session.device_fingerprint !== incomingFingerprint) {
+    if (!fingerprintMatchesRequest(session.device_fingerprint, req)) {
       console.warn(`[Security] Session fingerprint mismatch for user ${session.user_id}, session ${session.id}. Revoking session.`);
       await revokeSessionForFingerprintMismatch(session, req);
       return null;
@@ -428,8 +512,7 @@ export async function validateSession(sessionToken, req) {
   
   // Enforce fingerprint verification if req is provided
   if (req && session.device_fingerprint) {
-    const incomingFingerprint = computeCompoundFingerprint(req);
-    if (session.device_fingerprint !== incomingFingerprint) {
+    if (!fingerprintMatchesRequest(session.device_fingerprint, req)) {
       console.warn(`[Security] Session fingerprint mismatch for session ${session.id}. Revoking session.`);
       await revokeSessionForFingerprintMismatch(session, req);
       return null;

@@ -94,7 +94,7 @@ describe('security regression: workflow-supply-chain', () => {
 });
 
 describe('security regression: frontend-xss', () => {
-  it('keeps raw HTML rendering and terminal output behind sanitization or React escaping', async () => {
+  it('keeps raw HTML rendering and terminal output behind React escaping boundaries', async () => {
     const uiFiles = [
       'apps/user-interface/src/features/chat/components/ChatInterface.jsx',
       'apps/user-interface/src/features/editor/components/Terminal.jsx',
@@ -105,6 +105,7 @@ describe('security regression: frontend-xss', () => {
     expect(sources[0]).toContain('ReactMarkdown');
     expect(sources[0]).not.toContain('rehypeRaw');
     expect(sources.join('\n')).not.toContain('dangerouslySetInnerHTML');
-    expect(sources.join('\n')).toContain('DOMPurify.sanitize');
+    expect(sources[1]).toContain('segments.push({ text: part');
+    expect(sources[2]).toContain('oldValue={diffChunk.old}');
   });
 });

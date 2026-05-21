@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import { upsertUser } from '../db.js';
 import { createSession } from './session.js';
-import { setAuthCookies } from './middleware.js';
+import { ensureDeviceCookie, setAuthCookies } from './middleware.js';
 import {
   createOAuthHandoff,
   createOAuthState,
@@ -92,10 +92,12 @@ router.post('/verify-token', powGuard(4), async (req, res) => {
 
     // Create SaaS-grade session
     logger.debug('GoogleAuth', 'Creating session...');
+    const deviceId = ensureDeviceCookie(req, res);
     const session = await createSession({
       userId: user.id,
       provider: 'google',
-      req
+      req,
+      deviceId,
     });
     logger.debug('GoogleAuth', 'Session created', { sessionId: session.sessionId });
 
@@ -103,7 +105,8 @@ router.post('/verify-token', powGuard(4), async (req, res) => {
     setAuthCookies(res, {
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
-      sessionToken: session.sessionToken
+      sessionToken: session.sessionToken,
+      deviceId: session.deviceId,
     });
 
     logger.debug('GoogleAuth', 'Sending success response');
@@ -225,10 +228,12 @@ router.get('/google/callback', async (req, res) => {
     logger.info('GoogleAuth', 'User upserted:', { userId: user.id });
 
     logger.info('GoogleAuth', 'Step 4: Creating session...');
+    const deviceId = ensureDeviceCookie(req, res);
     const session = await createSession({
       userId: user.id,
       provider: 'google',
-      req
+      req,
+      deviceId,
     });
     logger.info('GoogleAuth', 'Session created:', { sessionId: session.sessionId });
 
@@ -236,7 +241,8 @@ router.get('/google/callback', async (req, res) => {
     setAuthCookies(res, {
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
-      sessionToken: session.sessionToken
+      sessionToken: session.sessionToken,
+      deviceId: session.deviceId,
     });
 
     const userPayload = {
