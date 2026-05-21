@@ -114,7 +114,9 @@ export async function authenticateFromHeaders(headers = {}, explicitAccessToken 
  */
 export function setAuthCookies(res, { accessToken, refreshToken, sessionToken }) {
   const secure = isSecureCookie();
-  const sameSite = 'strict';
+  // Use 'lax' for development to allow OAuth callback cookies
+  // In production with proper domain setup, 'strict' can be used
+  const sameSite = process.env.NODE_ENV === 'production' ? 'strict' : 'lax';
 
   // Access token (short-lived, sent automatically with API calls)
   res.cookie(AUTH_COOKIES.access, accessToken, {
@@ -153,7 +155,8 @@ export function setAuthCookies(res, { accessToken, refreshToken, sessionToken })
  */
 export function clearAuthCookies(res) {
   const secure = isSecureCookie();
-  const sameSite = 'strict';
+  // Use 'lax' for development to match setAuthCookies
+  const sameSite = process.env.NODE_ENV === 'production' ? 'strict' : 'lax';
 
   res.clearCookie(AUTH_COOKIES.access, { path: '/', secure, sameSite });
   res.clearCookie(AUTH_COOKIES.session, { path: '/', secure, sameSite });
