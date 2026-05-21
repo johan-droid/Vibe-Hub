@@ -1,7 +1,5 @@
-```
 # Security audit reports
 SECURITY_AUDIT_REPORT.md
-```
 node_modules
 
 # Logs
@@ -12,9 +10,9 @@ yarn-debug.log*
 pnpm-debug.log*
 
 # Runtime files
-.env
-.env.*.local
-.env.local
+**/.env
+**/.env.*
+!**/.env.example
 
 # Build / output
 dist/

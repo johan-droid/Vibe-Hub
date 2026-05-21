@@ -78,7 +78,9 @@ function readJson(file) {
 }
 
 function scanLifecycleScripts(files, findings) {
-  const packageFiles = files.filter(file => file.endsWith('package.json'));
+  const packageFiles = files
+    .filter(file => file.endsWith('package.json'))
+    .filter(file => !file.includes('/node_modules/'));
   for (const file of packageFiles) {
     const scripts = readJson(file).scripts || {};
     for (const [name, command] of Object.entries(scripts)) {

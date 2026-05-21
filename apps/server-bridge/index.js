@@ -113,6 +113,7 @@ const parseLimit = (value, fallback) => {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
+const trustProxyHops = parseLimit(process.env.TRUST_PROXY_HOPS, process.env.RENDER || isProd ? 1 : 0);
 
 const SECRET_FIELD_PATTERN = /(api[_-]?key|secret|token|password|credential|authorization|cookie|session)/i;
 
@@ -221,7 +222,6 @@ app.use(helmet({
 }));
 
 // Rate limiting - Prevent abuse
-const trustProxyHops = parseLimit(process.env.TRUST_PROXY_HOPS, process.env.RENDER || isProd ? 1 : 0);
 if (trustProxyHops > 0) {
   app.set('trust proxy', trustProxyHops);
 }
@@ -293,15 +293,11 @@ const wsActiveByIp = new Map();
 const wsActiveByUser = new Map();
 
 function getRequestIp(req) {
-  return String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown')
-    .split(',')[0]
-    .trim();
+  return String(req.ip || req.socket?.remoteAddress || 'unknown').trim();
 }
 
 function getSocketIp(socket) {
-  return String(socket.handshake.headers['x-forwarded-for'] || socket.handshake.address || 'unknown')
-    .split(',')[0]
-    .trim();
+  return String(socket.handshake.address || socket.conn?.remoteAddress || 'unknown').trim();
 }
 
 function registerWsConnection(ip) {
@@ -350,11 +346,25 @@ function releaseWsUser(userId) {
 
 // ── Standard Middleware ───────────────────────────────────────────────────────
 
-// CORS: Allow all origins in dev for multiple ports, restrict in production
-const corsOrigin = process.env.NODE_ENV === 'production' 
-  ? (process.env.UI_ORIGIN || true) 
-  : true;
-app.use(cors({ origin: process.env.UI_ORIGIN || 'http://localhost:5173', credentials: true }));
+function configuredCorsOrigins() {
+  const origins = [
+    process.env.UI_ORIGIN,
+    process.env.UI_ALLOWED_ORIGINS,
+    process.env.FRONTEND_ORIGINS,
+  ]
+    .filter(Boolean)
+    .flatMap(value => String(value).split(','))
+    .map(value => value.trim())
+    .filter(Boolean);
+
+  return [...new Set(origins)];
+}
+
+const allowedCorsOrigins = configuredCorsOrigins();
+const corsOrigin = isProd
+  ? (allowedCorsOrigins.length ? allowedCorsOrigins : false)
+  : (allowedCorsOrigins.length ? allowedCorsOrigins : true);
+app.use(cors({ origin: corsOrigin, credentials: true }));
 
 
 // Request context logging (adds requestId and logs requests)
@@ -490,26 +500,29 @@ async function handleGithubWebhook(req, res) {
 
   const event   = req.headers['x-github-event'];
   const payload = JSON.parse(req.body.toString());
+  const installationId = payload?.installation?.id || payload?.workflow_run?.installation?.id || null;
+
+  const sendToAuthorizedSessions = (messageFactory) => {
+    for (const session of sessions.values()) {
+      if (!installationId || String(session.githubInstallationId) !== String(installationId)) continue;
+      if (session.ws.readyState !== session.ws.OPEN) continue;
+      session.ws.send(JSON.stringify(messageFactory(session)));
+    }
+  };
 
   // Handle Action workflow runs (e.g. AI Sandbox results)
   if (event === 'workflow_run') {
     const workflowName = payload.workflow_run.name;
     const conclusion = payload.workflow_run.conclusion;
-    // Notify clients that GitHub runner finished
-    const wss = req.app.get('wss'); // Assume wss is attached to app
-    if (wss) wss.clients.forEach(client => {
-      if (client.readyState === 1) { // WebSocket.OPEN
-        client.send(JSON.stringify({
-          type: 'terminal_output',
-          data: `\x1b[36m[GitHub] Workflow ${workflowName} finished with conclusion: ${conclusion}\x1b[0m\n`
-        }));
-        client.send(JSON.stringify({
-          type: 'state_change',
-          state: 'idle',
-          message: 'GitHub workflow complete'
-        }));
-      }
-    });
+    sendToAuthorizedSessions(() => ({
+      type: 'terminal_output',
+      data: `\x1b[36m[GitHub] Workflow ${workflowName} finished with conclusion: ${conclusion}\x1b[0m\n`
+    }));
+    sendToAuthorizedSessions(() => ({
+      type: 'state_change',
+      state: 'idle',
+      message: 'GitHub workflow complete'
+    }));
   }
 
   // Route webhook events to the relevant open agent session (if any).
@@ -520,18 +533,12 @@ async function handleGithubWebhook(req, res) {
 
   if (event === 'workflow_run' && payload.action === 'completed') {
       const { workflow_run } = payload;
-
-      // Broadcast to all active sessions (since we aren't mapping repos to sessions yet)
-      for (const [sessionId, session] of sessions) {
-          if (session.ws.readyState === session.ws.OPEN) {
-              session.ws.send(JSON.stringify({
-                  type: 'github_workflow_completed',
-                  workflow: workflow_run.name,
-                  conclusion: workflow_run.conclusion,
-                  url: workflow_run.html_url
-              }));
-          }
-      }
+      sendToAuthorizedSessions(() => ({
+        type: 'github_workflow_completed',
+        workflow: workflow_run.name,
+        conclusion: workflow_run.conclusion,
+        url: workflow_run.html_url
+      }));
   }
 
   res.status(200).send('OK');
@@ -813,7 +820,7 @@ io.use(async (socket, next) => {
     return next(new Error('WebSocket rate limit exceeded.'));
   }
 
-  const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+  const token = socket.handshake.auth?.token || null;
   let auth = null;
   try {
     auth = await authenticateFromHeaders(socket.handshake.headers, token, socket.handshake);
@@ -941,8 +948,7 @@ wss.on('connection', async (ws, req) => {
   };
 
   // ── Authentication ─────────────────────────────────────────────────────
-  const url     = new URL(req.url, `http://${req.headers.host}`);
-  const token   = url.searchParams.get('token');
+  const token = null;
   try {
     auth = await authenticateFromHeaders(req.headers, token, req);
   } catch (error) {

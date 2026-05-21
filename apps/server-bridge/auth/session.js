@@ -185,10 +185,9 @@ export function extractDeviceInfo(req) {
  * Get client IP address
  */
 export function getClientIp(req) {
-  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-         req.headers['x-real-ip'] ||
+  return req.ip ||
          req.socket?.remoteAddress ||
-         req.ip ||
+         req.headers['x-real-ip'] ||
          '0.0.0.0';
 }
 
