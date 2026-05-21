@@ -54,7 +54,11 @@ pool = new pg.Pool({
 
 // Log pool errors for debugging
 pool.on('error', (err, client) => {
-  logger.error('Database', 'Unexpected error on idle client', err);
+  if (err.message === 'Connection terminated unexpectedly') {
+    logger.debug('Database', 'Idle client connection terminated by server (expected for serverless DBs)');
+  } else {
+    logger.error('Database', 'Unexpected error on idle client', err);
+  }
 });
 
 export async function withTenantContext(tenantId, operation) {

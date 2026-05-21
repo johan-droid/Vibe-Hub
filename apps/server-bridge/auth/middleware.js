@@ -228,7 +228,7 @@ export function ensureDeviceCookie(req, res) {
   res.cookie(AUTH_COOKIES.device, deviceId, {
     httpOnly: true,
     secure: isSecureCookie(),
-    sameSite: 'strict',
+    sameSite: isSecureCookie() ? 'none' : 'lax',
     maxAge: 365 * 24 * 60 * 60 * 1000,
     path: '/',
   });

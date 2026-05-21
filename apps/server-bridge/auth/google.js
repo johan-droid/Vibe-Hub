@@ -157,7 +157,7 @@ router.get('/google', async (req, res) => {
   res.cookie('google_oauth_state', state, {
     httpOnly: true,
     secure: isSecureCookie(),
-    sameSite: 'strict',
+    sameSite: isSecureCookie() ? 'none' : 'lax',
     maxAge: 15 * 60 * 1000,
   });
   setOAuthReturnOriginCookie(res, returnOrigin);

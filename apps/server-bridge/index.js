@@ -373,11 +373,16 @@ app.use(detailedLogger.logRequest); // Detailed request logging
 app.use(requestLogger); // Attach logger to request object
 app.use(metricsMiddleware);
 
-// Raw body parser for webhook signature verification (must come before JSON).
-app.use(['/api/github/webhook', '/api/v6/github/webhook'], express.raw({ type: 'application/json' }));
-
 // 5 MB JSON cap — large enough for paste-in files, prevents body-flood DoS.
-app.use(express.json({ limit: '5mb' }));
+// We capture rawBody for webhook signature verification.
+app.use(express.json({ 
+  limit: '5mb',
+  verify: (req, res, buf) => {
+    if (req.originalUrl.includes('/webhook')) {
+      req.rawBody = buf;
+    }
+  }
+}));
 
 // Cookie parser for reading auth cookies
 app.use(cookieParser());
@@ -486,20 +491,21 @@ app.get('/api/v6/audit-logs', requireInternalControlPlane, requireAuth, handleAu
 
 // ── GitHub webhooks ───────────────────────────────────────────────────────────
 async function handleGithubWebhook(req, res) {
-  // The body arrives as a raw Buffer because of the express.raw() middleware
-  // above. We must verify the HMAC signature before processing anything.
   const signature = req.headers['x-hub-signature-256'];
   if (!signature) {
     return res.status(403).send('Missing signature.');
   }
-  const valid = await githubService.verifyWebhookSignature(req.body, signature);
+  
+  // Use req.rawBody populated by express.json verify function
+  const rawBody = req.rawBody || req.body;
+  const valid = await githubService.verifyWebhookSignature(rawBody, signature);
 
   if (!valid) {
     return res.status(403).send('Invalid signature.');
   }
 
   const event   = req.headers['x-github-event'];
-  const payload = JSON.parse(req.body.toString());
+  const payload = typeof req.body === 'string' || Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString()) : req.body;
   const installationId = payload?.installation?.id || payload?.workflow_run?.installation?.id || null;
 
   const sendToAuthorizedSessions = (messageFactory) => {

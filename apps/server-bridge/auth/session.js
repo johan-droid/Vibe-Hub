@@ -274,12 +274,12 @@ export function getClientIp(req) {
          '0.0.0.0';
 }
 
+
 /**
  * Create a new session for a user
  */
 export async function createSession({ userId, provider, req, deviceFingerprint = null, deviceId = null }) {
-  // Check concurrent session limit
-  const activeSessions = await countActiveUserSessions(userId);
+  let activeSessions = await countActiveUserSessions(userId);
   if (activeSessions >= MAX_CONCURRENT_SESSIONS) {
     const deviceInfo = extractDeviceInfo(req);
     const ipAddress = getClientIp(req);
@@ -291,15 +291,16 @@ export async function createSession({ userId, provider, req, deviceFingerprint =
       device: deviceInfo.browser + ' on ' + deviceInfo.os
     });
 
-    // In dev/prod, instead of blocking the user, we prune the oldest session
-    // This is safer for UX than hard-locking the account.
-    console.info('[Session] Auto-pruning oldest session for user:', userId);
-    await revokeOldestUserSession(userId, 'limit_reached_auto_prune');
+    while (activeSessions >= MAX_CONCURRENT_SESSIONS) {
+      console.info('[Session] Auto-pruning oldest session for user:', userId);
+      await revokeOldestUserSession(userId, 'limit_reached_auto_prune');
+      activeSessions--;
+    }
   }
-  
+
   const sessionToken = generateSecureToken(32);
   const sessionTokenHash = hashToken(sessionToken);
-  
+
   const refreshToken = generateSecureToken(48);
   const refreshTokenHash = hashToken(refreshToken);
   
