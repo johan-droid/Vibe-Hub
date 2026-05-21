@@ -39,7 +39,6 @@ router.get('/config', (req, res) => {
       },
       github: {
         configured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET && process.env.GITHUB_REDIRECT_URI && process.env.UI_ORIGIN),
-        mockEnabled: ['1', 'true', 'yes', 'on'].includes(String(process.env.SELINA_ENABLE_GITHUB_MOCK_AUTH || '').toLowerCase()),
       },
     },
   });

@@ -340,6 +340,10 @@ class ApiClient {
     return this.get('/api/v6/mcp/diagnostics');
   }
 
+  async registerMcpServer(name, command, args = []) {
+    return this.post('/api/v6/mcp/register', { name, command, args });
+  }
+
   async callMcpTool(toolId, args) {
     return this.post('/api/v6/mcp/call', { toolId, arguments: args });
   }

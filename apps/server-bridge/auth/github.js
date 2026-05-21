@@ -23,23 +23,6 @@ const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 const GITHUB_USER_URL = 'https://api.github.com/user';
 const GITHUB_EMAILS_URL = 'https://api.github.com/user/emails';
 
-function githubMockEnabled(env = process.env) {
-  return ['1', 'true', 'yes', 'on'].includes(String(env.SELINA_ENABLE_GITHUB_MOCK_AUTH || '').toLowerCase());
-}
-
-function buildMockGithubProfile(env = process.env) {
-  const login = env.GITHUB_MOCK_LOGIN || 'selina-dev';
-  const providerId = env.GITHUB_MOCK_PROVIDER_ID || `mock-${login}`;
-
-  return {
-    id: providerId,
-    login,
-    email: env.GITHUB_MOCK_EMAIL || `${login}@example.test`,
-    name: env.GITHUB_MOCK_NAME || 'Selina GitHub Test User',
-    avatar_url: env.GITHUB_MOCK_AVATAR_URL || 'https://avatars.githubusercontent.com/u/9919?v=4',
-  };
-}
-
 async function finalizeGithubSignIn({ req, res, returnOrigin, profile, logMode = 'oauth' }) {
   const user = await upsertUser({
     email: profile.email || `${profile.login}@github.noreply`,
@@ -108,25 +91,6 @@ const requiredEnvVars = ['GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', 'GITHUB_RED
  * Redirect user to GitHub's consent screen
  */
 router.get('/github', async (req, res) => {
-  if (githubMockEnabled()) {
-    const returnOrigin = getOAuthRequestOrigin(req);
-    logger.warn('GitHubAuth', 'GitHub mock auth enabled; issuing local test session', { returnOrigin });
-
-    try {
-      await finalizeGithubSignIn({
-        req,
-        res,
-        returnOrigin,
-        profile: buildMockGithubProfile(),
-        logMode: 'mock',
-      });
-      return;
-    } catch (err) {
-      logger.error('GitHubAuth', 'Mock GitHub sign-in failed', err);
-      return redirectWithError(req, res, 'provider_failed');
-    }
-  }
-
   const missingVars = requiredEnvVars.filter(v => !process.env[v]);
   if (missingVars.length > 0) {
     return handleOAuthConfigError(req, res);

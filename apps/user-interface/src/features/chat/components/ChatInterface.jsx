@@ -1,65 +1,73 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Send, 
-  Brain, 
-  Terminal, 
-  Sparkles, 
-  Code, 
-  Fingerprint, 
-  ChevronRight, 
-  Activity, 
-  Zap, 
-  ShieldCheck, 
-  User,
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Brain,
+  FileImage,
+  FileUp,
+  FolderGit2,
+  Loader2,
   Paperclip,
-  Github,
-  Globe,
-  Cpu,
   Plus,
-  Plug
+  PlugZap,
+  Send,
+  ShieldCheck,
+  TerminalSquare,
+  User,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useStore } from '../../../store/useStore';
 import { Button } from '../../shared/components/Button';
+import { api } from '../../../services/api';
+
+function sanitizeFileName(name) {
+  return String(name || 'upload')
+    .replace(/[^\w.-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    || 'upload';
+}
+
+function parseCliArgs(value) {
+  const matches = String(value || '').match(/"[^"]*"|'[^']*'|\S+/g) || [];
+  return matches.map((part) => part.replace(/^['"]|['"]$/g, ''));
+}
+
+function isTextLikeFile(file) {
+  if (!file) return false;
+  if (file.type?.startsWith('text/')) return true;
+  return /\.(txt|md|json|js|jsx|ts|tsx|css|html|py|rs|go|yml|yaml|env|csv)$/i.test(file.name || '');
+}
 
 function ThoughtSection({ thoughts }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  if (!thoughts || thoughts.length === 0) return null;
+  const [expanded, setExpanded] = useState(false);
+  if (!thoughts?.length) return null;
 
   return (
-    <div className="mb-6 w-full">
+    <div className="mt-3">
       <button
         type="button"
-        aria-label="Toggle Reasoning Trace"
-        aria-expanded={isExpanded}
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="group inline-flex items-center gap-3 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-on-surface-variant shadow-sm transition hover:bg-surface-container-low hover:text-on-surface"
+        onClick={() => setExpanded((value) => !value)}
+        className="inline-flex items-center gap-2 rounded-full border border-outline-variant/60 bg-surface-container-low px-3 py-1.5 text-[11px] font-semibold text-on-surface-variant transition hover:text-on-surface"
       >
-        <div className="relative">
-          <Brain size={14} className="text-primary" />
-        </div>
-        <span className="text-[10px] font-bold uppercase tracking-[0.12em]">Reasoning trace</span>
-        <motion.span animate={{ rotate: isExpanded ? 90 : 0 }} className="opacity-20 group-hover:opacity-60 transition-opacity">
-          <ChevronRight size={14} />
-        </motion.span>
+        <Brain size={14} className="text-primary" />
+        Reasoning
       </button>
 
-      <AnimatePresence>
-        {isExpanded && (
+      <AnimatePresence initial={false}>
+        {expanded && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="mt-3 overflow-hidden rounded-lg border border-outline-variant bg-surface-container-low p-4"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mt-3 overflow-hidden rounded-2xl border border-outline-variant/50 bg-surface-container-low"
           >
-            <div className="space-y-3">
-              {thoughts.map((t, i) => (
-                <div key={i} className="flex gap-3 text-sm font-medium leading-6 text-on-surface-variant">
-                  <div className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/40" />
-                  <span>{typeof t === 'string' ? t : (t.content || t.message)}</span>
+            <div className="space-y-3 p-4 text-sm text-on-surface-variant">
+              {thoughts.map((thought, index) => (
+                <div key={`${index}-${thought?.timestamp || index}`} className="flex gap-3">
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70" />
+                  <span>{typeof thought === 'string' ? thought : thought?.content || thought?.message || ''}</span>
                 </div>
               ))}
             </div>
@@ -70,50 +78,56 @@ function ThoughtSection({ thoughts }) {
   );
 }
 
-function MessageBubble({ content, role, thoughts = [] }) {
+function MessageBubble({ role, content, thoughts = [] }) {
   const isUser = role === 'user';
+  const isSystem = role === 'system';
+  const label = isUser ? 'You' : isSystem ? 'Workspace' : 'Agent';
+  const Icon = isUser ? User : isSystem ? TerminalSquare : ShieldCheck;
 
   return (
-    <div className={`flex max-w-[90%] flex-col gap-2 ${isUser ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
-      <div className={`flex items-center gap-2 px-1 text-[10px] font-bold uppercase tracking-[0.12em] ${isUser ? 'text-primary' : 'text-on-surface-variant'}`}>
-        {isUser ? <User size={12} /> : <ShieldCheck size={12} />}
-        <span>{isUser ? 'Operator' : 'System Agent'}</span>
+    <div className={`flex flex-col gap-2 ${isUser ? 'items-end' : 'items-start'}`}>
+      <div className={`flex items-center gap-2 text-xs font-semibold ${isUser ? 'text-primary' : 'text-on-surface-variant'}`}>
+        <Icon size={14} />
+        <span>{label}</span>
       </div>
 
-      {!isUser && <ThoughtSection thoughts={thoughts} />}
-
       <div
-        className={`relative p-4 text-sm leading-7 shadow-sm transition-all md:p-5 ${
+        className={`max-w-[min(90%,52rem)] rounded-3xl border px-4 py-3 text-sm leading-7 shadow-sm md:px-5 ${
           isUser
-            ? 'rounded-xl rounded-tr-sm bg-primary font-medium text-on-primary'
-            : 'rounded-xl rounded-tl-sm border border-outline-variant bg-surface-container-lowest font-medium text-on-surface'
+            ? 'border-primary/20 bg-primary text-on-primary'
+            : isSystem
+            ? 'border-outline-variant/60 bg-surface-container-low text-on-surface'
+            : 'border-outline-variant/60 bg-surface-container-lowest text-on-surface'
         }`}
       >
         <ReactMarkdown
           components={{
-            p: ({ children }) => <p className="mb-6 last:mb-0 leading-relaxed">{children}</p>,
+            p: ({ children }) => <p className="mb-4 last:mb-0">{children}</p>,
             code({ inline, className, children, ...props }) {
               const match = /language-(\w+)/.exec(className || '');
-              return !inline && match ? (
-                <div className="my-5 overflow-hidden rounded-lg border border-outline-variant bg-[#1e1e1e] shadow-sm">
-                  <div className="flex items-center justify-between border-b border-white/5 bg-white/5 px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <Code size={14} className="text-primary" />
-                      <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/50">{match[1]}</span>
-                    </div>
+              if (!inline && match) {
+                return (
+                  <div className="my-4 overflow-hidden rounded-2xl border border-white/10 bg-[#0B1020]">
+                    <SyntaxHighlighter
+                      style={vscDarkPlus}
+                      language={match[1]}
+                      PreTag="div"
+                      className="!m-0 !bg-transparent !p-4 !text-[12px]"
+                      {...props}
+                    >
+                      {String(children).replace(/\n$/, '')}
+                    </SyntaxHighlighter>
                   </div>
-                  <SyntaxHighlighter
-                    style={vscDarkPlus}
-                    language={match[1]}
-                    PreTag="div"
-                    className="!m-0 !bg-transparent !p-5 !font-mono !text-[13px] !leading-relaxed"
-                    {...props}
-                  >
-                    {String(children).replace(/\n$/, '')}
-                  </SyntaxHighlighter>
-                </div>
-              ) : (
-                <code className={`rounded px-1.5 py-0.5 font-mono text-[0.9em] font-bold ${isUser ? 'bg-white/20 text-white' : 'bg-primary/10 text-primary'}`} {...props}>
+                );
+              }
+
+              return (
+                <code
+                  className={`rounded-md px-1.5 py-0.5 font-mono text-[0.92em] ${
+                    isUser ? 'bg-white/15 text-white' : 'bg-primary/10 text-primary'
+                  }`}
+                  {...props}
+                >
                   {children}
                 </code>
               );
@@ -123,184 +137,479 @@ function MessageBubble({ content, role, thoughts = [] }) {
           {content}
         </ReactMarkdown>
       </div>
+
+      {!isUser && <ThoughtSection thoughts={thoughts} />}
     </div>
   );
 }
 
-export default function ChatInterface({ onSend }) {
-  const [input, setInput] = useState('');
-  const { 
-    messages, 
-    streamingMessage, 
-    isThinking, 
-    agentThoughts, 
-    linkedProjects, 
-    uploadedFiles 
+function EmptyState({ onTemplate }) {
+  const suggestions = [
+    'Clone and scan https://github.com/owner/repo, then summarize the architecture.',
+    'Review the latest staged diff and explain the risk before I approve it.',
+    'Inspect the uploaded files and tell me what the agent should work on next.',
+  ];
+
+  return (
+    <div className="flex h-full items-center justify-center p-6">
+      <div className="max-w-2xl text-center">
+        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-3xl border border-outline-variant/60 bg-surface-container-low">
+          <ShieldCheck size={28} className="text-primary" />
+        </div>
+        <h2 className="text-3xl font-semibold tracking-tight text-on-surface">Simple agent chat, wired to the real workspace</h2>
+        <p className="mt-3 text-base leading-7 text-on-surface-variant">
+          Use the plus button to clone a repository, upload files or images into the live workspace, or register an MCP connector.
+        </p>
+
+        <div className="mt-8 grid gap-3 text-left md:grid-cols-3">
+          {suggestions.map((suggestion) => (
+            <button
+              key={suggestion}
+              type="button"
+              onClick={() => onTemplate(suggestion)}
+              className="rounded-2xl border border-outline-variant/50 bg-surface-container-low px-4 py-4 text-sm text-on-surface transition hover:border-primary/40 hover:bg-surface-container"
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ContextChip({ icon: Icon, label, tone = 'default' }) {
+  const toneClass = tone === 'warning'
+    ? 'border-amber-400/20 bg-amber-400/10 text-amber-300'
+    : 'border-outline-variant/50 bg-surface-container-low text-on-surface-variant';
+
+  return (
+    <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${toneClass}`}>
+      <Icon size={13} />
+      <span>{label}</span>
+    </div>
+  );
+}
+
+export default function ChatInterface({ onSend, onContextChange }) {
+  const {
+    messages,
+    streamingMessage,
+    isThinking,
+    agentThoughts,
+    linkedProjects,
+    uploadedFiles,
+    vfsInstance,
+    addMessage,
+    addProject,
+    addUploadedFile,
+    setVfsTree,
   } = useStore();
+
+  const [input, setInput] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [activeMenu, setActiveMenu] = useState('repo');
+  const [repoUrl, setRepoUrl] = useState('');
+  const [mcpName, setMcpName] = useState('');
+  const [mcpCommand, setMcpCommand] = useState('');
+  const [mcpArgs, setMcpArgs] = useState('');
+  const [busyAction, setBusyAction] = useState(null);
+  const [status, setStatus] = useState(null);
+
   const scrollRef = useRef(null);
+  const textareaRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const imageInputRef = useRef(null);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-      const isAtBottom = scrollHeight - scrollTop <= clientHeight + 400;
-      if (isAtBottom) {
-        scrollRef.current.scrollTo({
-          top: scrollHeight,
-          behavior: 'smooth'
-        });
-      }
+    if (!scrollRef.current) return;
+    const element = scrollRef.current;
+    const isNearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 220;
+    if (isNearBottom) {
+      element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
     }
-  }, [messages, streamingMessage]);
+  }, [messages, streamingMessage, isThinking]);
+
+  useEffect(() => {
+    if (!textareaRef.current) return;
+    textareaRef.current.style.height = '0px';
+    textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 220)}px`;
+  }, [input]);
+
+  const contextChips = useMemo(() => {
+    const chips = [];
+    linkedProjects.forEach((project) => {
+      chips.push({ id: `repo-${project.id}`, icon: FolderGit2, label: project.name });
+    });
+    uploadedFiles.forEach((file) => {
+      chips.push({
+        id: `file-${file.id}`,
+        icon: file.type?.startsWith('image/') ? FileImage : Paperclip,
+        label: file.path ? `${file.name} · ${file.path}` : file.name,
+      });
+    });
+    return chips.slice(-8);
+  }, [linkedProjects, uploadedFiles]);
+
+  const setNotice = (kind, message) => {
+    setStatus({ kind, message });
+  };
 
   const handleSend = () => {
     if (!input.trim() || isThinking) return;
-    onSend(input);
+    onSend(input.trim());
     setInput('');
   };
 
-  return (
-    <div className="flex h-full flex-col overflow-hidden bg-surface relative">
-      {/* Background Decor */}
-      <div className="absolute inset-0 bg-dot-pattern opacity-5 pointer-events-none" />
+  const refreshWorkspaceTree = async () => {
+    if (!vfsInstance) return;
+    try {
+      const tree = await vfsInstance.getTree('.');
+      setVfsTree(tree);
+    } catch {}
+  };
 
-      {/* Header Info */}
-      <div className="flex h-14 items-center justify-between border-b border-outline-variant/30 bg-surface-container-lowest/80 backdrop-blur-md px-6 z-10">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-outline-variant/40 bg-surface-container-low text-[10px] font-black uppercase tracking-[0.15em] text-on-surface-variant">
-            <Cpu size={12} className="text-primary" />
-            Selina v6
-          </div>
-          <div className="h-4 w-px bg-outline-variant/40" />
-          <div className="flex items-center gap-2">
-            <div className={`h-1.5 w-1.5 rounded-full ${isThinking ? 'bg-primary animate-pulse' : 'bg-google-green shadow-[0_0_8px_rgba(52,168,83,0.4)]'}`} />
-            <span className="text-[11px] font-bold text-on-surface-variant uppercase tracking-widest">{isThinking ? 'Thinking' : 'Operational'}</span>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.15em] text-on-surface-variant/40">
-             <Activity size={12} /> {agentThoughts.length} TRACE
-          </div>
-          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.15em] text-on-surface-variant/40">
-             <Fingerprint size={12} /> ENCRYPTED
-          </div>
-        </div>
+  const handleCloneRepo = async () => {
+    if (!repoUrl.trim()) return;
+    setBusyAction('repo');
+
+    try {
+      const response = await api.linkRepo(repoUrl.trim());
+      if (!response?.success) {
+        throw new Error(response?.error || 'Repository clone failed.');
+      }
+
+      addProject(response.project);
+      addMessage({
+        role: 'system',
+        content: `Repository cloned and indexed: \`${response.project.name}\`${response.project.indexedSymbols ? ` with ${response.project.indexedSymbols} indexed symbols` : ''}.`,
+      });
+      setNotice('success', `Cloned and scanned ${response.project.name}.`);
+      setRepoUrl('');
+      setMenuOpen(false);
+      onContextChange?.();
+    } catch (error) {
+      setNotice('error', error.message);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const importFilesIntoWorkspace = async (files, bucket) => {
+    if (!files?.length) return;
+    if (!vfsInstance) {
+      setNotice('error', 'Workspace container is still starting. Try again in a moment.');
+      return;
+    }
+
+    setBusyAction('upload');
+    try {
+      const selectedFiles = Array.from(files);
+      const imported = [];
+
+      for (const [index, file] of selectedFiles.entries()) {
+        const safeName = sanitizeFileName(file.name);
+        const targetPath = `/uploads/${bucket}/${Date.now()}-${index}-${safeName}`;
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        await vfsInstance.createFile(targetPath, bytes);
+
+        imported.push({
+          id: `${Date.now()}-${index}-${safeName}`,
+          name: file.name,
+          size: file.size,
+          path: targetPath,
+          type: file.type || (bucket === 'images' ? 'image/*' : 'application/octet-stream'),
+        });
+
+        if (selectedFiles.length === 1 && isTextLikeFile(file)) {
+          addMessage({
+            role: 'system',
+            content: `Imported \`${file.name}\` into \`${targetPath}\`. The agent can inspect it from the live workspace.`,
+          });
+        }
+      }
+
+      imported.forEach((file) => addUploadedFile(file));
+      await refreshWorkspaceTree();
+      setNotice('success', `Imported ${imported.length} file${imported.length === 1 ? '' : 's'} into /uploads/${bucket}.`);
+      setMenuOpen(false);
+      onContextChange?.();
+    } catch (error) {
+      setNotice('error', error.message);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleRegisterMcp = async () => {
+    if (!mcpName.trim() || !mcpCommand.trim()) return;
+    setBusyAction('mcp');
+
+    try {
+      const response = await api.registerMcpServer(
+        mcpName.trim(),
+        mcpCommand.trim(),
+        parseCliArgs(mcpArgs)
+      );
+
+      if (!response?.success) {
+        throw new Error(response?.error || 'Failed to register MCP server.');
+      }
+
+      addMessage({
+        role: 'system',
+        content: `MCP connector registered: \`${mcpName.trim()}\` using \`${mcpCommand.trim()}\`.`,
+      });
+      setNotice('success', `Registered MCP server ${mcpName.trim()}.`);
+      setMcpName('');
+      setMcpCommand('');
+      setMcpArgs('');
+      setMenuOpen(false);
+      onContextChange?.();
+    } catch (error) {
+      setNotice('error', error.message);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-surface">
+      <div ref={scrollRef} className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-6 md:px-8">
+        {messages.length === 0 && !streamingMessage && !isThinking ? (
+          <EmptyState onTemplate={setInput} />
+        ) : (
+          <>
+            {messages.map((message, index) => (
+              <MessageBubble
+                key={message.id || `message-${index}`}
+                role={message.role}
+                content={message.content}
+                thoughts={message.thoughts || []}
+              />
+            ))}
+
+            {streamingMessage && (
+              <MessageBubble role="assistant" content={streamingMessage} thoughts={agentThoughts} />
+            )}
+
+            {isThinking && !streamingMessage && (
+              <div className="flex items-center gap-3 px-1 text-sm text-on-surface-variant">
+                <Loader2 size={16} className="animate-spin text-primary" />
+                <span>The agent is working.</span>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
-      {/* Messages */}
-      <div ref={scrollRef} className="scrollbar-none flex-1 space-y-8 overflow-y-auto p-6 md:p-10 relative z-0">
-        <AnimatePresence initial={false}>
-          {messages.length === 0 && !streamingMessage && !isThinking && (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex h-full items-center justify-center text-center">
-              <div className="max-w-md">
-                <div className="mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-3xl border border-outline-variant/20 bg-surface-container-lowest text-primary shadow-2xl shadow-primary/10">
-                  <Sparkles size={36} />
-                </div>
-                <h3 className="mb-4 text-3xl font-black tracking-tight text-on-surface">Universal Agent</h3>
-                <p className="text-lg font-medium leading-relaxed text-on-surface-variant/60">
-                  Connect repositories, upload assets, and orchestrate MCP tools with the next-gen Vibe engine.
-                </p>
-                <div className="mt-10 grid grid-cols-2 gap-4">
-                  <div className="p-4 rounded-2xl border border-outline-variant/20 bg-surface-container-low/40 text-left hover:border-primary/20 transition-all cursor-pointer">
-                    <Github size={16} className="mb-2 text-primary" />
-                    <p className="text-xs font-bold mb-1">Index Repository</p>
-                    <p className="text-[10px] text-on-surface-variant/50 font-medium">Link GitHub for deep AST analysis.</p>
-                  </div>
-                  <div className="p-4 rounded-2xl border border-outline-variant/20 bg-surface-container-low/40 text-left hover:border-primary/20 transition-all cursor-pointer">
-                    <Plug size={16} className="mb-2 text-google-yellow" />
-                    <p className="text-xs font-bold mb-1">MCP Tools</p>
-                    <p className="text-[10px] text-on-surface-variant/50 font-medium">Connect external services & APIs.</p>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
+      <div className="border-t border-outline-variant/50 bg-surface-container-low/70 px-4 py-4 backdrop-blur md:px-6">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-3 flex flex-wrap gap-2">
+            {contextChips.map((chip) => (
+              <ContextChip key={chip.id} icon={chip.icon} label={chip.label} />
+            ))}
+            {!vfsInstance && (
+              <ContextChip icon={Loader2} label="Workspace booting" tone="warning" />
+            )}
+          </div>
 
-          {messages.map((m, i) => (
-            <motion.div key={m.id || `msg-${i}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}>
-              <MessageBubble content={m.content} role={m.role} thoughts={m.thoughts || []} />
-            </motion.div>
-          ))}
-
-          {streamingMessage && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <MessageBubble content={streamingMessage} role="assistant" thoughts={agentThoughts} />
-            </motion.div>
-          )}
-
-          {isThinking && !streamingMessage && (
-            <div className="flex items-center gap-6 py-6 pl-4">
-               <div className="flex gap-2">
-                 {[0, 1, 2].map((i) => (
-                   <motion.div key={i} animate={{ opacity: [0.2, 1, 0.2], scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.2 }} className="h-2 w-2 rounded-full bg-primary" />
-                 ))}
-               </div>
-               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Neural processing active</span>
+          {status?.message && (
+            <div
+              className={`mb-3 rounded-2xl border px-4 py-3 text-sm ${
+                status.kind === 'error'
+                  ? 'border-red-400/20 bg-red-400/10 text-red-200'
+                  : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200'
+              }`}
+            >
+              {status.message}
             </div>
           )}
-        </AnimatePresence>
-      </div>
 
-      {/* Input Area */}
-      <div className="p-6 bg-gradient-to-t from-surface via-surface/95 to-transparent z-10">
-        <div className="mx-auto max-w-5xl">
-          {/* Context Chips */}
-          <div className="flex flex-wrap gap-2 mb-4">
-            {linkedProjects.map(p => (
-              <div key={p.id} className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-container-low border border-outline-variant/30 text-[10px] font-bold text-on-surface-variant">
-                <Github size={12} className="text-primary" />
-                {p.name}
-              </div>
-            ))}
-            {uploadedFiles.map(f => (
-              <div key={f.id} className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-container-low border border-outline-variant/30 text-[10px] font-bold text-on-surface-variant">
-                <Paperclip size={12} className="text-google-yellow" />
-                {f.name}
-              </div>
-            ))}
-          </div>
+          <div className="relative rounded-3xl border border-outline-variant/60 bg-surface-container-lowest shadow-sm">
+            <div className="flex items-end gap-2 px-3 py-3">
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen((value) => !value)}
+                  className="flex h-11 w-11 items-center justify-center rounded-2xl border border-outline-variant/60 bg-surface-container-low text-on-surface transition hover:border-primary/40 hover:text-primary"
+                  aria-label="Add repo, file, image, or MCP connector"
+                >
+                  <Plus size={18} />
+                </button>
 
-          <div className="relative group shadow-2xl shadow-primary/5">
-            <textarea
-              rows="1"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              disabled={isThinking}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              placeholder="Ask anything or orchestrate tools..."
-              className="min-h-[64px] w-full resize-none rounded-2xl border border-outline-variant/40 bg-surface-container-low/80 backdrop-blur-xl py-5 pl-6 pr-24 text-base font-medium text-on-surface transition-all placeholder:text-on-surface-variant/40 focus:border-primary/40 focus:bg-surface-container-lowest focus:outline-none shadow-sm"
-            />
-            
-            <div className="absolute bottom-3 right-3 flex items-center gap-2">
-               <button type="button" aria-label="Add Connector or Context" className="p-2.5 text-on-surface-variant/40 hover:text-primary hover:bg-primary/10 rounded-xl transition-all" title="Add Connector or Context">
-                <Plus size={22} />
-              </button>
-              <Button 
-                variant="filled" 
-                size="lg" 
-                disabled={isThinking || !input.trim()} 
-                onClick={handleSend} 
-                className="!h-10 !w-10 !rounded-xl !p-0 border-none shadow-xl shadow-primary/20"
+                <AnimatePresence>
+                  {menuOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                      className="absolute bottom-14 left-0 z-20 w-[min(28rem,calc(100vw-2rem))] rounded-3xl border border-outline-variant/60 bg-surface-container-lowest p-4 shadow-2xl"
+                    >
+                      <div className="mb-3 flex flex-wrap gap-2">
+                        {[
+                          { id: 'repo', label: 'Clone Repo', icon: FolderGit2 },
+                          { id: 'files', label: 'Upload Files', icon: FileUp },
+                          { id: 'images', label: 'Upload Images', icon: FileImage },
+                          { id: 'mcp', label: 'Add MCP', icon: PlugZap },
+                        ].map(({ id, label, icon: Icon }) => (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => setActiveMenu(id)}
+                            className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition ${
+                              activeMenu === id
+                                ? 'border-primary/30 bg-primary/10 text-primary'
+                                : 'border-outline-variant/50 bg-surface-container-low text-on-surface-variant hover:text-on-surface'
+                            }`}
+                          >
+                            <Icon size={14} />
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {activeMenu === 'repo' && (
+                        <div className="space-y-3">
+                          <p className="text-sm text-on-surface-variant">Clone a real repository into the backend mirror and index it for the agent.</p>
+                          <input
+                            type="url"
+                            value={repoUrl}
+                            onChange={(event) => setRepoUrl(event.target.value)}
+                            placeholder="https://github.com/owner/repo"
+                            className="h-11 w-full rounded-2xl border border-outline-variant/60 bg-surface-container-low px-4 text-sm text-on-surface outline-none transition focus:border-primary/40"
+                          />
+                          <Button
+                            variant="filled"
+                            onClick={handleCloneRepo}
+                            disabled={busyAction === 'repo' || !repoUrl.trim()}
+                            className="!rounded-2xl"
+                          >
+                            {busyAction === 'repo' ? <Loader2 size={16} className="animate-spin" /> : <FolderGit2 size={16} />}
+                            <span>Clone and Scan</span>
+                          </Button>
+                        </div>
+                      )}
+
+                      {activeMenu === 'files' && (
+                        <div className="space-y-3">
+                          <p className="text-sm text-on-surface-variant">Import documents, source files, or datasets into the live workspace at <code>/uploads/files</code>.</p>
+                          <Button
+                            variant="tonal"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={busyAction === 'upload'}
+                            className="!rounded-2xl"
+                          >
+                            {busyAction === 'upload' ? <Loader2 size={16} className="animate-spin" /> : <FileUp size={16} />}
+                            <span>Select Files</span>
+                          </Button>
+                        </div>
+                      )}
+
+                      {activeMenu === 'images' && (
+                        <div className="space-y-3">
+                          <p className="text-sm text-on-surface-variant">Import screenshots or reference images into the live workspace at <code>/uploads/images</code>.</p>
+                          <Button
+                            variant="tonal"
+                            onClick={() => imageInputRef.current?.click()}
+                            disabled={busyAction === 'upload'}
+                            className="!rounded-2xl"
+                          >
+                            {busyAction === 'upload' ? <Loader2 size={16} className="animate-spin" /> : <FileImage size={16} />}
+                            <span>Select Images</span>
+                          </Button>
+                        </div>
+                      )}
+
+                      {activeMenu === 'mcp' && (
+                        <div className="space-y-3">
+                          <p className="text-sm text-on-surface-variant">Register an MCP server with the backend so it becomes part of the live connector inventory.</p>
+                          <input
+                            type="text"
+                            value={mcpName}
+                            onChange={(event) => setMcpName(event.target.value)}
+                            placeholder="Server name"
+                            className="h-11 w-full rounded-2xl border border-outline-variant/60 bg-surface-container-low px-4 text-sm text-on-surface outline-none transition focus:border-primary/40"
+                          />
+                          <input
+                            type="text"
+                            value={mcpCommand}
+                            onChange={(event) => setMcpCommand(event.target.value)}
+                            placeholder="Command"
+                            className="h-11 w-full rounded-2xl border border-outline-variant/60 bg-surface-container-low px-4 text-sm text-on-surface outline-none transition focus:border-primary/40"
+                          />
+                          <input
+                            type="text"
+                            value={mcpArgs}
+                            onChange={(event) => setMcpArgs(event.target.value)}
+                            placeholder='Arguments, for example: --stdio --port 3002'
+                            className="h-11 w-full rounded-2xl border border-outline-variant/60 bg-surface-container-low px-4 text-sm text-on-surface outline-none transition focus:border-primary/40"
+                          />
+                          <Button
+                            variant="filled"
+                            onClick={handleRegisterMcp}
+                            disabled={busyAction === 'mcp' || !mcpName.trim() || !mcpCommand.trim()}
+                            className="!rounded-2xl"
+                          >
+                            {busyAction === 'mcp' ? <Loader2 size={16} className="animate-spin" /> : <PlugZap size={16} />}
+                            <span>Register MCP</span>
+                          </Button>
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              <textarea
+                ref={textareaRef}
+                rows={1}
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    handleSend();
+                  }
+                }}
+                disabled={isThinking}
+                placeholder="Ask the agent to inspect code, explain a diff, or work on the linked repo..."
+                className="max-h-[220px] min-h-[44px] flex-1 resize-none bg-transparent px-3 py-2 text-sm text-on-surface outline-none placeholder:text-on-surface-variant/70"
+              />
+
+              <Button
+                variant="filled"
+                size="lg"
+                disabled={isThinking || !input.trim()}
+                onClick={handleSend}
+                className="!h-11 !w-11 !rounded-2xl !p-0"
               >
-                <Send size={22} />
+                <Send size={18} />
               </Button>
             </div>
           </div>
-          
-          <div className="mt-4 flex items-center justify-between px-2">
-            <div className="flex items-center gap-4 text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant/40">
-              <span className="flex items-center gap-1.5"><ShieldCheck size={12} className="text-google-green" /> End-to-End Secure</span>
-              <span className="flex items-center gap-1.5"><Globe size={12} /> Local-First Execution</span>
-            </div>
-            <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant/30">
-              <Zap size={10} /> BUS: 4.2 GT/s
-            </div>
-          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(event) => {
+              importFilesIntoWorkspace(event.target.files, 'files');
+              event.target.value = '';
+            }}
+          />
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(event) => {
+              importFilesIntoWorkspace(event.target.files, 'images');
+              event.target.value = '';
+            }}
+          />
         </div>
       </div>
     </div>

@@ -76,7 +76,7 @@ export const backgroundPatterns = {
  */
 export const loadingVariants = {
   power: {
-    label: 'Power Loading',
+    label: 'Loading',
     description: 'Sequential dots with power aura effect',
     animation: 'power',
   },
@@ -92,7 +92,7 @@ export const loadingVariants = {
   },
   typing: {
     label: 'Typing',
-    description: 'Simulated typing effect with cursor',
+    description: 'Typing effect with cursor',
     animation: 'typing',
   },
 };

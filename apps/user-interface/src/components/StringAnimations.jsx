@@ -234,7 +234,7 @@ export function PowerString({
  * Shimmer text animation
  * Gradient shimmer across text
  */
-export function ShimmerText({ text = 'Power Loading...', className = '' }) {
+export function ShimmerText({ text = 'Loading...', className = '' }) {
   return (
     <motion.div
       className={className}
@@ -322,7 +322,7 @@ export function BounceText({ text = 'Selina', className = '' }) {
  * Gradient pulse text
  * Color pulses through the text
  */
-export function GradientPulseText({ text = 'Power Loading', className = '' }) {
+export function GradientPulseText({ text = 'Loading', className = '' }) {
   return (
     <motion.div
       className={className}
@@ -358,14 +358,14 @@ export function LoadingStatus({
   const renderVariant = () => {
     switch (variant) {
       case 'typing':
-        return <TypingText text="Power String Loading..." />;
+        return <TypingText text="Loading..." />;
       case 'pulse':
         return <PulsingWords words={['Loading', 'Initializing', 'Preparing']} />;
       case 'wave':
         return <WaveText text="Loading..." className="text-base font-semibold" />;
       case 'power':
       default:
-        return <PowerString baseText="Power Loading" />;
+        return <PowerString baseText="Loading" />;
     }
   };
 

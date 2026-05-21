@@ -253,7 +253,7 @@ function LandingNav({ authenticated, onPrimaryCta }) {
   );
 }
 
-function HeroTerminalPreview({ onPrimaryCta, onSecondaryCta, authenticated, statusPill, diagnosticsText }) {
+function HeroTerminalPreview({ onPrimaryCta, onSecondaryCta, authenticated, statusPill, diagnosticsText, skillInfo }) {
   return (
     <section id="platform" className="relative overflow-hidden px-6 pb-24 pt-16 md:px-10 md:pb-32 md:pt-24">
       <div
@@ -341,29 +341,48 @@ function HeroTerminalPreview({ onPrimaryCta, onSecondaryCta, authenticated, stat
               </div>
             </div>
 
-            <div className="relative overflow-hidden px-5 py-6 font-mono text-[13px] leading-7 text-on-surface-variant">
+            <div className="relative overflow-hidden px-5 py-6">
               <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-primary/10 to-transparent" />
-              <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-28 bg-gradient-to-t from-surface-container-lowest via-surface-container-lowest/90 to-transparent" />
               <div className="pointer-events-none absolute inset-x-0 top-[-20%] h-28 bg-gradient-to-b from-transparent via-primary/10 to-transparent opacity-70 blur-md" />
 
-              <div className="relative space-y-1">
-                <div><span className="text-primary">$</span> boot orchestrator --mode governed</div>
-                <div><span className="text-primary">[ok]</span> docker sandbox boundary attached</div>
-                <div><span className="text-primary">[ok]</span> staged VFS mounted for review</div>
-                <div><span className="text-primary">[ok]</span> MCP tool registry synchronized</div>
-                <div><span className="text-google-blue">selina</span> routing request through deterministic plan graph...</div>
-                <div><span className="text-google-blue">selina</span> evaluating runtime policy and repository context...</div>
-                <div className="rounded-2xl border border-outline-variant/40 bg-surface px-4 py-4">
-                  <div className="text-google-red">- const token = localStorage.getItem('auth');</div>
-                  <div className="text-primary">+ const token = await secureStorage.retrieve('auth');</div>
-                </div>
-                <div className="flex items-center justify-between gap-4 pt-2">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-on-surface-variant/80">
-                    Review checkpoint / operator action required
+              <div className="relative space-y-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-[11px] font-black uppercase tracking-[0.16em] text-on-surface-variant/75">
+                      Live workspace signals
+                    </div>
+                    <div className="mt-1 text-sm font-medium text-on-surface-variant">
+                      This panel reflects backend reachability and current runtime configuration instead of seeded sample output.
+                    </div>
                   </div>
-                  <Button variant="tonal" size="sm" className="rounded-full px-4">
-                    Approve &amp; Execute
+                  <Button variant="tonal" size="sm" className="rounded-full px-4" onClick={onPrimaryCta}>
+                    {authenticated ? 'Open Dashboard' : 'Sign In'}
                   </Button>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[
+                    { label: 'Backend', value: statusPill.label },
+                    { label: 'Runtime', value: diagnosticsText },
+                    { label: 'Capabilities', value: `${skillInfo.count || 0} routed skills` },
+                    { label: 'Access', value: authenticated ? 'authenticated session available' : 'sign-in required' },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-2xl border border-outline-variant/40 bg-surface px-4 py-4">
+                      <div className="text-[10px] font-black uppercase tracking-[0.16em] text-on-surface-variant/70">{item.label}</div>
+                      <div className="mt-2 text-sm font-black text-on-surface">{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-2xl border border-outline-variant/40 bg-surface px-4 py-4">
+                  <div className="text-[10px] font-black uppercase tracking-[0.16em] text-on-surface-variant/70">Top skill routes</div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {skillInfo.labels.map((label) => (
+                      <span key={label} className="rounded-full border border-outline-variant/40 bg-surface-container-low px-3 py-1 text-[11px] font-black uppercase tracking-[0.12em] text-on-surface-variant">
+                        {label}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -791,6 +810,7 @@ export default function LandingPage() {
           onSecondaryCta={handleArchitectureCta}
           statusPill={statusPill}
           diagnosticsText={diagnosticsText}
+          skillInfo={skillInfo}
         />
         <TrustStrip skillInfo={skillInfo} />
         <div id="architecture">

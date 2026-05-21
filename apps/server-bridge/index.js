@@ -582,8 +582,8 @@ app.get('/api/v6/repos/list', requireAuth, handleListRepos);
 app.get('/api/v6/mcp/tools', requireAuth, handleListTools);
 app.get('/api/v6/mcp/servers', requireAuth, handleListServers);
 app.get('/api/v6/mcp/diagnostics', requireAuth, handleMcpDiagnostics);
-
 app.post('/api/v6/mcp/call', requireAuth, handleCallTool);
+app.post('/api/v6/mcp/register', requireAuth, handleRegisterServer);
 
 // ── Chat History (V6) ─────────────────────────────────────────────────────────
 import { chatRouter } from './orchestrator/chat_routes.js';

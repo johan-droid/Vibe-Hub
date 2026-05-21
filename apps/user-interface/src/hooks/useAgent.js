@@ -3,6 +3,7 @@ import { SwarmSocket } from '../services/socket.js';
 import { api } from '../services/api';
 import { VFSContainer } from '../vfs/container.js';
 import { useStore } from '../store/useStore';
+import { initializeVfsSocket } from '../store/useVfsStore';
 import { getAgentLoop } from '../services/AgentLoop.js';
 
 /**
@@ -16,6 +17,7 @@ export function useAgent() {
     addMessage, addThought, setThinking,
     setDiffData, setVfsTree, setStreamingMessage,
     setVfsStatus,
+    setVfsInstance,
     setAgentLoopStatus,
     addOrchestratorEvent, setPendingApproval,
     user,
@@ -31,6 +33,7 @@ export function useAgent() {
     const vfs = new VFSContainer();
     vfsRef.current = vfs;
     setVfsStatus?.('booting');
+    initializeVfsSocket(user?.id || null);
 
     // Initialize agent loop with progress callbacks
     getAgentLoop(vfs, 
@@ -98,6 +101,7 @@ export function useAgent() {
     vfs.boot().then(() => {
       if (cancelled) return;
 
+      setVfsInstance?.(vfs);
       vfs.getTree('.').then(tree => setVfsTree(tree));
 
       const socket = new SwarmSocket(token);

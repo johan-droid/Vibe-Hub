@@ -38,7 +38,11 @@ function gitTrackedFiles() {
     throw new Error(`git ls-files failed: ${result.stderr || result.status}`);
   }
 
-  return result.stdout.split('\0').filter(Boolean).map(file => file.replace(/\\/g, '/'));
+  return result.stdout
+    .split('\0')
+    .filter(Boolean)
+    .map(file => file.replace(/\\/g, '/'))
+    .filter(file => fs.existsSync(path.join(ROOT, file)));
 }
 
 function addFinding(findings, fields) {

@@ -46,27 +46,11 @@ export class SecuritySandboxService {
       throw new Error('Security session expired or token missing.');
     }
 
-    // Simulate tool output for demonstration
-    if (command.includes('semgrep')) {
-      return {
-        stdout: JSON.stringify([
-          { check_id: 'js.lang.security.audit.sqli', path: 'db.js', line: 42, extra: { message: 'Potential SQL injection point' } }
-        ]),
-        stderr: ''
-      };
-    }
-    
-    if (command.includes('npm audit')) {
-      return {
-        stdout: 'Found 3 vulnerabilities (2 moderate, 1 high)',
-        stderr: ''
-      };
-    }
-
-    return { stdout: `Command executed: ${command}`, stderr: '' };
+    throw new Error(`Security sandbox execution is not implemented for command: ${command}`);
   }
 
   async destroy(id) {
+    this.#ephemeralTokens.delete(id);
     this.activeSandboxes.delete(id);
     return { status: 'destroyed' };
   }

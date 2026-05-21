@@ -1,4 +1,3 @@
-import DOMPurify from 'dompurify';
 import React, { useEffect, useRef, useState, useCallback, memo } from 'react';
 import { Terminal as TermIcon, Trash2, ChevronDown, Circle, Play, Zap, Cpu, Activity, Shield, Globe, HardDrive, RefreshCw } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
@@ -29,7 +28,7 @@ function parseAnsi(raw) {
     } else if (part.startsWith('\x1b[')) {
       continue;
     } else if (part) {
-      segments.push({ text: DOMPurify.sanitize(part), className: currentClass });
+      segments.push({ text: part, className: currentClass });
     }
   }
   return segments;
@@ -50,7 +49,7 @@ const LogLine = memo(function LogLine({ line, index }) {
   const segments = parseAnsi(line);
   const hasAnsi = segments.some((s) => s.className !== 'text-on-surface-variant/60');
   const lineClass = hasAnsi ? '' : getLineClass(line);
-  const safeLine = DOMPurify.sanitize(line);
+  const safeLine = line;
 
   return (
     <div className={`flex gap-6 py-1 px-4 group hover:bg-black/[0.02] transition-colors rounded-lg mx-2 ${lineClass}`}>
