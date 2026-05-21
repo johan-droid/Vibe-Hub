@@ -11,7 +11,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
-        value: 20.19.6
+        value: 22
       - key: NODE_ENV
         value: production
       - key: PORT
@@ -86,6 +86,16 @@ services:
         generateValue: true
       - key: SELINA_ACTION_GRANT_TTL_MS
         value: 120000
+      - key: SELINA_REQUIRE_PROMPT_SECRETS
+        value: true
+      - key: SELINA_PROMPT_HARDENING_DIRECTIVE
+        sync: false
+      - key: SELINA_MEMORY_ENCRYPTION_KEY
+        sync: false
+      - key: SELINA_MEMORY_RETENTION_MS
+        value: 86400000
+      - key: SELINA_MEMORY_COMPLETION_MAX_CHARS
+        value: 4000
       - key: SELINA_TOOL_APPROVAL_TIMEOUT_MS
         value: 120000
       - key: SELINA_MAX_SURGICAL_DELTA_CHARS
@@ -98,6 +108,18 @@ services:
         value: false
       - key: TRUST_PROXY_HOPS
         value: 1
+      - key: EDGE_PROTECTION_REQUIRED
+        value: true
+      - key: EDGE_PROVIDER
+        value: cloudflare
+      - key: EDGE_CACHE_SECONDS
+        value: 300
+      - key: ALLOW_PUBLIC_CONTROL_PLANE
+        value: false
+      - key: CONTROL_PLANE_ALLOWED_CIDRS
+        sync: false
+      - key: CONTROL_PLANE_INTERNAL_TOKEN
+        sync: false
       - key: SELINA_ROLLOUT_DIR
         value: /tmp/selina-rollouts
       - key: SELINA_SANDBOX_TIMEOUT_MS
@@ -222,11 +244,11 @@ services:
     region: oregon
     plan: free
     rootDir: apps/user-interface
-    buildCommand: npm install --legacy-peer-deps --no-audit --no-fund && npm run build
+    buildCommand: npm ci --legacy-peer-deps --no-audit --no-fund && npm run build
     staticPublishPath: dist
     envVars:
       - key: NODE_VERSION
-        value: 20.19.6
+        value: 22
       - key: VITE_API_BASE
         value: https://vibe-hub-bridge.onrender.com
       - key: VITE_WS_BASE

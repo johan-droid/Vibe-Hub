@@ -3,7 +3,8 @@ import path from 'path';
 import { v4 as uuid } from 'uuid';
 import { embeddingsService } from './embeddings.js';
 import { ASTParser } from './ast-graph.js';
-import pool from '../db.js';
+import { withTenantContext } from '../db.js';
+import { activateSemanticIndexVersion } from './semantic-index-registry.js';
 
 const targetDir = path.resolve(process.cwd(), '..', '..', 'apps');
 
@@ -30,6 +31,12 @@ function determineContextType(filePath) {
 }
 
 async function indexRepo() {
+  const projectName = process.env.SEMANTIC_INDEX_PROJECT_NAME || 'default';
+  const namespace = process.env.SEMANTIC_INDEX_NAMESPACE || 'default';
+  const tenantId = process.env.SEMANTIC_INDEX_TENANT_ID || 'shared';
+  const indexVersion = process.env.SEMANTIC_INDEX_VERSION || 'live';
+  const activateOnComplete = process.env.SEMANTIC_INDEX_ACTIVATE_ON_COMPLETE !== 'false';
+
   console.log('[Indexer] Starting full-repo traversal...');
   const files = await walk(targetDir);
   console.log(`[Indexer] Found ${files.length} .js/.jsx files.`);
@@ -56,15 +63,34 @@ async function indexRepo() {
         console.log(`[Indexer] Generating embedding for ${node.name} (${node.type})`);
         const vector = await embeddingsService.getEmbedding(nodeContent);
 
-        await pool.query(
-          `INSERT INTO semantic_embeddings (id, project_name, file_path, node_id, node_name, node_type, context_type, content, embedding)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-          [uuid(), 'default', file, node.id, node.name, node.type, contextType, nodeContent, `[${vector.join(',')}]`]
-        );
+        await withTenantContext(tenantId, client => client.query(
+          `INSERT INTO semantic_embeddings (
+             id, project_name, tenant_id, namespace, index_version,
+             file_path, node_id, node_name, node_type, context_type, content, embedding
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+          [
+            uuid(),
+            projectName,
+            tenantId,
+            namespace,
+            indexVersion,
+            file,
+            node.id,
+            node.name,
+            node.type,
+            contextType,
+            nodeContent,
+            `[${vector.join(',')}]`,
+          ]
+        ));
       } catch (err) {
         console.error(`[Indexer] Failed to process node ${node.name} in ${file}:`, err.message);
       }
     }
+  }
+  if (activateOnComplete) {
+    await activateSemanticIndexVersion({ projectName, tenantId, namespace, indexVersion });
   }
   console.log('[Indexer] Full-repo traversal complete.');
   process.exit(0);

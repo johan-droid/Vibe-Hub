@@ -1,0 +1,11 @@
+# Use this workspace to collaborate
+workspace:
+  id: 79c93fb4-3e3e-4c6c-86b8-a1d62fc8f17e
+
+localResources:
+  collections:
+    - ..\docs\postman\Vibe-Hub-Integration.postman_collection.json
+
+cloudResources:
+  collections:
+    ..\postman\collections\My Collection: 50188862-02b6c127-ac0a-454a-a52d-c698214dd73d

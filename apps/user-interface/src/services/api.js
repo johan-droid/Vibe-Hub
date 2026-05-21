@@ -105,7 +105,7 @@ class ApiClient {
   /**
    * Attempt to refresh the access token using refresh token
    */
-  async refreshAccessToken() {
+  async refreshAccessToken({ suppressLogout = false } = {}) {
     if (this.refreshPromise) return this.refreshPromise;
 
     this.refreshPromise = (async () => {
@@ -118,7 +118,7 @@ class ApiClient {
         });
 
         if (!res.ok) {
-          throw new Error('Refresh failed');
+          throw new ApiError(await readError(res), res.status);
         }
 
         const data = await res.json();
@@ -127,8 +127,15 @@ class ApiClient {
         }
         throw new Error('Invalid refresh response');
       } catch (err) {
-        this.clearAllTokens();
-        useStore.getState().logout();
+        const shouldLogout = !suppressLogout && (
+          (err instanceof ApiError && err.status === 401)
+          || err?.message === 'Invalid refresh response'
+        );
+
+        if (shouldLogout) {
+          this.clearAllTokens();
+          useStore.getState().logout();
+        }
         throw err;
       } finally {
         this.refreshPromise = null;
@@ -282,8 +289,45 @@ class ApiClient {
   }
 
   /** Probe current auth state without causing an expected 401 on app startup */
-  async authStatus() {
-    return this.get('/api/auth/status', { skipRefresh: true });
+  async authStatus({ attemptRefresh = false } = {}) {
+    const fetchStatus = async () => {
+      const res = await fetch(`${API_BASE}/api/auth/status`, {
+        headers: await this.requestHeaders(),
+        credentials: 'include',
+      });
+
+      if (res.status === 401) {
+        return {
+          success: true,
+          authenticated: false,
+          user: null,
+          sessionId: null,
+        };
+      }
+
+      if (!res.ok) {
+        throw new ApiError(await readError(res), res.status);
+      }
+
+      return res.json();
+    };
+
+    const status = await fetchStatus();
+    if (status.authenticated || !attemptRefresh) {
+      return status;
+    }
+
+    try {
+      await this.refreshAccessToken({ suppressLogout: true });
+    } catch {
+      return status;
+    }
+
+    return fetchStatus();
+  }
+
+  async resolveSession() {
+    return this.authStatus({ attemptRefresh: true });
   }
 
   /** Exchange opaque OAuth callback code for HTTP-only cookies on the API host */
@@ -338,6 +382,10 @@ class ApiClient {
 
   async mcpDiagnostics() {
     return this.get('/api/v6/mcp/diagnostics');
+  }
+
+  async registerMcpServer(name, command, args = []) {
+    return this.post('/api/v6/mcp/register', { name, command, args });
   }
 
   async callMcpTool(toolId, args) {

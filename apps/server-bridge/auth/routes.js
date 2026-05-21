@@ -61,7 +61,8 @@ router.post('/handoff', async (req, res) => {
     setAuthCookies(res, {
       accessToken: record.session.accessToken,
       refreshToken: record.session.refreshToken,
-      sessionToken: record.session.sessionToken
+      sessionToken: record.session.sessionToken,
+      deviceId: record.session.deviceId,
     });
 
     res.set('Cache-Control', 'no-store');

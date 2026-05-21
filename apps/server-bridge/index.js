@@ -40,6 +40,7 @@ import { configureCache } from './utils/cache.js';
 import semanticGraphBuilder from './memory/loader.js';
 import { createCodeQueue } from './orchestrator/job-queue.js';
 import { validateEnvironment } from './utils/env.js';
+import { assertEdgeConfiguration, edgeCacheHeaders, requireInternalControlPlane } from './utils/edge-security.js';
 import { SELINA_BRAND } from './config/brand.js';
 
 import { initDB }                from './db.js';
@@ -72,9 +73,34 @@ import { createActionGrant, hashToolParams, verifyActionGrant } from './auth/act
 import { insertAgentActionGrant } from './db.js';
 import { applyFuzzyPatchFile, PatchFileError } from './orchestrator/patch-file.js';
 import { integrationRouter } from './integration/router.js';
+import {
+  assertSessionStillValid,
+  registerSessionCleanup,
+  unregisterSessionCleanup,
+} from './auth/session.js';
+import {
+  acquireRun,
+  getConcurrencyRetryAfterSeconds,
+  getRunConcurrencyLimit,
+  releaseRun,
+} from './auth/concurrency-governor.js';
+import { filterModelOutput } from './orchestrator/output-filter.js';
+import {
+  ToolExecutionPolicyError,
+  recordToolExecutionOutcome,
+  validateToolInvocationPolicy,
+} from './orchestrator/tool-execution-policy.js';
+import {
+  DailyTokenQuotaExceededError,
+  assertUserNotSuspended,
+  recordBillingEvent,
+} from './orchestrator/cost-controls.js';
+import { loadPromptSecrets } from './orchestrator/prompt-secrets.js';
 // ─── Express + HTTP server ────────────────────────────────────────────────────
 
 validateEnvironment();
+assertEdgeConfiguration();
+await loadPromptSecrets();
 
 const app    = express();
 const server = createServer(app);
@@ -87,6 +113,7 @@ const parseLimit = (value, fallback) => {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
+const trustProxyHops = parseLimit(process.env.TRUST_PROXY_HOPS, process.env.RENDER || isProd ? 1 : 0);
 
 const SECRET_FIELD_PATTERN = /(api[_-]?key|secret|token|password|credential|authorization|cookie|session)/i;
 
@@ -108,6 +135,52 @@ function inferToolSource(toolName) {
   if (toolName.startsWith('github_')) return 'github';
   if (toolName.startsWith('browser_')) return 'browser';
   return 'builtin';
+}
+
+function protectOutboundPayload(payload, session, auth) {
+  if (!payload || typeof payload !== 'object') return payload;
+
+  const contentField = {
+    thought: 'message',
+    stream_chunk: 'delta',
+    result: 'content',
+  }[payload.type];
+
+  if (!contentField || typeof payload[contentField] !== 'string') {
+    return payload;
+  }
+
+  const verdict = filterModelOutput(payload[contentField], {
+    tenantFingerprints: [
+      ...(session.otherTenantFingerprints || []),
+      ...(auth.user?.blockedTenantFingerprints || []),
+      ...(auth.user?.otherTenantFingerprints || []),
+    ],
+  });
+  if (!verdict.flagged) return payload;
+
+  session.securityFlags = {
+    ...(session.securityFlags || {}),
+    promptLeakageDetected: verdict.category === 'prompt_leakage' || session.securityFlags?.promptLeakageDetected || false,
+    outputDlpDetected: verdict.category === 'dlp' || session.securityFlags?.outputDlpDetected || false,
+    outputFilterReason: verdict.reason,
+    outputFilterCategory: verdict.category,
+    outputFilteredAt: new Date().toISOString(),
+  };
+
+  detailedLogger.warn('OutputGuard', 'Redacted model output before returning it to the user.', {
+    sessionId: auth.sessionId,
+    userId: auth.user.id,
+    type: payload.type,
+    reason: verdict.reason,
+    category: verdict.category,
+  });
+
+  return {
+    ...payload,
+    [contentField]: verdict.safeText,
+    securityFiltered: true,
+  };
 }
 
 configureCache({ redis: redisClients?.command || null });
@@ -149,7 +222,6 @@ app.use(helmet({
 }));
 
 // Rate limiting - Prevent abuse
-const trustProxyHops = parseLimit(process.env.TRUST_PROXY_HOPS, process.env.RENDER || isProd ? 1 : 0);
 if (trustProxyHops > 0) {
   app.set('trust proxy', trustProxyHops);
 }
@@ -221,15 +293,11 @@ const wsActiveByIp = new Map();
 const wsActiveByUser = new Map();
 
 function getRequestIp(req) {
-  return String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown')
-    .split(',')[0]
-    .trim();
+  return String(req.ip || req.socket?.remoteAddress || 'unknown').trim();
 }
 
 function getSocketIp(socket) {
-  return String(socket.handshake.headers['x-forwarded-for'] || socket.handshake.address || 'unknown')
-    .split(',')[0]
-    .trim();
+  return String(socket.handshake.address || socket.conn?.remoteAddress || 'unknown').trim();
 }
 
 function registerWsConnection(ip) {
@@ -278,11 +346,25 @@ function releaseWsUser(userId) {
 
 // ── Standard Middleware ───────────────────────────────────────────────────────
 
-// CORS: Allow all origins in dev for multiple ports, restrict in production
-const corsOrigin = process.env.NODE_ENV === 'production' 
-  ? (process.env.UI_ORIGIN || true) 
-  : true;
-app.use(cors({ origin: process.env.UI_ORIGIN || 'http://localhost:5173', credentials: true }));
+function configuredCorsOrigins() {
+  const origins = [
+    process.env.UI_ORIGIN,
+    process.env.UI_ALLOWED_ORIGINS,
+    process.env.FRONTEND_ORIGINS,
+  ]
+    .filter(Boolean)
+    .flatMap(value => String(value).split(','))
+    .map(value => value.trim())
+    .filter(Boolean);
+
+  return [...new Set(origins)];
+}
+
+const allowedCorsOrigins = configuredCorsOrigins();
+const corsOrigin = isProd
+  ? (allowedCorsOrigins.length ? allowedCorsOrigins : false)
+  : (allowedCorsOrigins.length ? allowedCorsOrigins : true);
+app.use(cors({ origin: corsOrigin, credentials: true }));
 
 
 // Request context logging (adds requestId and logs requests)
@@ -301,7 +383,7 @@ app.use(express.json({ limit: '5mb' }));
 app.use(cookieParser());
 
 // ── API documentation + metrics ───────────────────────────────────────────────
-app.get('/', (_req, res) => {
+app.get('/', edgeCacheHeaders({ seconds: 300 }), (_req, res) => {
   res.json({
     service: SELINA_BRAND.serviceName,
     product: SELINA_BRAND.productName,
@@ -313,9 +395,9 @@ app.get('/', (_req, res) => {
     integration: '/api/v6/integration',
   });
 });
-app.get('/swagger.json', (_req, res) => res.json(buildOpenApiSpec()));
-app.get('/api-docs', (_req, res) => res.type('html').send(apiDocsHtml()));
-app.get('/metrics', async (_req, res) => res.type('text/plain; version=0.0.4').send(await renderMetrics()));
+app.get('/swagger.json', edgeCacheHeaders({ seconds: 300 }), (_req, res) => res.json(buildOpenApiSpec()));
+app.get('/api-docs', edgeCacheHeaders({ seconds: 300 }), (_req, res) => res.type('html').send(apiDocsHtml()));
+app.get('/metrics', requireInternalControlPlane, async (_req, res) => res.type('text/plain; version=0.0.4').send(await renderMetrics()));
 
 // Debug request-history endpoints are intentionally not mounted. Request and
 // logger diagnostics must go through authenticated operational channels only.
@@ -392,15 +474,15 @@ async function handleAuditLogs(req, res, next) {
   }
 }
 
-app.get('/api/runtime/diagnostics', requireAuth, handleRuntimeDiagnostics);
-app.get('/api/v6/runtime/diagnostics', requireAuth, handleRuntimeDiagnostics);
-app.get('/api/v6/runtime/experts', requireAuth, handleRuntimeExperts);
-app.get('/api/runtime/skills', requireAuth, handleRuntimeSkills);
-app.get('/api/v6/runtime/skills', requireAuth, handleRuntimeSkills);
-app.get('/api/runtime/brand', handleRuntimeBrand);
-app.get('/api/v6/runtime/brand', handleRuntimeBrand);
-app.get('/api/audit-logs', requireAuth, handleAuditLogs);
-app.get('/api/v6/audit-logs', requireAuth, handleAuditLogs);
+app.get('/api/runtime/diagnostics', requireInternalControlPlane, requireAuth, handleRuntimeDiagnostics);
+app.get('/api/v6/runtime/diagnostics', requireInternalControlPlane, requireAuth, handleRuntimeDiagnostics);
+app.get('/api/v6/runtime/experts', requireAuth, edgeCacheHeaders({ seconds: 120 }), handleRuntimeExperts);
+app.get('/api/runtime/skills', requireAuth, edgeCacheHeaders({ seconds: 300 }), handleRuntimeSkills);
+app.get('/api/v6/runtime/skills', requireAuth, edgeCacheHeaders({ seconds: 300 }), handleRuntimeSkills);
+app.get('/api/runtime/brand', edgeCacheHeaders({ seconds: 3600 }), handleRuntimeBrand);
+app.get('/api/v6/runtime/brand', edgeCacheHeaders({ seconds: 3600 }), handleRuntimeBrand);
+app.get('/api/audit-logs', requireInternalControlPlane, requireAuth, handleAuditLogs);
+app.get('/api/v6/audit-logs', requireInternalControlPlane, requireAuth, handleAuditLogs);
 
 // ── GitHub webhooks ───────────────────────────────────────────────────────────
 async function handleGithubWebhook(req, res) {
@@ -418,26 +500,29 @@ async function handleGithubWebhook(req, res) {
 
   const event   = req.headers['x-github-event'];
   const payload = JSON.parse(req.body.toString());
+  const installationId = payload?.installation?.id || payload?.workflow_run?.installation?.id || null;
+
+  const sendToAuthorizedSessions = (messageFactory) => {
+    for (const session of sessions.values()) {
+      if (!installationId || String(session.githubInstallationId) !== String(installationId)) continue;
+      if (session.ws.readyState !== session.ws.OPEN) continue;
+      session.ws.send(JSON.stringify(messageFactory(session)));
+    }
+  };
 
   // Handle Action workflow runs (e.g. AI Sandbox results)
   if (event === 'workflow_run') {
     const workflowName = payload.workflow_run.name;
     const conclusion = payload.workflow_run.conclusion;
-    // Notify clients that GitHub runner finished
-    const wss = req.app.get('wss'); // Assume wss is attached to app
-    if (wss) wss.clients.forEach(client => {
-      if (client.readyState === 1) { // WebSocket.OPEN
-        client.send(JSON.stringify({
-          type: 'terminal_output',
-          data: `\x1b[36m[GitHub] Workflow ${workflowName} finished with conclusion: ${conclusion}\x1b[0m\n`
-        }));
-        client.send(JSON.stringify({
-          type: 'state_change',
-          state: 'idle',
-          message: 'GitHub workflow complete'
-        }));
-      }
-    });
+    sendToAuthorizedSessions(() => ({
+      type: 'terminal_output',
+      data: `\x1b[36m[GitHub] Workflow ${workflowName} finished with conclusion: ${conclusion}\x1b[0m\n`
+    }));
+    sendToAuthorizedSessions(() => ({
+      type: 'state_change',
+      state: 'idle',
+      message: 'GitHub workflow complete'
+    }));
   }
 
   // Route webhook events to the relevant open agent session (if any).
@@ -448,18 +533,12 @@ async function handleGithubWebhook(req, res) {
 
   if (event === 'workflow_run' && payload.action === 'completed') {
       const { workflow_run } = payload;
-
-      // Broadcast to all active sessions (since we aren't mapping repos to sessions yet)
-      for (const [sessionId, session] of sessions) {
-          if (session.ws.readyState === session.ws.OPEN) {
-              session.ws.send(JSON.stringify({
-                  type: 'github_workflow_completed',
-                  workflow: workflow_run.name,
-                  conclusion: workflow_run.conclusion,
-                  url: workflow_run.html_url
-              }));
-          }
-      }
+      sendToAuthorizedSessions(() => ({
+        type: 'github_workflow_completed',
+        workflow: workflow_run.name,
+        conclusion: workflow_run.conclusion,
+        url: workflow_run.html_url
+      }));
   }
 
   res.status(200).send('OK');
@@ -503,8 +582,8 @@ app.get('/api/v6/repos/list', requireAuth, handleListRepos);
 app.get('/api/v6/mcp/tools', requireAuth, handleListTools);
 app.get('/api/v6/mcp/servers', requireAuth, handleListServers);
 app.get('/api/v6/mcp/diagnostics', requireAuth, handleMcpDiagnostics);
-
 app.post('/api/v6/mcp/call', requireAuth, handleCallTool);
+app.post('/api/v6/mcp/register', requireAuth, handleRegisterServer);
 
 // ── Chat History (V6) ─────────────────────────────────────────────────────────
 import { chatRouter } from './orchestrator/chat_routes.js';
@@ -606,6 +685,7 @@ async function handleCopilotChat(req, res) {
   try {
     const orchestrator = new AgentOrchestrator();
     orchestrator.setUser(req.user.id);
+    orchestrator.setAuthContext?.(req.user, req.sessionId || null);
 
     // Stream Gemini tokens as OpenAI-compatible SSE events
     await orchestrator.handlePrompt(
@@ -667,25 +747,59 @@ configureSocketRedisAdapter(io, redisClients);
 const codeQueue = createCodeQueue({
   io,
   processor: async (data) => {
-    const result = await router.executeWithStateMachine(
-      data.prompt,
-      data.userId,
-      data.targetFile,
-      io,
-      data.socketId,
-      data.requestId,
-      data.effortLevel || 'standard',
-    );
-    if (io && data.socketId) {
-      io.to(data.socketId).emit('agent_status', {
-        status: 'job_completed',
-        message: `Orchestration job completed.`,
-        jobId: data.jobId,
-        requestId: data.requestId,
-        timestamp: new Date().toISOString(),
-      });
+    let abortRun = null;
+    const sessionCleanup = data.sessionId ? (() => {
+      if (io && data.socketId) {
+        io.to(data.socketId).emit('agent_status', {
+          status: 'reauth_required',
+          message: 'Session fingerprint changed. Re-authentication is required and the current queued run has been terminated.',
+          jobId: data.jobId,
+          requestId: data.requestId,
+          timestamp: new Date().toISOString(),
+        });
+      }
+      abortRun?.('ORCHESTRATION_ABORTED');
+    }) : null;
+
+    try {
+      if (data.sessionId) {
+        const session = await assertSessionStillValid(data.sessionId, data.userId);
+        if (!session) {
+          throw new Error('Session was revoked or expired before the queued run started. Re-authentication required.');
+        }
+        registerSessionCleanup(data.sessionId, sessionCleanup);
+      }
+
+      const result = await router.executeWithStateMachine(
+        data.prompt,
+        data.userId,
+        data.targetFile,
+        io,
+        data.socketId,
+        data.requestId,
+        data.effortLevel || 'standard',
+        {
+          onAbortReady: (abortHandler) => {
+            abortRun = abortHandler;
+          }
+        }
+      );
+      if (io && data.socketId) {
+        io.to(data.socketId).emit('agent_status', {
+          status: 'job_completed',
+          message: `Orchestration job completed.`,
+          jobId: data.jobId,
+          requestId: data.requestId,
+          timestamp: new Date().toISOString(),
+        });
+      }
+      return result;
+    } finally {
+      if (data.sessionId && sessionCleanup) {
+        unregisterSessionCleanup(data.sessionId, sessionCleanup);
+      }
+      releaseRun(data.userId, data.requestId);
     }
-    return result;
   },
 });
 app.set('codeQueue', codeQueue);
@@ -706,10 +820,10 @@ io.use(async (socket, next) => {
     return next(new Error('WebSocket rate limit exceeded.'));
   }
 
-  const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+  const token = socket.handshake.auth?.token || null;
   let auth = null;
   try {
-    auth = await authenticateFromHeaders(socket.handshake.headers, token);
+    auth = await authenticateFromHeaders(socket.handshake.headers, token, socket.handshake);
   } catch (error) {
     releaseWsConnection(ip);
     return next(new Error('Authentication check failed.'));
@@ -734,7 +848,14 @@ io.use(async (socket, next) => {
 io.on('connection', (socket) => {
   logger.info('Socket.io', `Client connected: ${socket.id}`);
   socket.join(`user_${socket.data.user.id}`);
-  
+
+  const socketCleanup = () => {
+    detailedLogger.warn('Auth', `Fingerprint changed mid-session for Socket.io. Disconnecting.`, { sessionId: socket.data.sessionId });
+    socket.data.aborted = true;
+    socket.disconnect(true);
+  };
+  registerSessionCleanup(socket.data.sessionId, socketCleanup);
+
   socket.on('join', (data) => {
     if (data.userId && String(data.userId) === String(socket.data.user.id)) {
       socket.join(`user_${socket.data.user.id}`);
@@ -745,6 +866,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     releaseWsConnection(socket.data.ip);
     releaseWsUser(socket.data.user?.id);
+    unregisterSessionCleanup(socket.data.sessionId, socketCleanup);
     logger.info('Socket.io', `Client disconnected: ${socket.id}`);
   });
 });
@@ -826,10 +948,9 @@ wss.on('connection', async (ws, req) => {
   };
 
   // ── Authentication ─────────────────────────────────────────────────────
-  const url     = new URL(req.url, `http://${req.headers.host}`);
-  const token   = url.searchParams.get('token');
+  const token = null;
   try {
-    auth = await authenticateFromHeaders(req.headers, token);
+    auth = await authenticateFromHeaders(req.headers, token, req);
   } catch (error) {
     releaseConnection();
     ws.close(1011, 'Authentication check failed.');
@@ -851,6 +972,7 @@ wss.on('connection', async (ws, req) => {
   const sessionId    = uuid();
   const orchestrator = new AgentOrchestrator();
   orchestrator.setUser(auth.user.id);
+  orchestrator.setAuthContext(auth.user, auth.sessionId);
 
   const session = {
     ws,
@@ -862,9 +984,20 @@ wss.on('connection', async (ws, req) => {
     pendingPlans:        new Map(),
     pongReceived:        true,
     pingTimeout:         null,
+    idleTimeout:         null,
+    lastUserInteractionAt: Date.now(),
+    pausedState:         null,
     taskManager:         null, // lazy-init on first task message
+    securityFlags:       { promptLeakageDetected: false },
   };
   sessions.set(sessionId, session);
+
+  const wsSessionCleanup = () => {
+    detailedLogger.warn('Auth', `Fingerprint changed mid-session. Revoking session and closing WebSocket.`, { sessionId: auth.sessionId });
+    session.aborted = true;
+    ws.close(4003, 'Fingerprint changed mid-session.');
+  };
+  registerSessionCleanup(auth.sessionId, wsSessionCleanup);
 
   // ── Pong handler (heartbeat) ───────────────────────────────────────────
   ws.on('pong', () => {
@@ -875,10 +1008,11 @@ wss.on('connection', async (ws, req) => {
   // ── Helpers: safe send ────────────────────────────────────────────────
   const send = (payload) => {
     if (ws.readyState === ws.OPEN) {
+      const safePayload = protectOutboundPayload(payload, session, auth);
       const runIdentity = session.currentRunIdentity;
       const outgoing = process.env.SELINA_ENABLE_JSONRPC_EVENTS === 'false'
-        ? payload
-        : attachJsonRpcEnvelope(payload, runIdentity || {});
+        ? safePayload
+        : attachJsonRpcEnvelope(safePayload, runIdentity || {});
       if (outgoing.jsonrpcEvent && runIdentity?.runId) {
         persistRunEvent(outgoing.jsonrpcEvent, runIdentity);
       }
@@ -886,26 +1020,80 @@ wss.on('connection', async (ws, req) => {
     }
   };
 
+  const pauseIdleRun = () => {
+    if (!session.currentRunIdentity || session.aborted) return;
+    session.pausedState = {
+      run: session.currentRunIdentity,
+      pausedAt: new Date().toISOString(),
+      reason: 'idle_timeout',
+    };
+    session.aborted = true;
+    send({
+      type: 'run_paused',
+      code: 'IDLE_TIMEOUT',
+      message: 'Agent run paused after 5 minutes without user interaction. Resources were released and the run can be resumed.',
+      state: session.pausedState,
+    });
+    for (const p of session.pendingToolCalls.values()) {
+      clearTimeout(p.timeout);
+      p.reject(new Error('ORCHESTRATION_PAUSED_IDLE'));
+    }
+    session.pendingToolCalls.clear();
+    for (const p of session.pendingClarifications.values()) {
+      clearTimeout(p.timeout);
+      p.reject(new Error('ORCHESTRATION_PAUSED_IDLE'));
+    }
+    session.pendingClarifications.clear();
+    for (const p of session.pendingPlans.values()) {
+      clearTimeout(p.timeout);
+      p.reject(new Error('ORCHESTRATION_PAUSED_IDLE'));
+    }
+    session.pendingPlans.clear();
+    recordBillingEvent({
+      kind: 'agent_run_paused_idle',
+      userId: auth.user.id,
+      sessionId: auth.sessionId,
+      runId: session.currentRunIdentity.runId,
+    });
+  };
+
+  const touchUserInteraction = () => {
+    session.lastUserInteractionAt = Date.now();
+    clearTimeout(session.idleTimeout);
+    session.idleTimeout = setTimeout(pauseIdleRun, 5 * 60_000);
+  };
+  touchUserInteraction();
+
   // ── Tool call dispatchers ─────────────────────────────────────────────
 
   /**
    * onThought — streams the agent's reasoning monologue to the frontend.
    * These appear in the chat interface as collapsible "thought" bubbles.
    */
-  const onThought = (message) => send({ type: 'thought', message });
+  const onThought = (message) => {
+    if (session.aborted || ws.readyState !== ws.OPEN) {
+      throw new Error('ORCHESTRATION_ABORTED');
+    }
+    send({ type: 'thought', message });
+  };
 
   /**
    * onToolCall — routes a tool call to:
    *   1. Server-side handlers (GitHub, sandbox, creative)
    *   2. Client-side VFS/WebContainer (forwarded over WS, awaited via Promise)
    */
-  const onToolCall = async (name, args = {}) => {
+  const onToolCall = async (name, rawArgs = {}) => {
+    if (session.aborted || ws.readyState !== ws.OPEN) {
+      throw new Error('ORCHESTRATION_ABORTED');
+    }
+    let args = rawArgs || {};
     const toolCallId = uuid();
     const startedAt = Date.now();
     const toolSource = inferToolSource(name);
     const allTools = [...AGENT_TOOLS, ...mcpManager.getToolsForLLM()];
     const toolDefinition = allTools.find(tool => tool.name === name || tool.uniqueId === name);
     let actionGrant = null;
+    let toolPolicy = null;
     const emitToolCall = (payload) => {
       if (payload.status) recordAgentToolCallMetric(name, toolSource, payload.status);
       send({
@@ -938,6 +1126,30 @@ wss.on('connection', async (ws, req) => {
           error: error.message,
           details: error.details || [],
         });
+      }
+      throw error;
+    }
+
+    try {
+      toolPolicy = validateToolInvocationPolicy(name, args, {
+        toolDefinition,
+        user: auth?.user || null,
+        tenantId: auth?.user?.tenantId || session.tenantId || null,
+      });
+      args = toolPolicy.args;
+    } catch (error) {
+      if (error instanceof ToolExecutionPolicyError) {
+        emitToolCall({
+          status: 'failed',
+          error: error.message,
+          metadata: {
+            code: error.code,
+            source: toolSource,
+            args: redactToolPayload(args),
+          },
+        });
+        send({ type: 'error', message: error.message });
+        return JSON.stringify({ success: false, code: error.code, error: error.message });
       }
       throw error;
     }
@@ -1015,7 +1227,18 @@ wss.on('connection', async (ws, req) => {
         args: redactToolPayload(args),
         risk: toolDefinition?.risk || toolDefinition?.metadata?.risk || null,
         actionGrantId: actionGrant?.grantId || null,
+        timeoutMs: toolPolicy?.timeoutMs || null,
+        credentialScope: toolPolicy?.credentialScope || null,
       },
+    });
+    recordBillingEvent({
+      kind: 'tool_call_started',
+      userId: auth.user.id,
+      sessionId: auth.sessionId,
+      runId: session.currentRunIdentity?.runId || null,
+      tool: name,
+      source: toolSource,
+      credentialScope: toolPolicy?.credentialScope || null,
     });
 
     let toolFailed = false;
@@ -1257,20 +1480,32 @@ wss.on('connection', async (ws, req) => {
     // We forward the call over the WebSocket and await the browser's response.
     return await new Promise((resolve, reject) => {
       const callId = uuid();
+      const timeoutMs = toolPolicy?.timeoutMs || 10_000;
 
-      // Self-cleaning timeout: releases the Promise if the client takes > 60 s
+      // Self-cleaning timeout: releases the Promise if the client takes too long.
       const timeout = setTimeout(() => {
         if (session.pendingToolCalls.has(callId)) {
           session.pendingToolCalls.delete(callId);
-          reject(new Error(`Tool "${name}" timed out after 60s (client did not respond).`));
+          reject(new Error(`Tool "${name}" timed out after ${Math.ceil(timeoutMs / 1000)}s (client did not respond).`));
         }
-      }, 60_000);
+      }, timeoutMs);
 
       session.pendingToolCalls.set(callId, { resolve, reject, timeout });
       send({ type: 'tool_request', callId, name, args });
     });
     } catch (error) {
       toolFailed = true;
+      recordToolExecutionOutcome(name, false);
+      recordBillingEvent({
+        kind: 'tool_call_failed',
+        userId: auth.user.id,
+        sessionId: auth.sessionId,
+        runId: session.currentRunIdentity?.runId || null,
+        tool: name,
+        source: toolSource,
+        durationMs: Date.now() - startedAt,
+        error: error.message,
+      });
       emitToolCall({
         status: 'failed',
         error: error.message,
@@ -1282,6 +1517,16 @@ wss.on('connection', async (ws, req) => {
       throw error;
     } finally {
       if (!toolFailed) {
+        recordToolExecutionOutcome(name, true);
+        recordBillingEvent({
+          kind: 'tool_call_completed',
+          userId: auth.user.id,
+          sessionId: auth.sessionId,
+          runId: session.currentRunIdentity?.runId || null,
+          tool: name,
+          source: toolSource,
+          durationMs: Date.now() - startedAt,
+        });
         emitToolCall({
           status: 'completed',
           metadata: {
@@ -1300,7 +1545,10 @@ wss.on('connection', async (ws, req) => {
    * doesn't hang indefinitely (Ryzen host RAM).
    */
   const onClarification = (questions, context) =>
-    new Promise((resolve) => {
+    new Promise((resolve, reject) => {
+      if (session.aborted || ws.readyState !== ws.OPEN) {
+        return reject(new Error('ORCHESTRATION_ABORTED'));
+      }
       const clarificationId = uuid();
       const timeout = setTimeout(() => {
         if (session.pendingClarifications.has(clarificationId)) {
@@ -1309,7 +1557,7 @@ wss.on('connection', async (ws, req) => {
         }
       }, 5 * 60_000);
 
-      session.pendingClarifications.set(clarificationId, { resolve, timeout });
+      session.pendingClarifications.set(clarificationId, { resolve, reject, timeout });
       send({ type: 'clarification_request', clarificationId, questions, context });
     });
 
@@ -1318,7 +1566,10 @@ wss.on('connection', async (ws, req) => {
    * Resolves with `true` (approved) or `false` (rejected).
    */
   const onPlan = (steps, risks) =>
-    new Promise((resolve) => {
+    new Promise((resolve, reject) => {
+      if (session.aborted || ws.readyState !== ws.OPEN) {
+        return reject(new Error('ORCHESTRATION_ABORTED'));
+      }
       const planId = uuid();
       const timeout = setTimeout(() => {
         if (session.pendingPlans.has(planId)) {
@@ -1327,7 +1578,7 @@ wss.on('connection', async (ws, req) => {
         }
       }, 5 * 60_000);
 
-      session.pendingPlans.set(planId, { resolve, timeout });
+      session.pendingPlans.set(planId, { resolve, reject, timeout });
       send({ type: 'plan_request', planId, steps, risks });
     });
 
@@ -1335,6 +1586,7 @@ wss.on('connection', async (ws, req) => {
   ws.on('message', async (raw) => {
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
+    touchUserInteraction();
 
     switch (msg.type) {
 
@@ -1342,6 +1594,14 @@ wss.on('connection', async (ws, req) => {
       // USER SENDS PROMPT
       // ════════════════════════════════════════════════════════════════════
       case 'prompt': {
+        try {
+          assertUserNotSuspended(auth.user.id);
+        } catch (error) {
+          send({ type: 'error', code: error.code || 'USER_SUSPENDED', message: error.message });
+          break;
+        }
+        session.aborted = false;
+        session.pausedState = null;
         // Gap #3: Basic Rate Limiting (20 prompts / 15 min)
         const now = Date.now();
         const WINDOW_MS = 15 * 60 * 1000;
@@ -1357,7 +1617,38 @@ wss.on('connection', async (ws, req) => {
         const { prompt, effortLevel = 'standard' } = msg;
         const previousRunIdentity = session.currentRunIdentity;
         const rootRunIdentity = createRootRunIdentity({ expert: 'manager' });
+        rootRunIdentity.sessionId = auth.sessionId;
+        rootRunIdentity.userId = auth.user.id;
         session.currentRunIdentity = rootRunIdentity;
+
+        if (!String(auth.sessionId || '').startsWith('external:')) {
+          const activeSession = await assertSessionStillValid(auth.sessionId, auth.user.id);
+          if (!activeSession) {
+            send({
+              type: 'reauth_required',
+              error: 'Session has expired or been revoked. Please sign in again.',
+              code: 'SESSION_REAUTH_REQUIRED'
+            });
+            session.currentRunIdentity = previousRunIdentity;
+            break;
+          }
+        }
+
+        if (!acquireRun(auth.user.id, rootRunIdentity.runId)) {
+          send({
+            type: 'error',
+            message: `Concurrency limit exceeded. A maximum of ${getRunConcurrencyLimit()} concurrent agent runs is permitted per user.`
+          });
+          send({
+            type: 'concurrency_exceeded',
+            error: 'Too Many Requests',
+            code: 'CONCURRENCY_LIMIT_EXCEEDED',
+            retryAfterSeconds: getConcurrencyRetryAfterSeconds()
+          });
+          session.currentRunIdentity = previousRunIdentity;
+          break;
+        }
+
         await persistRun(rootRunIdentity, {
           userId: auth.user.id,
           projectName: 'default',
@@ -1401,10 +1692,37 @@ wss.on('connection', async (ws, req) => {
 
           send({ type: 'result', content });
         } catch (err) {
-          send({ type: 'error', message: err.message });
+          if (err.message === 'ORCHESTRATION_ABORTED') {
+            logger.warn('Orchestration aborted mid-workflow due to session fingerprint change or WebSocket disconnect.');
+          } else if (err.code === 'PROMPT_GUARD_REJECTED') {
+            send({
+              type: 'error',
+              code: 'PROMPT_GUARD_REJECTED',
+              message: 'This request was blocked by the prompt-injection guard before planning.',
+              details: err.details || null,
+            });
+          } else if (err instanceof DailyTokenQuotaExceededError || err.code === 'DAILY_TOKEN_QUOTA_EXCEEDED') {
+            send({
+              type: 'quota_exceeded',
+              code: 'DAILY_TOKEN_QUOTA_EXCEEDED',
+              message: 'Daily token quota exceeded for this session. Please try again after the quota resets.',
+              usage: err.usage,
+              limit: err.limit,
+            });
+          } else if (err.code === 'LLM_RATE_LIMIT_EXCEEDED') {
+            send({
+              type: 'rate_limited',
+              code: 'LLM_RATE_LIMIT_EXCEEDED',
+              message: 'Too many LLM completions in the last minute. Please retry shortly.',
+              retryAfterSeconds: err.retryAfterSeconds || 60,
+            });
+          } else {
+            send({ type: 'error', message: err.message });
+          }
         } finally {
           send({ type: 'thinking', value: false });
           session.currentRunIdentity = previousRunIdentity;
+          releaseRun(auth.user.id, rootRunIdentity.runId);
         }
         break;
       }
@@ -1546,12 +1864,23 @@ wss.on('connection', async (ws, req) => {
   // ── Disconnection cleanup ─────────────────────────────────────────────────
   ws.on('close', () => {
     releaseConnection();
+    unregisterSessionCleanup(auth.sessionId, wsSessionCleanup);
     // Cancel all pending timeouts so they don't fire after GC
     clearTimeout(session.pingTimeout);
+    clearTimeout(session.idleTimeout);
 
-    for (const p of session.pendingToolCalls.values())    clearTimeout(p.timeout);
-    for (const p of session.pendingClarifications.values()) clearTimeout(p.timeout);
-    for (const p of session.pendingPlans.values())        clearTimeout(p.timeout);
+    for (const p of session.pendingToolCalls.values()) {
+      clearTimeout(p.timeout);
+      p.reject(new Error('ORCHESTRATION_ABORTED'));
+    }
+    for (const p of session.pendingClarifications.values()) {
+      clearTimeout(p.timeout);
+      p.reject(new Error('ORCHESTRATION_ABORTED'));
+    }
+    for (const p of session.pendingPlans.values()) {
+      clearTimeout(p.timeout);
+      p.reject(new Error('ORCHESTRATION_ABORTED'));
+    }
 
     // Remove session — lets V8 GC collect the orchestrator, all pending Maps,
     // and the ws reference. Critical: without this, each disconnected session
@@ -1561,6 +1890,22 @@ wss.on('connection', async (ws, req) => {
 
   ws.on('error', () => {
     releaseConnection();
+    unregisterSessionCleanup(auth.sessionId, wsSessionCleanup);
+    clearTimeout(session.idleTimeout);
+
+    for (const p of session.pendingToolCalls.values()) {
+      clearTimeout(p.timeout);
+      p.reject(new Error('ORCHESTRATION_ABORTED'));
+    }
+    for (const p of session.pendingClarifications.values()) {
+      clearTimeout(p.timeout);
+      p.reject(new Error('ORCHESTRATION_ABORTED'));
+    }
+    for (const p of session.pendingPlans.values()) {
+      clearTimeout(p.timeout);
+      p.reject(new Error('ORCHESTRATION_ABORTED'));
+    }
+
     sessions.delete(sessionId);
   });
 });

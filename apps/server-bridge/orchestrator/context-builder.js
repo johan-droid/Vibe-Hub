@@ -12,6 +12,7 @@
  */
 
 import pool from '../db.js';
+import { hardenSystemPrompt } from './prompt-hardening.js';
 
 // ─── Strict Language Enforcement ─────────────────────────────────────────────
 
@@ -229,7 +230,7 @@ export class ContextBuilder {
       this._buildDomainContext(domain, skillProfile)
     ];
 
-    return sections.filter(Boolean).join('\n\n');
+    return hardenSystemPrompt(sections.filter(Boolean).join('\n\n'));
   }
 
   static _buildProjectContext(projectTree, packageJson) {

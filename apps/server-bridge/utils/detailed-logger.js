@@ -13,11 +13,13 @@
 import winston from 'winston';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { getTraceLogFields } from './tracing.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Test mode flag
 const TEST_MODE = process.env.TEST_MODE === 'true' || process.env.NODE_ENV === 'development';
+const useJsonLogs = process.env.LOG_FORMAT === 'json' || process.env.NODE_ENV === 'production';
 
 // Log levels
 const levels = {
@@ -45,6 +47,7 @@ winston.addColors(colors);
 
 // Create formatters
 const consoleFormat = winston.format.combine(
+  winston.format((info) => Object.assign(info, getTraceLogFields()))(),
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
   winston.format.colorize({ all: true }),
   winston.format.printf(({ level, message, timestamp, component, ...metadata }) => {
@@ -54,6 +57,7 @@ const consoleFormat = winston.format.combine(
 );
 
 const jsonFormat = winston.format.combine(
+  winston.format((info) => Object.assign(info, getTraceLogFields()))(),
   winston.format.timestamp(),
   winston.format.json()
 );
@@ -63,7 +67,7 @@ const transports = [
   // Console transport
   new winston.transports.Console({
     level: TEST_MODE ? 'debug' : 'info',
-    format: consoleFormat
+    format: useJsonLogs ? jsonFormat : consoleFormat
   })
 ];
 
@@ -169,7 +173,7 @@ export const logger = {
   
   // Request logging middleware
   logRequest: (req, res, next) => {
-    const requestId = req.headers['x-request-id'] || generateRequestId();
+    const requestId = req.id || req.headers['x-request-id'] || generateRequestId();
     req.requestId = requestId;
     
     const startTime = Date.now();

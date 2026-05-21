@@ -12,26 +12,27 @@ function phaseCopy(phase) {
   return 'Working on the request';
 }
 
-function phaseLogs(phase) {
-  const baseTime = Date.now();
-  const common = [
-    { timestamp: baseTime, message: 'Context loaded', type: 'success' },
-    { timestamp: baseTime + 500, message: phaseCopy(phase), type: 'info' },
-  ];
+function phaseLogs(events = [], phase) {
+  const recent = events
+    .slice(-5)
+    .map((event) => ({
+      timestamp: event.timestamp || Date.now(),
+      message: event.summary || event.message || event.title || phaseCopy(phase),
+      type: event.status === 'failed' ? 'error' : event.status === 'completed' ? 'success' : 'info',
+    }))
+    .filter((event) => event.message);
 
-  if (phase === 'sandboxing') {
-    return [...common, { timestamp: baseTime + 1000, message: 'Local Docker sandbox engaged', type: 'success' }];
-  }
+  if (recent.length > 0) return recent;
 
-  if (phase === 'rollback') {
-    return [...common, { timestamp: baseTime + 1000, message: 'Retry budget protecting the workflow', type: 'info' }];
-  }
-
-  return common;
+  return [{
+    timestamp: Date.now(),
+    message: phaseCopy(phase),
+    type: 'info',
+  }];
 }
 
-export default function AgentActionOverlay({ isThinking, neuralStatus, onDismiss }) {
-  const logs = phaseLogs(neuralStatus?.phase);
+export default function AgentActionOverlay({ isThinking, neuralStatus, events = [], onDismiss }) {
+  const logs = phaseLogs(events, neuralStatus?.phase);
 
   return (
     <AnimatePresence>

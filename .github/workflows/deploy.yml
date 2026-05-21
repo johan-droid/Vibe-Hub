@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
 jobs:
   quality-gate:
     runs-on: ubuntu-latest
@@ -21,24 +26,105 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Production sanitation
+        run: npm run sanitize
+
       - name: Lint frontend
         run: npm run lint --workspace=apps/user-interface
 
       - name: Validate server syntax
         run: npm run validate
 
+      - name: Run integration smoke tests
+        run: npm run test --workspace=apps/server-bridge -- test/api.test.js test/integration-api.test.js
+
       - name: Run server tests
-        run: npm run test --workspace=apps/server-bridge -- --coverage
+        run: npm run test --workspace=apps/server-bridge -- --coverage --silent
+
+      - name: Run frontend unit tests
+        run: npm run test:unit --workspace=apps/user-interface
 
       - name: Build frontend
         run: npm run build:ui
 
-      - name: Security audit
+      - name: Agentic security audit
+        run: npm run security:audit
+
+      - name: Dependency security audit
         run: npm audit --workspaces --audit-level=high
+
+  immutable-images:
+    runs-on: ubuntu-latest
+    needs: quality-gate
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAMESPACE: ${{ github.repository_owner }}/vibe-hub
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set image tags
+        id: tags
+        run: |
+          echo "server_local=vibe-hub-server-bridge:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "ui_local=vibe-hub-user-interface:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "server_remote=${REGISTRY}/${IMAGE_NAMESPACE}/server-bridge:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "ui_remote=${REGISTRY}/${IMAGE_NAMESPACE}/user-interface:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Build server image
+        run: docker build -f apps/server-bridge/Dockerfile -t "${{ steps.tags.outputs.server_local }}" .
+
+      - name: Build UI image
+        run: docker build -f apps/user-interface/Dockerfile -t "${{ steps.tags.outputs.ui_local }}" .
+
+      - name: Scan server image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.tags.outputs.server_local }}
+          format: sarif
+          output: trivy-server-bridge.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
+      - name: Scan UI image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.tags.outputs.ui_local }}
+          format: sarif
+          output: trivy-user-interface.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
+      - name: Upload server scan
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-server-bridge.sarif
+
+      - name: Upload UI scan
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-user-interface.sarif
+
+      - name: Login to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push immutable images
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          docker tag "${{ steps.tags.outputs.server_local }}" "${{ steps.tags.outputs.server_remote }}"
+          docker tag "${{ steps.tags.outputs.ui_local }}" "${{ steps.tags.outputs.ui_remote }}"
+          docker push "${{ steps.tags.outputs.server_remote }}"
+          docker push "${{ steps.tags.outputs.ui_remote }}"
 
   deploy-render:
     runs-on: ubuntu-latest
-    needs: quality-gate
+    needs: immutable-images
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     env:
       RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}

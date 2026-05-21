@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { upsertUser } from '../db.js';
 import { createSession } from './session.js';
-import { setAuthCookies } from './middleware.js';
+import { ensureDeviceCookie, setAuthCookies } from './middleware.js';
 import {
   createOAuthHandoff,
   createOAuthState,
@@ -22,6 +22,54 @@ const GITHUB_AUTH_URL = 'https://github.com/login/oauth/authorize';
 const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 const GITHUB_USER_URL = 'https://api.github.com/user';
 const GITHUB_EMAILS_URL = 'https://api.github.com/user/emails';
+
+async function finalizeGithubSignIn({ req, res, returnOrigin, profile, logMode = 'oauth' }) {
+  const user = await upsertUser({
+    email: profile.email || `${profile.login}@github.noreply`,
+    name: profile.name || profile.login,
+    avatarUrl: profile.avatar_url,
+    provider: 'github',
+    providerId: String(profile.id),
+  });
+
+  const deviceId = ensureDeviceCookie(req, res);
+  const session = await createSession({
+    userId: user.id,
+    provider: 'github',
+    req,
+    deviceId,
+  });
+
+  setAuthCookies(res, {
+    accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
+    sessionToken: session.sessionToken,
+    deviceId: session.deviceId,
+  });
+
+  const userPayload = {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    avatarUrl: user.avatar_url,
+    provider: user.provider,
+  };
+
+  const handoffCode = await createOAuthHandoff({
+    provider: 'github',
+    session,
+    user: userPayload,
+  });
+
+  logger.info('GitHubAuth', `Completed ${logMode} GitHub sign-in`, {
+    userId: user.id,
+    returnOrigin,
+  });
+
+  const redirectUrl = new URL('/auth/callback', returnOrigin);
+  redirectUrl.searchParams.set('code', handoffCode);
+  res.redirect(redirectUrl.toString());
+}
 
 function redirectWithError(req, res, error) {
   return res.redirect(buildOAuthCallbackUrl(getOAuthReturnOrigin(req), error));
@@ -129,48 +177,16 @@ router.get('/github/callback', async (req, res) => {
       email = primary?.email;
     }
 
-    const user = await upsertUser({
-      email: email || `${profile.login}@github.noreply`,
-      name: profile.name || profile.login,
-      avatarUrl: profile.avatar_url,
-      provider: 'github',
-      providerId: String(profile.id),
+    await finalizeGithubSignIn({
+      req,
+      res,
+      returnOrigin,
+      profile: {
+        ...profile,
+        email,
+      },
+      logMode: 'oauth',
     });
-
-    // Create SaaS-grade session
-    const session = await createSession({
-      userId: user.id,
-      provider: 'github',
-      req
-    });
-
-    // Set secure cookies
-    setAuthCookies(res, {
-      accessToken: session.accessToken,
-      refreshToken: session.refreshToken,
-      sessionToken: session.sessionToken
-    });
-
-    const userPayload = {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      avatarUrl: user.avatar_url,
-      provider: user.provider
-    };
-
-    const handoffCode = await createOAuthHandoff({
-      provider: 'github',
-      session,
-      user: userPayload
-    });
-
-    // Redirect with only an opaque one-time code; the frontend exchanges it
-    // against the API host to set cookies reliably on localhost/127.0.0.1.
-    const redirectUrl = new URL('/auth/callback', returnOrigin);
-    redirectUrl.searchParams.set('code', handoffCode);
-
-    res.redirect(redirectUrl.toString());
   } catch (err) {
     logger.error('GitHubAuth', 'Callback error', err);
     if (err.message === 'MAX_SESSIONS_EXCEEDED') {

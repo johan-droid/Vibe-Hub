@@ -1,6 +1,5 @@
-import React, { useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { MessageSquare, Plus, Search, Clock, FolderGit2, Trash2 } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { MessageSquare, Plus, Search, Clock, FolderGit2 } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
 import { Button } from '../../shared/components/Button';
 import { api } from '../../../services/api';
@@ -14,6 +13,7 @@ export default function ChatHistorySidebar() {
     linkedProjects,
     user
   } = useStore();
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     const fetchSessions = async () => {
@@ -64,6 +64,14 @@ export default function ChatHistorySidebar() {
     }
   };
 
+  const filteredSessions = useMemo(() => {
+    if (!query.trim()) return chatSessions;
+    const normalized = query.trim().toLowerCase();
+    return chatSessions.filter((chat) =>
+      String(chat.title || 'New Chat').toLowerCase().includes(normalized)
+    );
+  }, [chatSessions, query]);
+
   return (
     <div className="flex h-full flex-col bg-surface-container-lowest text-on-surface">
       {/* Header */}
@@ -84,6 +92,8 @@ export default function ChatHistorySidebar() {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/40 group-focus-within:text-primary transition-colors" />
           <input 
             type="text" 
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
             placeholder="Search chats..."
             className="w-full h-9 bg-surface-container-low border border-outline-variant/20 rounded-lg pl-9 pr-4 text-xs font-medium focus:outline-none focus:border-primary/40 focus:bg-surface-container-lowest transition-all"
           />
@@ -116,28 +126,27 @@ export default function ChatHistorySidebar() {
         <div>
           <h3 className="px-3 mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant/40">History</h3>
           <div className="space-y-1">
-            {chatSessions.length > 0 ? (
-              chatSessions.map(chat => (
+            {filteredSessions.length > 0 ? (
+              filteredSessions.map(chat => (
                 <button
                   type="button"
                   aria-label={`Load chat session ${chat.title || 'New Chat'}`}
                   key={chat.id}
                   onClick={() => loadSession(chat.id)}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg group transition-colors text-left ${activeSessionId === chat.id ? 'bg-primary/10 text-primary' : 'hover:bg-surface-container-low'}`}
+                  className={`w-full flex items-center px-3 py-2.5 rounded-lg group transition-colors text-left ${activeSessionId === chat.id ? 'bg-primary/10 text-primary' : 'hover:bg-surface-container-low'}`}
                 >
-                  <div className="flex items-center gap-3 overflow-hidden">
+                  <div className="flex min-w-0 items-center gap-3 overflow-hidden">
                     <MessageSquare size={16} className={`${activeSessionId === chat.id ? 'text-primary' : 'text-on-surface-variant/40 group-hover:text-primary/60'} shrink-0`} />
                     <span className={`text-xs font-medium truncate ${activeSessionId === chat.id ? 'text-primary' : 'text-on-surface-variant group-hover:text-on-surface'}`}>{chat.title || 'New Chat'}</span>
-                  </div>
-                  <div className="opacity-0 group-hover:opacity-100 p-1 hover:bg-google-red/10 hover:text-google-red rounded transition-all" onClick={(e) => e.stopPropagation()}>
-                    <Trash2 size={12} />
                   </div>
                 </button>
               ))
             ) : (
               <div className="px-3 py-8 text-center">
                 <Clock size={24} className="mx-auto mb-3 text-on-surface-variant/20" />
-                <p className="text-[11px] font-medium text-on-surface-variant/40">No recent activity</p>
+                <p className="text-[11px] font-medium text-on-surface-variant/40">
+                  {query.trim() ? 'No chats match this search' : 'No recent activity'}
+                </p>
               </div>
             )}
           </div>

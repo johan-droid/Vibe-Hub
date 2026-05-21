@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import { upsertUser } from '../db.js';
 import { createSession } from './session.js';
-import { setAuthCookies } from './middleware.js';
+import { ensureDeviceCookie, setAuthCookies } from './middleware.js';
 import {
   createOAuthHandoff,
   createOAuthState,
@@ -16,6 +16,7 @@ import {
   setOAuthReturnOriginCookie,
 } from './oauth-return.js';
 import logger from '../utils/detailed-logger.js';
+import { powGuard } from './pow-middleware.js';
 
 const router = Router();
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -29,14 +30,25 @@ const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
  */
 router.get('/config', (req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.json({ clientId: process.env.GOOGLE_CLIENT_ID });
+  res.json({
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    providers: {
+      google: {
+        configured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REDIRECT_URI),
+        clientId: process.env.GOOGLE_CLIENT_ID || '',
+      },
+      github: {
+        configured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET && process.env.GITHUB_REDIRECT_URI && process.env.UI_ORIGIN),
+      },
+    },
+  });
 });
 
 /**
  * POST /api/auth/google/verify-token
  * Support both ID token (credential) and Access Token
  */
-router.post('/verify-token', async (req, res) => {
+router.post('/verify-token', powGuard(4), async (req, res) => {
   const { credential, access_token } = req.body;
   logger.debug('GoogleAuth', 'Verify token request received', {
     hasCredential: !!credential,
@@ -80,10 +92,12 @@ router.post('/verify-token', async (req, res) => {
 
     // Create SaaS-grade session
     logger.debug('GoogleAuth', 'Creating session...');
+    const deviceId = ensureDeviceCookie(req, res);
     const session = await createSession({
       userId: user.id,
       provider: 'google',
-      req
+      req,
+      deviceId,
     });
     logger.debug('GoogleAuth', 'Session created', { sessionId: session.sessionId });
 
@@ -91,7 +105,8 @@ router.post('/verify-token', async (req, res) => {
     setAuthCookies(res, {
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
-      sessionToken: session.sessionToken
+      sessionToken: session.sessionToken,
+      deviceId: session.deviceId,
     });
 
     logger.debug('GoogleAuth', 'Sending success response');
@@ -213,10 +228,12 @@ router.get('/google/callback', async (req, res) => {
     logger.info('GoogleAuth', 'User upserted:', { userId: user.id });
 
     logger.info('GoogleAuth', 'Step 4: Creating session...');
+    const deviceId = ensureDeviceCookie(req, res);
     const session = await createSession({
       userId: user.id,
       provider: 'google',
-      req
+      req,
+      deviceId,
     });
     logger.info('GoogleAuth', 'Session created:', { sessionId: session.sessionId });
 
@@ -224,7 +241,8 @@ router.get('/google/callback', async (req, res) => {
     setAuthCookies(res, {
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
-      sessionToken: session.sessionToken
+      sessionToken: session.sessionToken,
+      deviceId: session.deviceId,
     });
 
     const userPayload = {

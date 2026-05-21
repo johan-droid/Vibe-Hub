@@ -64,3 +64,55 @@ htmlcov/
 *.tar.xz
 *.tar.zst
 ```
+# Security audit reports
+SECURITY_AUDIT_REPORT.md
+node_modules
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Runtime files
+**/.env
+**/.env.*
+!**/.env.example
+
+# Build / output
+dist/
+build/
+out/
+.cache/
+*.tsbuildinfo
+
+# Coverage
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDEs and editors
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Temporary
+tmp/
+temp/
+
+# Docker
+docker-compose.override.yml
+.env.docker
+
+# Test artifacts
+test-results/
+
+# Secrets and keys
+*.pem
+*.key

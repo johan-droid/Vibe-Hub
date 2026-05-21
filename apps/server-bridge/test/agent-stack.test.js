@@ -22,10 +22,15 @@ describe('Qdrant vector store seam', () => {
     const store = createVectorStore();
     await store.upsert({
       collection: 'code',
-      points: [{ id: 'a', vector: [1, 0], payload: { file: 'a.js' } }],
+      points: [{ id: 'a', vector: [1, 0], payload: { file: 'a.js', tenant_id: 'tenant-a' } }],
     });
 
-    const results = await store.search({ collection: 'code', vector: [1, 0], limit: 1 });
+    const results = await store.search({
+      collection: 'code',
+      vector: [1, 0],
+      limit: 1,
+      filter: { must: [{ key: 'tenant_id', match: { value: 'tenant-a' } }] },
+    });
 
     expect(results[0]).toMatchObject({ id: 'a', payload: { file: 'a.js' } });
     expect(results[0].score).toBeGreaterThan(0.99);
@@ -43,7 +48,12 @@ describe('Qdrant vector store seam', () => {
       fetchImpl,
     });
 
-    const results = await store.search({ collection: 'code', vector: [1, 2, 3], limit: 1 });
+    const results = await store.search({
+      collection: 'code',
+      vector: [1, 2, 3],
+      limit: 1,
+      filter: { must: [{ key: 'tenant_id', match: { value: 'tenant-a' } }] },
+    });
 
     expect(results).toEqual([{ id: 'point-1', score: 0.9 }]);
     expect(fetchImpl).toHaveBeenCalledWith(

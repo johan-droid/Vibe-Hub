@@ -3,16 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Terminal, 
   Plus, 
-  Trash2, 
-  Play, 
   Square, 
   ChevronDown, 
   ChevronRight,
-  Activity,
-  Cpu,
-  Zap,
-  Monitor,
-  Command
 } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
 
@@ -147,18 +140,63 @@ export default function TerminalSessionsPanel() {
     activeTerminalSession,
     terminalPanelVisible,
     addTerminalSession,
-    removeTerminalSession,
+    updateTerminalSession,
     setActiveTerminalSession,
-    clearTerminalSession,
     toggleTerminalPanel,
-    setTerminalPanelVisible
+    vfsInstance,
   } = useStore();
 
   const [commandInput, setCommandInput] = useState('');
   const [expandedSessions, setExpandedSessions] = useState(new Set());
 
   const sessions = Array.from(terminalSessions.values());
-  const activeSession = terminalSessions.get(activeTerminalSession);
+
+  const refreshSessions = useCallback(async () => {
+    if (!vfsInstance?.terminal) return;
+
+    const listedSessions = await vfsInstance.terminal.tool_listSessions();
+    for (const session of listedSessions) {
+      const output = await vfsInstance.terminal.tool_getOutput({ session: session.id, limit: 1000 });
+      const nextSession = {
+        ...session,
+        output,
+        outputCount: output.length,
+      };
+
+      if (terminalSessions.has(session.id)) {
+        updateTerminalSession(session.id, nextSession);
+      } else {
+        addTerminalSession(nextSession);
+      }
+    }
+  }, [addTerminalSession, terminalSessions, updateTerminalSession, vfsInstance]);
+
+  useEffect(() => {
+    if (!terminalPanelVisible || !vfsInstance?.terminal) return undefined;
+
+    refreshSessions().catch((error) => {
+      console.error('Failed to refresh terminal sessions:', error);
+    });
+
+    const timer = window.setInterval(() => {
+      refreshSessions().catch((error) => {
+        console.error('Failed to refresh terminal sessions:', error);
+      });
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [refreshSessions, terminalPanelVisible, vfsInstance]);
+
+  const parseCommand = useCallback((value) => {
+    const tokens = String(value || '')
+      .match(/"[^"]*"|'[^']*'|[^\s]+/g)
+      ?.map((token) => token.replace(/^['"]|['"]$/g, '')) || [];
+
+    if (tokens.length === 0) return null;
+
+    const [command, ...args] = tokens;
+    return { command, args };
+  }, []);
 
   const toggleSession = useCallback((sessionId) => {
     setExpandedSessions(prev => {
@@ -173,63 +211,55 @@ export default function TerminalSessionsPanel() {
   }, []);
 
   const executeCommand = useCallback(async (sessionId, command) => {
-    if (!command.trim()) return;
-    
-    // This would integrate with the agent to execute commands
-    // For now, just add to output as a demo
-    const session = terminalSessions.get(sessionId);
-    if (session) {
-      const newOutput = [
-        { type: 'stdout', data: command, timestamp: new Date() },
-        { type: 'stdout', data: `Command executed: ${command}`, timestamp: new Date() },
-        { type: 'command_complete', command, exitCode: 0, timestamp: new Date() }
-      ];
-      
-      // Update session output
-      const updatedSession = {
-        ...session,
-        output: [...session.output, ...newOutput].slice(-1000),
-        lastActivity: new Date()
-      };
-      
-      addTerminalSession(updatedSession);
+    const parsed = parseCommand(command);
+    if (!parsed || !vfsInstance?.terminal) return;
+
+    try {
+      await vfsInstance.terminal.tool_executeShell({
+        command: parsed.command,
+        args: parsed.args,
+        session: sessionId,
+      });
+      await refreshSessions();
+    } catch (error) {
+      console.error('Terminal command failed:', error);
+      updateTerminalSession(sessionId, {
+        output: [
+          ...(terminalSessions.get(sessionId)?.output || []),
+          { type: 'error', data: error.message, timestamp: new Date() },
+        ].slice(-1000),
+        outputCount: Math.min((terminalSessions.get(sessionId)?.outputCount || 0) + 1, 1000),
+      });
     }
-    
+
     setCommandInput('');
-  }, [terminalSessions, addTerminalSession]);
+  }, [parseCommand, refreshSessions, terminalSessions, updateTerminalSession, vfsInstance]);
 
   const createNewSession = useCallback(() => {
-    const newSession = {
-      id: `term_${Date.now()}`,
-      name: `Terminal ${sessions.length + 1}`,
-      shell: '/bin/bash',
-      isActive: true,
-      output: [],
-      createdAt: new Date(),
-      lastActivity: new Date(),
-      outputCount: 0
-    };
-    
-    addTerminalSession(newSession);
-    setExpandedSessions(prev => new Set([...prev, newSession.id]));
-  }, [sessions.length, addTerminalSession]);
+    if (!vfsInstance?.terminal) return;
+
+    vfsInstance.terminal
+      .tool_createSession({ name: `Terminal ${sessions.length + 1}`, shell: '/bin/bash' })
+      .then(async (sessionId) => {
+        await refreshSessions();
+        setActiveTerminalSession(sessionId);
+        setExpandedSessions(prev => new Set([...prev, sessionId]));
+      })
+      .catch((error) => {
+        console.error('Failed to create terminal session:', error);
+      });
+  }, [refreshSessions, sessions.length, setActiveTerminalSession, vfsInstance]);
 
   const killSession = useCallback((sessionId) => {
-    const session = terminalSessions.get(sessionId);
-    if (session) {
-      const updatedSession = {
-        ...session,
-        isActive: false,
-        output: [...session.output, {
-          type: 'killed',
-          data: 'Session terminated',
-          timestamp: new Date()
-        }]
-      };
-      
-      addTerminalSession(updatedSession);
-    }
-  }, [terminalSessions, addTerminalSession]);
+    if (!vfsInstance?.terminal) return;
+
+    vfsInstance.terminal
+      .tool_killSession({ session: sessionId })
+      .then(() => refreshSessions())
+      .catch((error) => {
+        console.error('Failed to kill terminal session:', error);
+      });
+  }, [refreshSessions, vfsInstance]);
 
   if (!terminalPanelVisible) {
     return null;
@@ -277,7 +307,7 @@ export default function TerminalSessionsPanel() {
             <Terminal size={32} className="text-on-surface-variant/20 mb-4" />
             <h3 className="text-sm font-medium text-on-surface-variant mb-2">No Terminal Sessions</h3>
             <p className="text-xs text-on-surface-variant/40 mb-4">
-              Create a terminal session to start testing commands
+              Create a terminal session to run commands in the workspace sandbox
             </p>
             <button
               onClick={createNewSession}

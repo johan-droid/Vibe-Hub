@@ -38,7 +38,11 @@ function gitTrackedFiles() {
     throw new Error(`git ls-files failed: ${result.stderr || result.status}`);
   }
 
-  return result.stdout.split('\0').filter(Boolean).map(file => file.replace(/\\/g, '/'));
+  return result.stdout
+    .split('\0')
+    .filter(Boolean)
+    .map(file => file.replace(/\\/g, '/'))
+    .filter(file => fs.existsSync(path.join(ROOT, file)));
 }
 
 function addFinding(findings, fields) {
@@ -78,7 +82,9 @@ function readJson(file) {
 }
 
 function scanLifecycleScripts(files, findings) {
-  const packageFiles = files.filter(file => file.endsWith('package.json'));
+  const packageFiles = files
+    .filter(file => file.endsWith('package.json'))
+    .filter(file => !file.includes('/node_modules/'));
   for (const file of packageFiles) {
     const scripts = readJson(file).scripts || {};
     for (const [name, command] of Object.entries(scripts)) {

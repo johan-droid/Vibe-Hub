@@ -41,6 +41,7 @@ export const codeRequestSchema = z.object({
     .uuid('Invalid user ID format'),
   targetFile: safePathSchema,
   effortLevel: z.enum(['quick', 'standard', 'deep']).optional().default('standard'),
+  queueLane: z.enum(['interactive', 'background']).optional().default('interactive'),
   socketId: z.string()
     .min(1, 'Socket ID is required for real-time updates')
 });

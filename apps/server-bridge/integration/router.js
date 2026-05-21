@@ -33,6 +33,7 @@ const integrationCodeRequestSchema = z.object({
   prompt: z.string().min(1).max(1000),
   targetFile: safePathSchema,
   effortLevel: z.enum(['quick', 'standard', 'deep']).optional().default('standard'),
+  queueLane: z.enum(['interactive', 'background']).optional().default('interactive'),
   socketId: z.string().min(1).optional(),
   userId: z.string().min(1).optional(),
 });
@@ -170,7 +171,7 @@ integrationRouter.use('/preferences', requireIntegrationAuth, requireScopedInteg
 
 integrationRouter.get('/runs/:runId', requireIntegrationAuth, requireScopedIntegrationUser, async (req, res, next) => {
   try {
-    const run = await fetchRunForUser(req.params.runId, req.user.id);
+    const run = await fetchRunForUser(req.params.runId, req.user.id, req.tenantId || req.user.tenantId);
     if (!run) return res.status(404).json({ success: false, error: 'Run not found' });
     return res.json({ success: true, run });
   } catch (error) {
@@ -180,7 +181,7 @@ integrationRouter.get('/runs/:runId', requireIntegrationAuth, requireScopedInteg
 
 integrationRouter.get('/runs/:runId/events', requireIntegrationAuth, requireScopedIntegrationUser, async (req, res, next) => {
   try {
-    const events = await fetchRunEventsForUser(req.params.runId, req.user.id);
+    const events = await fetchRunEventsForUser(req.params.runId, req.user.id, req.tenantId || req.user.tenantId);
     return res.json({ success: true, events });
   } catch (error) {
     return next(error);
@@ -189,7 +190,7 @@ integrationRouter.get('/runs/:runId/events', requireIntegrationAuth, requireScop
 
 integrationRouter.get('/runs/:runId/artifacts', requireIntegrationAuth, requireScopedIntegrationUser, async (req, res, next) => {
   try {
-    const run = await fetchRunForUser(req.params.runId, req.user.id);
+    const run = await fetchRunForUser(req.params.runId, req.user.id, req.tenantId || req.user.tenantId);
     if (!run) return res.status(404).json({ success: false, error: 'Run not found' });
     return res.json({
       success: true,
@@ -209,12 +210,13 @@ integrationRouter.post(
   async (req, res, next) => {
     try {
       const { runId, toolName, decision, reason = '', params, paramsHash: providedParamsHash } = req.validatedBody;
-      const run = await fetchRunForUser(runId, req.user.id);
+      const run = await fetchRunForUser(runId, req.user.id, req.tenantId || req.user.tenantId);
       if (!run) return res.status(404).json({ success: false, error: 'Run not found' });
 
       const paramsHash = providedParamsHash || hashToolParams(params || {});
       const grant = createActionGrant({
         userId: req.user.id,
+        tenantId: req.tenantId || req.user.tenantId,
         runId,
         toolName,
         paramsHash,

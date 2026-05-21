@@ -1,0 +1,7 @@
+npm error Lifecycle script `dev` failed with error:
+npm error code 4294967295
+npm error path D:\Vibe Hub\apps\user-interface
+npm error workspace user-interface@0.0.0
+npm error location D:\Vibe Hub\apps\user-interface
+npm error command failed
+npm error command C:\WINDOWS\system32\cmd.exe /d /s /c vite --host 127.0.0.1 --port 5174

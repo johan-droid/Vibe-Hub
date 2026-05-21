@@ -1,4 +1,3 @@
-import DOMPurify from 'dompurify';
 import React, { memo, useMemo, useEffect } from 'react';
 import { Eye, Code, FileCode, GitPullRequest, ChevronRight, X, Check, Github, Terminal, Zap, Sparkles } from 'lucide-react';
 import ReactDiffViewer from 'react-diff-viewer-continued';
@@ -168,8 +167,8 @@ const DiffViewer = memo(function DiffViewer({ onApply, onDiscard }) {
                 
                 <div className="p-2 md:p-4">
                   <ReactDiffViewer
-                    oldValue={DOMPurify.sanitize(diffChunk.old)}
-                    newValue={DOMPurify.sanitize(diffChunk.new)}
+                    oldValue={diffChunk.old}
+                    newValue={diffChunk.new}
                     splitView={true}
                     useDarkTheme={true}
                     styles={{

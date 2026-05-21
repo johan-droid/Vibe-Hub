@@ -17,6 +17,18 @@ import { modelService } from './models.js';
 import { resolveExpertProfile } from './expert-routing.js';
 import { authorizeToolCall, ToolAuthError } from './tool_auth_guard.js';
 import { hashToolParams, verifyActionGrant } from '../auth/action-grants.js';
+import {
+    ToolExecutionPolicyError,
+    recordToolExecutionOutcome,
+    validateToolInvocationPolicy,
+} from './tool-execution-policy.js';
+import {
+    acquireRun,
+    getConcurrencyRetryAfterSeconds,
+    getRunConcurrencyLimit,
+    releaseRun
+} from '../auth/concurrency-governor.js';
+import { registerSessionCleanup, unregisterSessionCleanup } from '../auth/session.js';
 
 
 // Resolve directory for skill files
@@ -161,7 +173,7 @@ ${prompt}
      * Execute task through XState machine with rollback capability
      * Streams state transitions via Socket.io for real-time UI updates
      */
-    async executeWithStateMachine(prompt, userId, targetFile, io, socketId, requestId = null, effortLevel = 'standard') {
+    async executeWithStateMachine(prompt, userId, targetFile, io, socketId, requestId = null, effortLevel = 'standard', options = {}) {
         const onFileStaged = (entry) => {
             if (io && socketId) {
                 io.to(socketId).emit('file_staged', {
@@ -189,7 +201,22 @@ ${prompt}
             let settled = false;
             let previousState = 'unknown';
             const agentService = createActor(agentMachine);
-            const subscription = agentService.subscribe({
+            let subscription = null;
+            const abortExecution = (reason = 'ORCHESTRATION_ABORTED') => {
+                if (settled) return;
+                settled = true;
+                subscription?.unsubscribe?.();
+                vfs.off('file_staged', onFileStaged);
+                try {
+                    agentService.stop();
+                } catch {
+                    // Best effort only; we still reject to unwind the caller.
+                }
+                reject(new Error(reason));
+            };
+
+            options.onAbortReady?.(abortExecution);
+            subscription = agentService.subscribe({
               next: (state) => {
                 logger.info('Agent', `transitioned to [${state.value}]`);
                 if (state.value === 'sandboxing') {
@@ -368,28 +395,95 @@ async function handleCodeRequest(req, res) {
         return res.status(400).json({ error: "socketId is required", requestId: req.id });
     }
 
+    const runId = req.id || 'http-run-' + Math.random().toString(36).substring(2, 11);
+    if (!acquireRun(userId, runId)) {
+        res.setHeader('Retry-After', String(getConcurrencyRetryAfterSeconds()));
+        return res.status(429).json({
+            success: false,
+            error: `Concurrency limit exceeded. A maximum of ${getRunConcurrencyLimit()} concurrent agent runs is permitted per user.`,
+            requestId: req.id
+        });
+    }
+
     if (codeQueue) {
-        const queued = await codeQueue.enqueue({ prompt, userId, targetFile, socketId, requestId: req.id, effortLevel });
+        try {
+            const queued = await codeQueue.enqueue({
+                prompt,
+                userId,
+                targetFile,
+                socketId,
+                requestId: runId,
+                effortLevel,
+                sessionId: req.sessionId || null,
+                authMode: req.authMode || 'user-session'
+            });
+            if (io && socketId) {
+                io.to(socketId).emit('agent_status', {
+                    status: 'queued',
+                    message: `Job ${queued.jobId} queued.`,
+                    jobId: queued.jobId,
+                    requestId: req.id,
+                    timestamp: new Date().toISOString()
+                });
+            }
+            return res.status(202).json({ success: true, jobId: queued.jobId, requestId: req.id });
+        } catch (enqueueError) {
+            releaseRun(userId, runId);
+            throw enqueueError;
+        }
+    }
+
+    let abortRun = null;
+    const sessionCleanup = req.sessionId ? (() => {
         if (io && socketId) {
             io.to(socketId).emit('agent_status', {
-                status: 'queued',
-                message: `Job ${queued.jobId} queued.`,
-                jobId: queued.jobId,
+                status: 'reauth_required',
+                message: 'Session fingerprint changed. Re-authentication is required and the current run has been terminated.',
                 requestId: req.id,
                 timestamp: new Date().toISOString()
             });
         }
-        return res.status(202).json({ success: true, jobId: queued.jobId, requestId: req.id });
+        abortRun?.('ORCHESTRATION_ABORTED');
+    }) : null;
+
+    if (sessionCleanup) {
+        registerSessionCleanup(req.sessionId, sessionCleanup);
     }
 
     try {
-        const result = await router.executeWithStateMachine(prompt, userId, targetFile, io, socketId, req.id, effortLevel);
+        const result = await router.executeWithStateMachine(
+            prompt,
+            userId,
+            targetFile,
+            io,
+            socketId,
+            req.id,
+            effortLevel,
+            {
+                onAbortReady: (abortHandler) => {
+                    abortRun = abortHandler;
+                }
+            }
+        );
         resetRetryState(userId);
         res.status(200).json({ success: true, data: result });
     } catch (error) {
+        if (error.message === 'ORCHESTRATION_ABORTED') {
+            return res.status(401).json({
+                success: false,
+                error: 'Session fingerprint changed. Re-authentication is required.',
+                code: 'SESSION_REAUTH_REQUIRED',
+                requestId: req.id
+            });
+        }
         const rollbackState = recordRollback(userId);
         const config = await router.route(prompt);
         res.status(202).json({ success: false, error: error.message, rollbackCount: rollbackState.count, fallback: config });
+    } finally {
+        if (sessionCleanup) {
+            unregisterSessionCleanup(req.sessionId, sessionCleanup);
+        }
+        releaseRun(userId, runId);
     }
 }
 
@@ -499,13 +593,19 @@ async function handleMcpDiagnostics(req, res) {
 
 async function handleCallTool(req, res) {
     try {
-        const { toolId, arguments: args, actionGrant, runId } = req.body;
+        const { toolId, arguments: rawArgs, actionGrant, runId } = req.body;
         if (!toolId) {
             res.status(400).json({ success: false, code: 'MCP_TOOL_ID_REQUIRED', error: 'toolId is required' });
             return;
         }
         const tool = mcpManager.tools.find(item => item.uniqueId === toolId) || mcpManager.localTools?.get?.(toolId);
         const llmToolName = toolId.replace(/:/g, '__');
+        const policy = validateToolInvocationPolicy(llmToolName, rawArgs || {}, {
+            toolDefinition: tool,
+            user: req.user || null,
+            tenantId: req.user?.tenantId || req.tenantId || null,
+        });
+        const args = policy.args;
         const paramsHash = hashToolParams(args || {});
         await authorizeToolCall(llmToolName, args || {}, {
             authSnapshot: req.user ? { type: 'user-session', userId: req.user.id, expiresAt: null } : null,
@@ -521,9 +621,26 @@ async function handleCallTool(req, res) {
                 }).ok;
             },
         });
-        const result = await mcpManager.callTool(toolId, args);
-        res.json({ success: true, result });
+        try {
+            const result = await mcpManager.callTool(toolId, args);
+            recordToolExecutionOutcome(llmToolName, true);
+            res.json({
+                success: true,
+                result,
+                metadata: {
+                    timeoutMs: policy.timeoutMs,
+                    credentialScope: policy.credentialScope,
+                },
+            });
+        } catch (error) {
+            recordToolExecutionOutcome(llmToolName, false);
+            throw error;
+        }
     } catch (error) {
+        if (error instanceof ToolExecutionPolicyError) {
+            res.status(error.status || 400).json({ success: false, code: error.code, error: error.message });
+            return;
+        }
         if (error instanceof ToolAuthError) {
             res.status(403).json({ success: false, code: 'TOOL_AUTH_DENIED', error: error.message });
             return;

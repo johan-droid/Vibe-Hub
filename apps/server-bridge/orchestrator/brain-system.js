@@ -10,6 +10,7 @@ import { WorkerOrchestrator } from './worker-orchestrator.js';
 import { SolutionsLedger } from './solutions-ledger.js';
 import { SandboxProviderRouter } from '../sandbox/providers.js';
 import { TokenBudgetBroker } from '../memory/token-budget-broker.js';
+import { assertPromptSafe } from './prompt-guard.js';
 
 export const BRAIN_SYSTEM_STAGES = Object.freeze([
   'token_budget_governor',
@@ -76,6 +77,7 @@ export class BrainSystemOrchestrator {
     let triage;
     try {
       this.securityCheck(userPrompt);
+      await assertPromptSafe(userPrompt);
       triage = normalizeTriage(await this.triage(userPrompt), budgetRoute);
       recordStage(stages, 'triage_security', {
         intent: triage.intent,

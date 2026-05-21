@@ -1,0 +1,81 @@
+groups:
+  - name: selina-slo-burn-rate
+    rules:
+      - alert: SelinaOrchestrationStepSloFastBurn
+        expr: |
+          (
+            sum(rate(orchestration_step_slo_events_total{result="violated",slo="step_lt_2s"}[5m]))
+            /
+            sum(rate(orchestration_step_slo_events_total{slo="step_lt_2s"}[5m]))
+          ) > (14.4 * 0.01)
+          and
+          (
+            sum(rate(orchestration_step_slo_events_total{result="violated",slo="step_lt_2s"}[1h]))
+            /
+            sum(rate(orchestration_step_slo_events_total{slo="step_lt_2s"}[1h]))
+          ) > (14.4 * 0.01)
+        for: 2m
+        labels:
+          severity: page
+          slo: step_lt_2s
+        annotations:
+          summary: Selina orchestration step SLO is burning fast
+          description: More than 14.4x of the 1% error budget is being consumed across 5m and 1h windows.
+
+      - alert: SelinaOrchestrationStepSloSlowBurn
+        expr: |
+          (
+            sum(rate(orchestration_step_slo_events_total{result="violated",slo="step_lt_2s"}[30m]))
+            /
+            sum(rate(orchestration_step_slo_events_total{slo="step_lt_2s"}[30m]))
+          ) > (6 * 0.01)
+          and
+          (
+            sum(rate(orchestration_step_slo_events_total{result="violated",slo="step_lt_2s"}[6h]))
+            /
+            sum(rate(orchestration_step_slo_events_total{slo="step_lt_2s"}[6h]))
+          ) > (6 * 0.01)
+        for: 15m
+        labels:
+          severity: ticket
+          slo: step_lt_2s
+        annotations:
+          summary: Selina orchestration step SLO is steadily burning
+          description: More than 6x of the 1% error budget is being consumed across 30m and 6h windows.
+
+  - name: selina-operational-alerts
+    rules:
+      - alert: SelinaHighHttp5xxRate
+        expr: |
+          sum(rate(http_request_errors_total[5m]))
+          /
+          sum(rate(http_requests_total[5m]))
+          > 0.02
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: Server Bridge 5xx rate is elevated
+          description: HTTP 5xx rate is above 2% for five minutes.
+
+      - alert: SelinaDeadLetterQueueGrowing
+        expr: sum(rate(orchestration_queue_jobs_total{status="dead_lettered"}[10m])) > 0
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: Orchestration jobs are entering the dead-letter queue
+          description: At least one queue lane is exhausting retries and dead-lettering jobs.
+
+      - alert: SelinaRagRecallLatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(rag_recall_duration_seconds_bucket[10m])) by (le, source)
+          ) > 1
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: RAG recall p95 latency is high
+          description: RAG recall p95 has stayed above one second for ten minutes.

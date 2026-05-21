@@ -93,7 +93,7 @@ export default function AuthCallback() {
           // Fallback to authStatus check
           setMessage('Verifying authentication status...');
           const userData = await Promise.race([
-            api.authStatus(),
+            api.resolveSession(),
             new Promise((_, reject) => 
               setTimeout(() => reject(new Error('Status check timed out')), 5000)
             )

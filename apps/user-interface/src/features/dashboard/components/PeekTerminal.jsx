@@ -15,6 +15,7 @@ function statusClass(status) {
 }
 
 function formatDuration(seconds) {
+  if (seconds == null) return null;
   if (seconds < 1) return `${Math.round(seconds * 1000)}ms`;
   return `${seconds.toFixed(1)}s`;
 }
@@ -41,13 +42,13 @@ export default function PeekTerminal({ onExpand, agentLoopStatus, vfsInstance })
         for (const session of sessions) {
           const output = await vfsInstance.terminal.tool_getOutput({ session: session.id, limit: 5 });
           const commandOutputs = output
-            .filter((item) => item.command)
+            .filter((item) => item.type === 'command_complete' || item.type === 'error')
             .map((item) => ({
               id: `${session.id}_${item.timestamp}`,
-              command: item.command,
+              command: item.command || session.name,
               status: item.type === 'command_complete' && item.exitCode === 0 ? 'success' : 'error',
               exitCode: item.exitCode || 1,
-              duration: 0.5,
+              duration: item.duration ?? null,
               timestamp: new Date(item.timestamp),
               output: item.data || '',
             }));
@@ -70,7 +71,7 @@ export default function PeekTerminal({ onExpand, agentLoopStatus, vfsInstance })
             command: item.command,
             status: item.exitCode === 0 ? 'success' : 'error',
             exitCode: item.exitCode,
-            duration: 0.5,
+            duration: item.duration ?? null,
             timestamp: item.timestamp || new Date(),
             output: item.output || '',
           }))
@@ -119,7 +120,7 @@ export default function PeekTerminal({ onExpand, agentLoopStatus, vfsInstance })
                 <span className="max-w-[17rem] truncate font-mono text-xs">{cmd.command}</span>
                 {statusIcon(cmd.status)}
                 <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/30">
-                  {formatDuration(cmd.duration)} / {formatTimeAgo(cmd.timestamp)}
+                  {cmd.duration != null ? `${formatDuration(cmd.duration)} / ` : ''}{formatTimeAgo(cmd.timestamp)}
                 </span>
               </motion.button>
             ))

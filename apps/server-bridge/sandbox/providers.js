@@ -65,6 +65,7 @@ export class E2BVibeKitSandboxProvider {
         runtime,
         scriptPath,
         timeoutMs,
+        network: 'restricted',
         files,
       });
       return normalizeE2BResult(result, isolatedWorkspace.copiedPaths);
@@ -99,6 +100,7 @@ export class E2BVibeKitSandboxProvider {
         command,
         args: Array.isArray(args) ? args.map(String) : [],
         timeoutMs,
+        network: 'restricted',
         files,
       });
       return normalizeE2BResult(result, isolatedWorkspace.copiedPaths);
@@ -177,9 +179,12 @@ function normalizeE2BResult(result = {}, copiedFiles = []) {
     error: result.error || null,
     sandbox: {
       type: 'e2b_vibekit',
+      isolation: 'firecracker_microvm',
       workspace: 'isolated_tmp_to_cloud',
       mount: 'copied_files_only',
-      network: result.network || 'provider_default',
+      network: result.network || 'restricted',
+      ephemeral: true,
+      freshInvocation: true,
       copiedFiles,
     },
   };

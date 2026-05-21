@@ -9,7 +9,8 @@ import { sanitizeEnvironment } from '../utils/env-sanitizer.js';
 const execFileAsync = promisify(execFile);
 
 const DEFAULT_TIMEOUT_MS = 10_000;
-const MAX_TIMEOUT_MS = 60_000;
+const configuredMaxTimeoutMs = Number.parseInt(process.env.SELINA_SANDBOX_MAX_TIMEOUT_MS || '10000', 10);
+const MAX_TIMEOUT_MS = Number.isFinite(configuredMaxTimeoutMs) ? configuredMaxTimeoutMs : 10_000;
 const MAX_OUTPUT_CHARS = 64_000;
 const SANDBOX_DIR_PREFIX = 'selina_sandbox_';
 const RESTRICTED_PATH_SEGMENTS = new Set([
@@ -202,6 +203,30 @@ function getRuntimeConfig(runtime = 'node') {
   return config;
 }
 
+function getContainerRuntime() {
+  return String(process.env.SELINA_SANDBOX_CONTAINER_RUNTIME || process.env.GVISOR_RUNTIME || '').trim();
+}
+
+function getRuntimeArgs() {
+  const runtime = getContainerRuntime();
+  return runtime ? ['--runtime', runtime] : [];
+}
+
+function buildSandboxMetadata(copiedPaths = []) {
+  const runtime = getContainerRuntime();
+  return {
+    type: 'local_docker',
+    isolation: runtime ? 'gvisor_runtime' : 'docker_namespace',
+    containerRuntime: runtime || null,
+    network: 'none',
+    workspace: 'isolated_tmp',
+    mount: 'rw',
+    ephemeral: true,
+    freshInvocation: true,
+    copiedFiles: copiedPaths,
+  };
+}
+
 async function cleanupContainer(containerName) {
   try {
     await execFileAsync('docker', ['rm', '-f', containerName], {
@@ -221,11 +246,24 @@ export async function cleanupSandboxWorkspace(sandboxRoot) {
 function runDocker({ sandboxWorkspacePath, image, containerArgs, timeoutMs, copiedPaths = [] }) {
   const timeout = clampTimeout(timeoutMs);
   const containerName = `selina-sandbox-${crypto.randomUUID()}`;
+  const runtimeArgs = getRuntimeArgs();
+  if (!runtimeArgs.length && process.env.SELINA_SANDBOX_REQUIRE_MICROVM === 'true') {
+    return cleanupSandboxWorkspace(sandboxWorkspacePath).then(() => ({
+      success: false,
+      exitCode: null,
+      timedOut: false,
+      stdout: '',
+      stderr: '',
+      error: 'Sandbox micro-VM runtime is required but no container runtime was configured.',
+      sandbox: buildSandboxMetadata(copiedPaths),
+    }));
+  }
   const dockerArgs = [
     'run',
     '--rm',
     '--name',
     containerName,
+    ...runtimeArgs,
     '--network',
     'none',
     '--cpus',
@@ -279,13 +317,7 @@ function runDocker({ sandboxWorkspacePath, image, containerArgs, timeoutMs, copi
         stdout,
         stderr,
         error: error.message,
-        sandbox: {
-          type: 'local_docker',
-          network: 'none',
-          workspace: 'isolated_tmp',
-          mount: 'rw',
-          copiedFiles: copiedPaths,
-        },
+        sandbox: buildSandboxMetadata(copiedPaths),
       });
     });
 
@@ -301,13 +333,7 @@ function runDocker({ sandboxWorkspacePath, image, containerArgs, timeoutMs, copi
         timedOut,
         stdout,
         stderr,
-        sandbox: {
-          type: 'local_docker',
-          network: 'none',
-          workspace: 'isolated_tmp',
-          mount: 'rw',
-          copiedFiles: copiedPaths,
-        },
+        sandbox: buildSandboxMetadata(copiedPaths),
       });
     });
   });

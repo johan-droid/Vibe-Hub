@@ -89,6 +89,7 @@ describe('E2BVibeKitSandboxProvider', () => {
     expect(adapter.run).toHaveBeenCalledWith(expect.objectContaining({
       mode: 'script',
       runtime: 'node',
+      network: 'restricted',
       files: [
         { path: 'run.js', content: 'console.log("safe");' },
         { path: 'helper.txt', content: 'visible' },
@@ -98,6 +99,9 @@ describe('E2BVibeKitSandboxProvider', () => {
       success: true,
       sandbox: {
         type: 'e2b_vibekit',
+        isolation: 'firecracker_microvm',
+        network: 'restricted',
+        ephemeral: true,
         workspace: 'isolated_tmp_to_cloud',
         copiedFiles: ['run.js', 'helper.txt'],
       },

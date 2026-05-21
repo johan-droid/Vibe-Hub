@@ -11,8 +11,11 @@ import { logger } from './logger.js';
  * Sanitizes common XSS vectors in request bodies
  */
 export function xssProtection(req, res, next) {
-  if (req.body && typeof req.body === 'object') {
+  if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
     sanitizeObject(req.body);
+  }
+  if (req.query && typeof req.query === 'object') {
+    sanitizeObject(req.query);
   }
   next();
 }
@@ -21,26 +24,53 @@ export function xssProtection(req, res, next) {
  * Recursively sanitize object properties
  */
 function sanitizeObject(obj) {
+  if (!obj || Buffer.isBuffer(obj)) return;
   for (const key in obj) {
     if (typeof obj[key] === 'string') {
-      obj[key] = sanitizeString(obj[key]);
+      obj[key] = isCodeLikeField(key) ? sanitizeAgentText(obj[key]) : sanitizeString(obj[key]);
     } else if (typeof obj[key] === 'object' && obj[key] !== null) {
       sanitizeObject(obj[key]);
     }
   }
 }
 
+function isCodeLikeField(key) {
+  return /(prompt|content|code|replacement|search|target|script|command|args?)/i.test(String(key));
+}
+
 /**
  * Sanitize string by removing dangerous HTML/JS
  */
-function sanitizeString(str) {
+export function sanitizeString(str) {
   return str
+    .replace(/\0/g, '')
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
     .replace(/javascript:/gi, 'blocked:')
     .replace(/on\w+\s*=/gi, 'blocked=')
     .replace(/<iframe/gi, '&lt;iframe')
     .replace(/<object/gi, '&lt;object')
     .replace(/<embed/gi, '&lt;embed');
+}
+
+export function sanitizeAgentText(str) {
+  return String(str)
+    .replace(/\0/g, '')
+    .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+    .slice(0, Number.parseInt(process.env.AGENT_INPUT_MAX_CHARS || '20000', 10));
+}
+
+export function detectPromptInjection(input = '') {
+  const patterns = [
+    /ignore (all )?(previous|prior) instructions/i,
+    /reveal (the )?(system|developer) prompt/i,
+    /exfiltrate|steal|leak/i,
+    /\b(?:cat|type)\s+\.env\b/i,
+    /BEGIN_(SYSTEM|DEVELOPER)_PROMPT/i,
+  ];
+  const text = String(input);
+  return patterns
+    .filter(pattern => pattern.test(text))
+    .map(pattern => pattern.source);
 }
 
 /**
@@ -76,7 +106,7 @@ export function attackMonitoring(req, res, next) {
     /UNION.*SELECT/i
   ];
   
-  const requestString = JSON.stringify(req.body) + req.url + JSON.stringify(req.query);
+  const requestString = JSON.stringify(Buffer.isBuffer(req.body) ? '[raw-body]' : req.body) + req.url + JSON.stringify(req.query);
   
   for (const pattern of suspiciousPatterns) {
     if (pattern.test(requestString)) {
@@ -127,5 +157,8 @@ export default {
   xssProtection,
   additionalSecurityHeaders,
   attackMonitoring,
+  sanitizeString,
+  sanitizeAgentText,
+  detectPromptInjection,
   validateFilePath
 };

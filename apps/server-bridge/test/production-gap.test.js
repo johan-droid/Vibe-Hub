@@ -102,13 +102,13 @@ describe('production gap closure primitives', () => {
 
   it('fails closed for unknown MCP mutation risk and allows declared readonly MCP tools', async () => {
     await expect(authorizeToolCall('remote_server__mutate', {}, {
-      authSnapshot: { type: 'user-session', userId: 'user-1' },
+      authSnapshot: { type: 'user-session', userId: 'user-1', permissions: ['tool:mcp'] },
       toolDefinition: { serverName: 'remote_server', metadata: {} },
       approvalFn: async () => false,
     })).rejects.toThrow(ToolAuthError);
 
     await expect(authorizeToolCall('selina_a11y__scan', { url: 'http://localhost:5173' }, {
-      authSnapshot: { type: 'user-session', userId: 'user-1' },
+      authSnapshot: { type: 'user-session', userId: 'user-1', permissions: ['tool:mcp'] },
       toolDefinition: { serverName: 'selina_a11y', metadata: { risk: 'readonly' } },
     })).resolves.toMatchObject({ approved: true });
   });

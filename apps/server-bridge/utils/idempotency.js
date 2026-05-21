@@ -1,5 +1,6 @@
-const DEFAULT_TTL_MS = 10 * 60 * 1000;
-const cache = new Map();
+import { getJson, setJson, deleteKey } from './cache.js';
+
+const DEFAULT_TTL_SECONDS = 10 * 60; // 10 minutes
 
 function cacheKey(req) {
   const key = req.get('Idempotency-Key');
@@ -13,40 +14,64 @@ function replay(res, entry) {
   return res.status(entry.statusCode).send(entry.body);
 }
 
-export function idempotencyMiddleware(ttlMs = DEFAULT_TTL_MS) {
-  return (req, res, next) => {
+export function idempotencyMiddleware(ttlSeconds = DEFAULT_TTL_SECONDS) {
+  return async (req, res, next) => {
     const key = cacheKey(req);
     if (!key) return next();
 
-    const existing = cache.get(key);
-    if (existing?.state === 'complete') return replay(res, existing);
+    const cacheKeyString = `idempotency:${key}`;
 
-    if (existing?.state === 'pending') {
-      existing.waiters.push({ res });
-      return;
-    }
+    try {
+      let existing = await getJson(cacheKeyString);
+      if (existing?.state === 'complete') {
+        return replay(res, existing);
+      }
 
-    const entry = { state: 'pending', waiters: [] };
-    cache.set(key, entry);
-
-    const originalSend = res.send.bind(res);
-    res.send = (body) => {
-      if (res.statusCode < 500) {
-        entry.state = 'complete';
-        entry.statusCode = res.statusCode;
-        entry.contentType = res.get('content-type');
-        entry.body = body;
-        setTimeout(() => cache.delete(key), ttlMs).unref?.();
-        for (const waiter of entry.waiters) replay(waiter.res, entry);
-      } else {
-        cache.delete(key);
-        for (const waiter of entry.waiters) {
-          waiter.res.status(503).json({ success: false, error: 'Original idempotent request failed.' });
+      if (existing?.state === 'pending') {
+        // Polling loop for active execution
+        for (let attempt = 0; attempt < 120; attempt++) { // poll for up to 12s
+          await new Promise(resolve => setTimeout(resolve, 100));
+          existing = await getJson(cacheKeyString);
+          if (existing?.state === 'complete') {
+            return replay(res, existing);
+          }
+          if (!existing) {
+            // The other request failed and deleted the key, we can proceed to run it ourselves
+            break;
+          }
         }
       }
-      return originalSend(body);
-    };
 
-    next();
+      // Mark request as pending
+      await setJson(cacheKeyString, { state: 'pending' }, ttlSeconds);
+
+      const originalSend = res.send.bind(res);
+      res.send = (body) => {
+        // Express res.send can be called synchronously, so we perform async cache update in background
+        if (res.statusCode < 500) {
+          const entry = {
+            state: 'complete',
+            statusCode: res.statusCode,
+            contentType: res.get('content-type') || 'application/json',
+            body: typeof body === 'string' ? body : JSON.stringify(body),
+          };
+          setJson(cacheKeyString, entry, ttlSeconds).catch(err => {
+            console.error('[Idempotency] Failed to finalize cache entry:', err.message);
+          });
+        } else {
+          deleteKey(cacheKeyString).catch(err => {
+            console.error('[Idempotency] Failed to delete cache entry:', err.message);
+          });
+        }
+        return originalSend(body);
+      };
+
+      next();
+    } catch (error) {
+      // If cache lookup errors out, gracefully fall back to executing request without blocking
+      console.error('[Idempotency] Middleware execution error:', error.message);
+      next();
+    }
   };
 }
+

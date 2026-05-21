@@ -50,6 +50,7 @@ function StatusPill({ status, isRunning }) {
 }
 
 function Metric({ icon: Icon, label, value, accent = 'text-white/65' }) {
+  if (value == null || value === '') return null;
   return (
     <div className="hidden items-center gap-2 rounded-md border border-white/10 bg-white/[0.035] px-2.5 py-1.5 text-xs lg:flex">
       <Icon size={14} className={accent} />
@@ -134,7 +135,7 @@ export default function AgentStatusBar({
 
         <div className="hidden h-6 w-px bg-white/10 md:block" />
         <div className="hidden items-center gap-2 md:flex">
-          <Metric icon={GitBranch} label="Session" value={`#${sessionNumber}`} accent="text-[#8DA2FF]" />
+          <Metric icon={GitBranch} label="Session" value={sessionNumber != null ? `#${sessionNumber}` : null} accent="text-[#8DA2FF]" />
           <Metric icon={Clock} label="Elapsed" value={formatTime(elapsedTime)} accent="text-[#F7C35F]" />
           <Metric icon={ShieldCheck} label="Sandbox" value="Local Docker" accent="text-[#43F3C5]" />
           <Metric icon={Cpu} label="Mode" value={experienceMode === 'learner' ? 'Learner' : 'Pro'} accent="text-[#8DA2FF]" />

@@ -57,6 +57,25 @@ pool.on('error', (err, client) => {
   logger.error('Database', 'Unexpected error on idle client', err);
 });
 
+export async function withTenantContext(tenantId, operation) {
+  if (!tenantId || typeof operation !== 'function') {
+    throw new Error('withTenantContext requires tenantId and operation.');
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT set_config($1, $2, true)', ['app.current_tenant_id', String(tenantId)]);
+    const result = await operation(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 // Monitor pool metrics in development
 if (process.env.NODE_ENV === 'development') {
   pool.on('connect', () => {
@@ -173,6 +192,48 @@ export async function initDB(retries = 5) {
         metadata JSONB DEFAULT '{}'::jsonb,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
+
+      CREATE TABLE IF NOT EXISTS semantic_embeddings (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        project_name VARCHAR(255) NOT NULL DEFAULT 'default',
+        tenant_id VARCHAR(255) NOT NULL DEFAULT 'shared',
+        namespace VARCHAR(255) NOT NULL DEFAULT 'default',
+        index_version VARCHAR(255) NOT NULL DEFAULT 'live',
+        file_path VARCHAR NOT NULL,
+        node_id UUID,
+        node_name VARCHAR,
+        node_type VARCHAR,
+        context_type VARCHAR NOT NULL,
+        content TEXT,
+        embedding vector(768),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS semantic_embeddings_embedding_idx ON semantic_embeddings USING hnsw (embedding vector_l2_ops);
+      CREATE INDEX IF NOT EXISTS semantic_embeddings_context_type_idx ON semantic_embeddings(context_type);
+      CREATE INDEX IF NOT EXISTS semantic_embeddings_scope_idx ON semantic_embeddings(project_name, tenant_id, namespace, index_version);
+      ALTER TABLE semantic_embeddings ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE semantic_embeddings FORCE ROW LEVEL SECURITY;
+      DROP POLICY IF EXISTS semantic_embeddings_tenant_isolation ON semantic_embeddings;
+      CREATE POLICY semantic_embeddings_tenant_isolation ON semantic_embeddings
+        USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), ''))
+        WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), ''));
+
+      CREATE TABLE IF NOT EXISTS semantic_index_registry (
+        project_name VARCHAR(255) NOT NULL DEFAULT 'default',
+        tenant_id VARCHAR(255) NOT NULL DEFAULT 'shared',
+        namespace VARCHAR(255) NOT NULL DEFAULT 'default',
+        active_index_version VARCHAR(255) NOT NULL DEFAULT 'live',
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (project_name, tenant_id, namespace)
+      );
+      ALTER TABLE semantic_index_registry ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE semantic_index_registry FORCE ROW LEVEL SECURITY;
+      DROP POLICY IF EXISTS semantic_index_registry_tenant_isolation ON semantic_index_registry;
+      CREATE POLICY semantic_index_registry_tenant_isolation ON semantic_index_registry
+        USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), ''))
+        WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), ''));
 
       CREATE TABLE IF NOT EXISTS chat_sessions (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -306,6 +367,7 @@ export async function initDB(retries = 5) {
         depth INT DEFAULT 0,
         sequence INT DEFAULT 0,
         user_id TEXT,
+        tenant_id TEXT DEFAULT 'shared',
         project_name TEXT DEFAULT 'default',
         expert TEXT,
         provider TEXT,
@@ -318,6 +380,7 @@ export async function initDB(retries = 5) {
       );
 
       CREATE INDEX IF NOT EXISTS idx_agent_runs_user_started ON agent_runs(user_id, started_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_agent_runs_tenant_user_started ON agent_runs(tenant_id, user_id, started_at DESC);
       CREATE INDEX IF NOT EXISTS idx_agent_runs_root ON agent_runs(root_run_id);
       CREATE INDEX IF NOT EXISTS idx_agent_runs_parent ON agent_runs(parent_run_id);
 
@@ -342,6 +405,7 @@ export async function initDB(retries = 5) {
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         grant_id TEXT UNIQUE NOT NULL,
         user_id TEXT NOT NULL,
+        tenant_id TEXT DEFAULT 'shared',
         run_id TEXT NOT NULL,
         tool_name TEXT NOT NULL,
         params_hash TEXT NOT NULL,
@@ -355,6 +419,7 @@ export async function initDB(retries = 5) {
 
       CREATE INDEX IF NOT EXISTS idx_agent_action_grants_run ON agent_action_grants(run_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_agent_action_grants_user ON agent_action_grants(user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_agent_action_grants_tenant_user ON agent_action_grants(tenant_id, user_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_agent_action_grants_scope ON agent_action_grants(run_id, tool_name, params_hash);
 
       CREATE TABLE IF NOT EXISTS agent_memory_items (
@@ -392,6 +457,19 @@ export async function initDB(retries = 5) {
       );
 
       CREATE INDEX IF NOT EXISTS idx_mcp_server_registry_status ON mcp_server_registry(status);
+
+      CREATE TABLE IF NOT EXISTS semantic_cache (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        prompt_hash VARCHAR(64) UNIQUE NOT NULL,
+        prompt TEXT NOT NULL,
+        response TEXT NOT NULL,
+        embedding vector(768),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        last_used_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_semantic_cache_embedding ON semantic_cache USING hnsw (embedding vector_l2_ops);
+      CREATE INDEX IF NOT EXISTS idx_semantic_cache_hash ON semantic_cache(prompt_hash);
     `);
 
     // ── MIGRATIONS: Add missing columns to existing tables ─────────────────
@@ -407,6 +485,70 @@ export async function initDB(retries = 5) {
             RAISE NOTICE 'Added provider column to user_sessions';
           END IF;
         END $$;
+      `);
+      await pool.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_name = 'semantic_embeddings'
+          ) THEN
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'semantic_embeddings' AND column_name = 'tenant_id'
+            ) THEN
+              ALTER TABLE semantic_embeddings ADD COLUMN tenant_id VARCHAR(255) NOT NULL DEFAULT 'shared';
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'semantic_embeddings' AND column_name = 'namespace'
+            ) THEN
+              ALTER TABLE semantic_embeddings ADD COLUMN namespace VARCHAR(255) NOT NULL DEFAULT 'default';
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'semantic_embeddings' AND column_name = 'index_version'
+            ) THEN
+              ALTER TABLE semantic_embeddings ADD COLUMN index_version VARCHAR(255) NOT NULL DEFAULT 'live';
+            END IF;
+          END IF;
+        END $$;
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS semantic_embeddings_scope_idx
+        ON semantic_embeddings(project_name, tenant_id, namespace, index_version);
+      `);
+      await pool.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_name = 'agent_runs'
+          ) AND NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'agent_runs' AND column_name = 'tenant_id'
+          ) THEN
+            ALTER TABLE agent_runs ADD COLUMN tenant_id TEXT DEFAULT 'shared';
+          END IF;
+
+          IF EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_name = 'agent_action_grants'
+          ) AND NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'agent_action_grants' AND column_name = 'tenant_id'
+          ) THEN
+            ALTER TABLE agent_action_grants ADD COLUMN tenant_id TEXT DEFAULT 'shared';
+          END IF;
+        END $$;
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_agent_runs_tenant_user_started
+        ON agent_runs(tenant_id, user_id, started_at DESC);
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_agent_action_grants_tenant_user
+        ON agent_action_grants(tenant_id, user_id, created_at DESC);
       `);
       console.log('[Startup] Database migrations applied');
     } catch (migrationErr) {
@@ -601,6 +743,21 @@ export async function getRefreshTokenByHash(tokenHash) {
        AND rt.expires_at > NOW()
        AND s.is_active = true
        AND s.expires_at > NOW()
+     LIMIT 1`,
+    [tokenHash]
+  );
+  return result.rows[0] || null;
+}
+
+export async function findRefreshTokenByHash(tokenHash) {
+  const result = await pool.query(
+    `SELECT rt.*, u.email, u.name, u.avatar_url, u.provider,
+            s.is_active AS session_active,
+            s.expires_at AS session_expires_at
+     FROM refresh_tokens rt
+     JOIN users u ON rt.user_id = u.id
+     LEFT JOIN user_sessions s ON rt.session_id = s.id
+     WHERE rt.token_hash = $1
      LIMIT 1`,
     [tokenHash]
   );
@@ -831,6 +988,7 @@ export async function upsertAgentRun({
   depth = 0,
   sequence = 0,
   userId = null,
+  tenantId = 'shared',
   projectName = 'default',
   expert = null,
   provider = null,
@@ -841,11 +999,12 @@ export async function upsertAgentRun({
 }) {
   const result = await pool.query(
     `INSERT INTO agent_runs (
-       id, root_run_id, parent_run_id, depth, sequence, user_id, project_name,
+       id, root_run_id, parent_run_id, depth, sequence, user_id, tenant_id, project_name,
        expert, provider, model, status, prompt, metadata
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
      ON CONFLICT (id) DO UPDATE SET
+       tenant_id = EXCLUDED.tenant_id,
        expert = EXCLUDED.expert,
        provider = EXCLUDED.provider,
        model = EXCLUDED.model,
@@ -859,6 +1018,7 @@ export async function upsertAgentRun({
       depth,
       sequence,
       userId,
+      tenantId,
       projectName,
       expert,
       provider,
@@ -907,18 +1067,22 @@ export async function recordAgentRunEvent({
   return result.rows[0] || null;
 }
 
-export async function getAgentRun(runId, userId = null) {
+export async function getAgentRun(runId, userId = null, tenantId = null) {
   const params = [runId];
   let query = 'SELECT * FROM agent_runs WHERE id = $1';
   if (userId) {
-    query += ' AND user_id = $2';
     params.push(userId);
+    query += ` AND user_id = $${params.length}`;
+  }
+  if (tenantId) {
+    params.push(tenantId);
+    query += ` AND tenant_id = $${params.length}`;
   }
   const result = await pool.query(query, params);
   return result.rows[0] || null;
 }
 
-export async function getAgentRunEvents(runId, userId = null) {
+export async function getAgentRunEvents(runId, userId = null, tenantId = null) {
   const params = [runId];
   let query = `
     SELECT e.*
@@ -927,8 +1091,12 @@ export async function getAgentRunEvents(runId, userId = null) {
     WHERE e.run_id = $1
   `;
   if (userId) {
-    query += ' AND r.user_id = $2';
     params.push(userId);
+    query += ` AND r.user_id = $${params.length}`;
+  }
+  if (tenantId) {
+    params.push(tenantId);
+    query += ` AND r.tenant_id = $${params.length}`;
   }
   query += ' ORDER BY e.created_at ASC';
   const result = await pool.query(query, params);
@@ -938,15 +1106,16 @@ export async function getAgentRunEvents(runId, userId = null) {
 export async function insertAgentActionGrant(grant) {
   const result = await pool.query(
     `INSERT INTO agent_action_grants (
-       grant_id, user_id, run_id, tool_name, params_hash, decision, reason,
+       grant_id, user_id, tenant_id, run_id, tool_name, params_hash, decision, reason,
        approval_source, expires_at, payload
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, to_timestamp($9 / 1000.0), $10)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, to_timestamp($10 / 1000.0), $11)
      ON CONFLICT (grant_id) DO NOTHING
      RETURNING *`,
     [
       grant.grantId,
       grant.userId,
+      grant.tenantId || 'shared',
       grant.runId,
       grant.toolName,
       grant.paramsHash,

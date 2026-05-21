@@ -26,11 +26,14 @@
     "sanitize": "node scripts/selina-sanitize.mjs",
     "security:audit": "node scripts/selina-security-audit.mjs",
     "test:security": "npm test --workspace=apps/server-bridge -- --run test/security-audit.test.js test/security-regression.test.js",
-    "release:gate": "node scripts/selina-release-gate.mjs"
+    "release:gate": "node scripts/selina-release-gate.mjs",
+    "docker:build:server": "docker build -f apps/server-bridge/Dockerfile -t vibe-hub/server-bridge:local .",
+    "docker:build:ui": "docker build -f apps/user-interface/Dockerfile -t vibe-hub/user-interface:local .",
+    "docker:build": "npm run docker:build:server && npm run docker:build:ui"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",
-    "vite": "^8.0.12"
+    "vite": "^7.3.3"
   },
   "overrides": {
     "workbox-build": {

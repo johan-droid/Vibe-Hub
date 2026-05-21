@@ -1,35 +1,36 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import {
   Activity,
   ArrowRight,
-  Brain,
+  Bot,
   CheckCircle2,
+  ChevronRight,
+  CloudCog,
   Code2,
   FileCode2,
   Github,
   Globe,
-  Layout,
+  LayoutDashboard,
   Lock,
   Mail,
   Play,
-  Shield,
+  RefreshCw,
   ShieldCheck,
   Sparkles,
   Terminal,
-  Zap,
+  Waypoints,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { useStore } from '../store/useStore';
-import { api } from '../services/api';
 import { Button } from '../features/shared/components/Button';
 import { VibeLogoCompact } from '../components/VibeLogo';
 import { SELINA_BRAND } from '../brand/selina';
+import { flattenSkillGraph, useBackendSignals } from '../hooks/useBackendSignals';
+import { useStore } from '../store/useStore';
 
-// Animation variants
 const fadeUp = {
-  hidden: { opacity: 0, y: 30 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.2, 0, 0, 1] } },
+  hidden: { opacity: 0, y: 24 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.75, ease: [0.22, 1, 0.36, 1] } },
 };
 
 const staggerContainer = {
@@ -37,47 +38,67 @@ const staggerContainer = {
   show: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.15,
+      staggerChildren: 0.1,
     },
   },
 };
 
-const bentoItem = {
-  hidden: { opacity: 0, scale: 0.95 },
-  show: { opacity: 1, scale: 1, transition: { duration: 0.6, ease: [0.2, 0, 0, 1] } },
-};
-
-const features = [
+const principles = [
   {
-    title: 'Smart Memory',
-    desc: 'Persist project decisions, debugging notes, and coding preferences as auditable memory instead of fragile chat-only context.',
-    icon: Brain,
-    image: '/images/smart_memory.png',
-    size: 'large',
-    color: 'google-blue'
+    icon: Waypoints,
+    title: 'Deterministic orchestration',
+    description:
+      'Selina routes prompts through explicit orchestration layers instead of relying on invisible, one-shot agent behavior.',
+    accent: 'text-google-blue',
   },
   {
-    title: 'The Universal Link',
-    desc: 'Route OpenAI, Anthropic, MCP, GitHub, browser, and terminal capabilities through one governed workspace.',
-    icon: Layout,
-    image: '/images/connected_tools.png',
-    size: 'medium',
-    color: 'google-yellow'
+    icon: FileCode2,
+    title: 'Approval-gated VFS',
+    description:
+      'Generated edits stage inside the guarded virtual file system so operators can review diffs before disk writes happen.',
+    accent: 'text-primary',
   },
   {
-    title: 'Safe Playground',
-    desc: 'Run generated code in a local Docker sandbox with explicit approval and environment sanitization.',
     icon: ShieldCheck,
-    image: '/images/safe_sandbox.png',
-    size: 'medium',
-    color: 'google-green'
+    title: 'Local Docker sandbox',
+    description:
+      'Execution stays inside the local Docker boundary with isolated runtime conditions and explicit approval for risky steps.',
+    accent: 'text-google-green',
   },
   {
-    title: 'Always Protected',
-    desc: 'Keep provider secrets out of the browser and require grants before write or execution tools run.',
-    icon: Lock,
-    size: 'small',
-    color: 'google-red'
+    icon: CloudCog,
+    title: 'MCP-connected tooling',
+    description:
+      'MCP, GitHub, browser, terminal, and memory surfaces are exposed through one governed workspace instead of scattered plugins.',
+    accent: 'text-google-yellow',
+  },
+];
+
+const howItWorks = [
+  {
+    step: '01',
+    title: 'Prompt enters the workspace',
+    description: 'A request starts as an authenticated run with visible state, not an opaque side channel.',
+  },
+  {
+    step: '02',
+    title: 'Selina routes and drafts',
+    description: 'The orchestrator selects the right path for code, debugging, review, or multi-step execution.',
+  },
+  {
+    step: '03',
+    title: 'Sandbox verifies behavior',
+    description: 'Builds, scripts, and generated code execute inside the local Docker execution boundary.',
+  },
+  {
+    step: '04',
+    title: 'Diff lands in staged VFS',
+    description: 'Edits are staged as reviewable changes instead of writing straight to the host file system.',
+  },
+  {
+    step: '05',
+    title: 'Operator approves or rejects',
+    description: 'Risky actions pause for human review, preserving control over file, tool, and execution boundaries.',
   },
 ];
 
@@ -85,37 +106,37 @@ const footerColumns = [
   {
     title: 'Platform',
     links: [
-      { label: 'Orchestrator Workspace', href: '#workspace', detail: 'Editor, terminal, tool graph, and execution log.' },
-      { label: 'Provider MoE', href: '#capabilities', detail: 'Route code, debug, review, and manager experts.' },
-      { label: 'MCP Tooling', href: '#capabilities', detail: 'Schema-validated tools with diagnostics and audit events.' },
-      { label: 'Local Docker Sandbox', href: '#security', detail: 'Generated code execution stays local by policy.' },
+      { label: 'Architecture', href: '#architecture', detail: 'How orchestration, sandboxing, and review fit together.' },
+      { label: 'Security', href: '#security', detail: 'Approval gates, local execution, and secret handling posture.' },
+      { label: 'Live status', href: '#platform-status', detail: 'Backend readiness, diagnostics, and runtime signals.' },
+      { label: 'Workspace flow', href: '#how-it-works', detail: 'Prompt to approval in one visible loop.' },
     ],
   },
   {
     title: 'Developers',
     links: [
-      { label: 'Documentation', href: 'https://github.com/johan-droid/Vibe-Hub', detail: 'Architecture, setup, and release notes.' },
-      { label: 'API Reference', href: 'https://github.com/johan-droid/Vibe-Hub', detail: 'Runtime, MCP, approvals, and run inspection APIs.' },
-      { label: 'GitHub Repository', href: 'https://github.com/johan-droid/Vibe-Hub', detail: 'Source, issues, and contribution workflow.' },
-      { label: 'Diagnostics', href: '#security', detail: 'Runtime health, MCP state, and sandbox readiness.' },
+      { label: 'GitHub repository', href: 'https://github.com/johan-droid/Vibe-Hub', detail: 'Source, issues, and contribution flow.' },
+      { label: 'Docs', href: 'https://github.com/johan-droid/Vibe-Hub', detail: 'Architecture, setup, and release notes.' },
+      { label: 'API reference', href: 'https://github.com/johan-droid/Vibe-Hub', detail: 'Runtime, MCP, approvals, and run inspection APIs.' },
+      { label: 'Product overview', href: '#capabilities', detail: 'Core platform principles and operator controls.' },
     ],
   },
   {
     title: 'Company',
     links: [
-      { label: 'About Selina', href: '#capabilities', detail: 'Secure agentic coding for focused teams.' },
-      { label: 'Contact', href: 'https://github.com/johan-droid/Vibe-Hub/issues/new', detail: 'Open a repository issue for product and support inquiries.' },
-      { label: 'Security Contact', href: 'https://github.com/johan-droid/Vibe-Hub/security', detail: 'Use the repository security channel for responsible disclosure.' },
-      { label: 'Status', href: '#status', detail: 'Local runtime and backend readiness signal.' },
+      { label: 'About Selina', href: '#platform', detail: 'Agentic software workspace for serious coding sessions.' },
+      { label: 'Contact', href: 'https://github.com/johan-droid/Vibe-Hub/issues/new', detail: 'Open a repository issue for product questions.' },
+      { label: 'Security contact', href: 'https://github.com/johan-droid/Vibe-Hub/security', detail: 'Use the repository security channel for disclosure.' },
+      { label: 'Dashboard', href: '/dashboard', detail: 'Jump straight into the authenticated workspace.' },
     ],
   },
   {
     title: 'Legal',
     links: [
-      { label: 'Terms of Service', href: '/login#terms', detail: 'Usage rules, generated code, and user responsibilities.' },
-      { label: 'Privacy Notice', href: '/login#privacy', detail: 'Cookie auth, session metadata, and audit events.' },
-      { label: 'Security Policy', href: '/login#security-notice', detail: 'Approval gates, local execution, and secret handling.' },
-      { label: 'Cookie Policy', href: '/login#privacy', detail: 'HttpOnly auth cookies and non-secret preferences.' },
+      { label: 'Terms of service', href: '/login#terms', detail: 'Usage, generated code, and operator responsibilities.' },
+      { label: 'Privacy notice', href: '/login#privacy', detail: 'Cookie auth, session metadata, and stored preferences.' },
+      { label: 'Security policy', href: '/login#security-notice', detail: 'Approval gates, local execution, and audit posture.' },
+      { label: 'Cookie policy', href: '/login#privacy', detail: 'HttpOnly cookies and browser-visible CSRF tokens.' },
     ],
   },
 ];
@@ -124,503 +145,693 @@ const footerCommitments = [
   {
     icon: Terminal,
     title: 'Local execution only',
-    text: 'Generated code runs in the local Docker sandbox with no cloud runner introduced.',
+    text: 'Generated code stays on the local Docker execution boundary instead of being sent to a hosted runner.',
   },
   {
     icon: ShieldCheck,
-    title: 'Approval-gated actions',
-    text: 'Write, execution, browser, GitHub, and MCP mutations require explicit grants.',
+    title: 'Approval before mutation',
+    text: 'Writes, browser actions, GitHub mutations, execution, and risky tool calls stop for review.',
   },
   {
     icon: Lock,
-    title: 'Zero-key browser UI',
-    text: 'Provider secrets stay server-side; browser auth uses HttpOnly cookies.',
+    title: 'Zero-key browser model',
+    text: 'Provider credentials stay server-side while the UI authenticates through secure cookie sessions.',
   },
   {
-    icon: FileCode2,
-    title: 'Auditable rollouts',
-    text: 'Plans, tool calls, edits, terminal output, and outcomes are captured as run artifacts.',
+    icon: Activity,
+    title: 'Run artifacts preserved',
+    text: 'Plans, tool calls, staged edits, and operational traces stay visible for inspection and follow-up.',
   },
-];
-
-const footerSignals = [
-  { icon: CheckCircle2, label: 'JSON-RPC event stream' },
-  { icon: Activity, label: 'Runtime diagnostics' },
-  { icon: Shield, label: 'Sanitized subprocess env' },
-  { icon: Globe, label: 'MCP-ready extension layer' },
 ];
 
 function BrandMark() {
   return (
-    <div className="flex h-10 w-10 items-center justify-center">
-      <VibeLogoCompact size={40} />
+    <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-outline-variant/40 bg-surface-container-low">
+      <VibeLogoCompact size={34} />
     </div>
   );
 }
 
-function BentoCard({ feature }) {
-  const isLarge = feature.size === 'large';
-  const Icon = feature.icon;
+function signalFromHealth(health) {
+  if (!health) return { label: 'Waiting for backend', tone: 'text-on-surface-variant', dot: 'bg-google-yellow' };
+  if (health.ready === true || health.status === 'active') {
+    return { label: 'Backend ready', tone: 'text-google-green', dot: 'bg-google-green' };
+  }
+  if (health.ready === false || health.status === 'error') {
+    return { label: 'Backend degraded', tone: 'text-google-red', dot: 'bg-google-red' };
+  }
+  return { label: 'Backend reachable', tone: 'text-google-blue', dot: 'bg-google-blue' };
+}
+
+function diagnosticsSummary(diagnostics) {
+  if (!diagnostics) return 'Awaiting runtime diagnostics';
+  if (diagnostics.mode) return String(diagnostics.mode).replaceAll('_', ' ');
+  if (diagnostics.provider) return `${diagnostics.provider} provider online`;
+  if (diagnostics.ready === true) return 'runtime ready';
+  return 'diagnostics available';
+}
+
+function skillsSummary(skills) {
+  const entries = flattenSkillGraph(skills?.graph || skills?.skills || skills);
+  const visible = entries
+    .map((entry) => entry?.name || entry?.domain || entry?.title || entry?.label)
+    .filter(Boolean)
+    .slice(0, 4);
+
+  return {
+    count: entries.length,
+    labels: visible.length ? visible : ['code', 'debug', 'ui', 'security'],
+  };
+}
+
+function LandingNav({ authenticated, onPrimaryCta }) {
+  const navItems = [
+    { label: 'Platform', href: '#platform' },
+    { label: 'Architecture', href: '#architecture' },
+    { label: 'Security', href: '#security' },
+    { label: 'Status', href: '#platform-status' },
+  ];
 
   return (
-    <motion.div
-      variants={bentoItem}
-      whileHover={{ y: -5 }}
-      className={`panel overflow-hidden group relative flex flex-col ${
-        isLarge ? 'bento-card-large' : ''
-      }`}
-    >
-      <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-primary/50 to-primary opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-      <div className="relative z-10 flex h-full flex-col p-6 md:p-8">
-        <div className={`mb-6 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-${feature.color}/10 text-${feature.color}`}>
-          <Icon size={20} />
-        </div>
-        
-        <h3 className={`${isLarge ? 'text-2xl' : 'text-xl'} font-black tracking-tight text-on-surface mb-3`}>{feature.title}</h3>
-        <p className="text-sm font-medium leading-relaxed text-on-surface-variant/70">{feature.desc}</p>
-        
-        {isLarge && (
-          <div className="mt-auto pt-8">
-             <Button variant="tonal" size="md" trailingIcon={ArrowRight} className="group-hover:bg-primary group-hover:text-on-primary transition-colors duration-500">Explore</Button>
+    <header className="sticky top-0 z-50 border-b border-outline-variant/30 bg-surface/85 backdrop-blur-xl">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 md:px-10">
+        <div className="flex items-center gap-5">
+          <div className="flex items-center gap-3">
+            <BrandMark />
+            <div>
+              <div className="text-lg font-black tracking-tight text-on-surface">Vibe Hub</div>
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-on-surface-variant">
+                {SELINA_BRAND.agentName}
+              </div>
+            </div>
           </div>
-        )}
-      </div>
 
-      {feature.image && (
-        <div className={`absolute ${isLarge ? 'right-0 bottom-0 w-2/3 h-2/3' : 'right-[-10%] bottom-[-10%] w-1/2 h-1/2'} opacity-40 group-hover:opacity-100 transition-all duration-700 pointer-events-none group-hover:scale-105`}>
-          <img 
-            src={feature.image} 
-            alt={feature.title}
-            className="w-full h-full object-contain object-right-bottom animate-float"
-          />
+          <nav className="hidden items-center gap-6 md:flex">
+            {navItems.map((item) => (
+              <a
+                key={item.label}
+                href={item.href}
+                className="text-[11px] font-black uppercase tracking-[0.16em] text-on-surface-variant transition-colors hover:text-primary"
+              >
+                {item.label}
+              </a>
+            ))}
+          </nav>
         </div>
-      )}
-    </motion.div>
+
+        <Button
+          variant="filled"
+          size="md"
+          trailingIcon={authenticated ? LayoutDashboard : Play}
+          onClick={onPrimaryCta}
+          className="rounded-full px-5 shadow-lg shadow-google-blue/20"
+        >
+          {authenticated ? 'Open Workspace' : 'Start Workspace'}
+        </Button>
+      </div>
+    </header>
   );
 }
 
-function Navbar() {
-  const navigate = useNavigate();
-  const user = useStore((s) => s.user);
+function HeroTerminalPreview({ onPrimaryCta, onSecondaryCta, authenticated, statusPill, diagnosticsText, skillInfo }) {
+  return (
+    <section id="platform" className="relative overflow-hidden px-6 pb-24 pt-16 md:px-10 md:pb-32 md:pt-24">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-50"
+        style={{
+          backgroundImage:
+            'linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px)',
+          backgroundSize: '32px 32px',
+        }}
+      />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
+      <div className="pointer-events-none absolute left-0 right-0 top-0 h-24 bg-gradient-to-b from-primary/10 to-transparent" />
+
+      <div className="mx-auto grid max-w-7xl gap-14 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+        <motion.div initial="hidden" animate="show" variants={staggerContainer} className="relative z-10">
+          <motion.div
+            variants={fadeUp}
+            className="mb-6 inline-flex items-center gap-2 rounded-full border border-outline-variant/40 bg-surface-container-low px-4 py-2"
+          >
+            <span className={`h-2 w-2 rounded-full ${statusPill.dot}`} />
+            <span className={`text-[11px] font-black uppercase tracking-[0.16em] ${statusPill.tone}`}>
+              {statusPill.label}
+            </span>
+          </motion.div>
+
+          <motion.h1 variants={fadeUp} className="display-medium mb-6 max-w-3xl">
+            Secure AI coding
+            <br />
+            <span className="text-on-surface-variant">without surrendering control.</span>
+          </motion.h1>
+
+          <motion.p variants={fadeUp} className="mb-8 max-w-2xl text-lg font-medium leading-relaxed text-on-surface-variant">
+            {SELINA_BRAND.productName} gives teams a sharper execution environment for agentic work: deterministic orchestration,
+            approval-gated diffs, local Docker sandboxing, and auditable run diagnostics in one workspace.
+          </motion.p>
+
+          <motion.div variants={fadeUp} className="mb-8 flex flex-col gap-4 sm:flex-row">
+            <Button
+              size="lg"
+              variant="filled"
+              trailingIcon={authenticated ? LayoutDashboard : ArrowRight}
+              onClick={onPrimaryCta}
+              className="h-14 rounded-full px-8 shadow-xl shadow-google-blue/20"
+            >
+              {authenticated ? 'Open Workspace' : 'Start Workspace'}
+            </Button>
+            <Button
+              size="lg"
+              variant="outlined"
+              leadingIcon={ChevronRight}
+              onClick={onSecondaryCta}
+              className="h-14 rounded-full px-8"
+            >
+              View Architecture
+            </Button>
+          </motion.div>
+
+          <motion.div variants={fadeUp} className="grid gap-3 sm:grid-cols-3">
+            {[
+              { label: 'Runtime', value: diagnosticsText },
+              { label: 'Execution', value: 'local Docker boundary' },
+              { label: 'Mutation model', value: 'approval before write' },
+            ].map((item) => (
+              <div key={item.label} className="rounded-2xl border border-outline-variant/40 bg-surface-container-low px-4 py-4">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-on-surface-variant/70">{item.label}</div>
+                <div className="mt-2 text-sm font-black text-on-surface">{item.value}</div>
+              </div>
+            ))}
+          </motion.div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+          className="relative z-10"
+        >
+          <div className="panel overflow-hidden rounded-[2rem] border border-outline-variant/50 bg-surface-container-lowest shadow-3xl">
+            <div className="flex items-center gap-2 border-b border-outline-variant/30 bg-surface px-5 py-3">
+              <span className="h-3 w-3 rounded-full bg-google-red" />
+              <span className="h-3 w-3 rounded-full bg-google-yellow" />
+              <span className="h-3 w-3 rounded-full bg-google-green" />
+              <div className="ml-3 text-[11px] font-bold uppercase tracking-[0.16em] text-on-surface-variant">
+                selina-execution-env / secure session
+              </div>
+            </div>
+
+            <div className="relative overflow-hidden px-5 py-6">
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-primary/10 to-transparent" />
+              <div className="pointer-events-none absolute inset-x-0 top-[-20%] h-28 bg-gradient-to-b from-transparent via-primary/10 to-transparent opacity-70 blur-md" />
+
+              <div className="relative space-y-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-[11px] font-black uppercase tracking-[0.16em] text-on-surface-variant/75">
+                      Live workspace signals
+                    </div>
+                    <div className="mt-1 text-sm font-medium text-on-surface-variant">
+                      This panel reflects backend reachability and current runtime configuration instead of seeded sample output.
+                    </div>
+                  </div>
+                  <Button variant="tonal" size="sm" className="rounded-full px-4" onClick={onPrimaryCta}>
+                    {authenticated ? 'Open Dashboard' : 'Sign In'}
+                  </Button>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[
+                    { label: 'Backend', value: statusPill.label },
+                    { label: 'Runtime', value: diagnosticsText },
+                    { label: 'Capabilities', value: `${skillInfo.count || 0} routed skills` },
+                    { label: 'Access', value: authenticated ? 'authenticated session available' : 'sign-in required' },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-2xl border border-outline-variant/40 bg-surface px-4 py-4">
+                      <div className="text-[10px] font-black uppercase tracking-[0.16em] text-on-surface-variant/70">{item.label}</div>
+                      <div className="mt-2 text-sm font-black text-on-surface">{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-2xl border border-outline-variant/40 bg-surface px-4 py-4">
+                  <div className="text-[10px] font-black uppercase tracking-[0.16em] text-on-surface-variant/70">Top skill routes</div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {skillInfo.labels.map((label) => (
+                      <span key={label} className="rounded-full border border-outline-variant/40 bg-surface-container-low px-3 py-1 text-[11px] font-black uppercase tracking-[0.12em] text-on-surface-variant">
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </section>
+  );
+}
+
+function TrustStrip({ skillInfo }) {
+  const items = [
+    { icon: ShieldCheck, label: 'Approval-gated writes' },
+    { icon: Terminal, label: 'Local Docker sandbox' },
+    { icon: Bot, label: `${skillInfo.count || 0} routed capabilities` },
+    { icon: Globe, label: 'MCP-aware workspace' },
+  ];
 
   return (
-    <div className="fixed inset-x-0 top-0 z-50 flex justify-center pt-6 px-4 pointer-events-none">
-      <nav className="pointer-events-auto flex w-full max-w-4xl items-center justify-between rounded-full border border-outline-variant/30 bg-surface/60 px-4 py-2 shadow-xl shadow-surface-container-lowest/5 backdrop-blur-3xl">
-        <button onClick={() => navigate('/')} className="flex items-center gap-3 pl-2 group">
-          <BrandMark />
-          <div className="text-left hidden sm:block">
-            <p className="text-lg font-black leading-none tracking-tight text-on-surface group-hover:text-primary transition-colors duration-300">Selina</p>
-          </div>
-        </button>
-
-        <div className="hidden items-center gap-8 md:flex">
-          {['Capabilities', 'Security', 'Workspace'].map((item) => (
-            <a 
-              key={item} 
-              href={`#${item.toLowerCase()}`} 
-              className="relative text-sm font-black uppercase tracking-widest text-on-surface-variant/70 transition-all hover:text-primary group"
-            >
-              {item}
-              <span className="absolute -bottom-1 left-0 h-0.5 w-0 bg-primary transition-all duration-300 group-hover:w-full" />
-            </a>
+    <section className="border-y border-outline-variant/30 bg-surface/70 px-6 py-7 md:px-10">
+      <div className="mx-auto max-w-7xl">
+        <p className="mb-5 text-center text-[11px] font-black uppercase tracking-[0.2em] text-on-surface-variant">
+          Operating constraints surfaced in the product
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
+          {items.map((item) => (
+            <div key={item.label} className="flex items-center gap-2 text-sm font-black text-on-surface-variant">
+              <item.icon size={16} className="text-primary" />
+              <span>{item.label}</span>
+            </div>
           ))}
         </div>
+      </div>
+    </section>
+  );
+}
 
-        <div className="flex items-center gap-3 pr-1">
-          {user ? (
-            <Button variant="filled" size="md" trailingIcon={ArrowRight} onClick={() => navigate('/dashboard')} className="rounded-full px-6 shadow-md shadow-primary/20 hover:shadow-primary/40 transition-all">
-              Workspace
-            </Button>
-          ) : (
-            <Button variant="filled" size="md" trailingIcon={ArrowRight} onClick={() => navigate('/login')} className="rounded-full px-7 h-11 text-sm font-black shadow-lg shadow-primary/25 hover:shadow-primary/45 hover:scale-[1.03] transition-all duration-300 bg-gradient-to-r from-primary to-primary/90">
-              Get Started
-            </Button>
-          )}
+function PrinciplesGrid() {
+  return (
+    <section id="capabilities" className="px-6 py-24 md:px-10 md:py-32">
+      <div className="mx-auto max-w-7xl">
+        <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.2 }} variants={staggerContainer}>
+          <motion.div variants={fadeUp} className="mb-12 max-w-3xl">
+            <p className="label-large mb-4 text-primary">Core Principles</p>
+            <h2 className="headline-large mb-5">Built for teams that want visible control over agent behavior.</h2>
+            <p className="body-medium text-on-surface-variant">
+              The workspace is designed around execution boundaries, not just prompt ergonomics. Every major capability answers the
+              same operator question: what ran, what changed, and who approved it?
+            </p>
+          </motion.div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            {principles.map((item) => (
+              <motion.div
+                key={item.title}
+                variants={fadeUp}
+                className="panel group rounded-[1.75rem] p-7 hover:-translate-y-1"
+              >
+                <div className={`mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-container-low ${item.accent}`}>
+                  <item.icon size={22} />
+                </div>
+                <h3 className="mb-3 text-xl font-black tracking-tight text-on-surface">{item.title}</h3>
+                <p className="text-sm font-medium leading-relaxed text-on-surface-variant">{item.description}</p>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      </div>
+    </section>
+  );
+}
+
+function HowItWorks() {
+  return (
+    <section id="how-it-works" className="border-y border-outline-variant/30 bg-surface-container-low/30 px-6 py-24 md:px-10 md:py-32">
+      <div className="mx-auto max-w-7xl">
+        <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.2 }} variants={staggerContainer}>
+          <motion.div variants={fadeUp} className="mb-12 max-w-3xl">
+            <p className="label-large mb-4 text-primary">How It Works</p>
+            <h2 className="headline-large mb-5">A visible request pipeline from prompt to approved change.</h2>
+            <p className="body-medium text-on-surface-variant">
+              Vibe Hub keeps the core loop simple: route the task, verify behavior, stage the diff, then stop for human approval
+              before mutation.
+            </p>
+          </motion.div>
+
+          <div className="grid gap-5 lg:grid-cols-5">
+            {howItWorks.map((item) => (
+              <motion.div key={item.step} variants={fadeUp} className="panel rounded-[1.5rem] p-6">
+                <div className="mb-4 inline-flex rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-black tracking-[0.2em] text-primary">
+                  {item.step}
+                </div>
+                <h3 className="mb-3 text-base font-black text-on-surface">{item.title}</h3>
+                <p className="text-sm font-medium leading-relaxed text-on-surface-variant">{item.description}</p>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      </div>
+    </section>
+  );
+}
+
+function PlatformStatusPanel({ health, diagnostics, skillInfo, loading, error, lastSyncedAt, onRefresh }) {
+  const statusPill = signalFromHealth(health);
+
+  const cards = [
+    {
+      title: 'Backend readiness',
+      value: statusPill.label,
+      meta: health?.ready === false ? 'review infrastructure state' : 'control plane reachable',
+      tone: statusPill.tone,
+    },
+    {
+      title: 'Runtime diagnostics',
+      value: diagnosticsSummary(diagnostics),
+      meta: diagnostics?.ready === true ? 'runtime reports ready' : 'runtime signal loaded',
+      tone: diagnostics?.ready === false ? 'text-google-red' : 'text-google-blue',
+    },
+    {
+      title: 'Capability routing',
+      value: `${skillInfo.count || 0} surfaced capabilities`,
+      meta: skillInfo.labels.join(' / '),
+      tone: 'text-primary',
+    },
+  ];
+
+  return (
+    <section id="platform-status" className="px-6 py-24 md:px-10 md:py-32">
+      <div className="mx-auto max-w-7xl">
+        <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.2 }} variants={staggerContainer}>
+          <motion.div variants={fadeUp} className="mb-12 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-3xl">
+              <p className="label-large mb-4 text-primary">Live Platform Status</p>
+              <h2 className="headline-large mb-5">Runtime and capability signals straight from the backend.</h2>
+              <p className="body-medium text-on-surface-variant">
+                The landing page uses the same app client surface the workspace uses: health, runtime diagnostics, routed skills, and
+                auth state all load live instead of being hardcoded.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="rounded-full border border-outline-variant/40 bg-surface-container-low px-3 py-1.5 text-xs font-black text-on-surface-variant">
+                {lastSyncedAt ? `Updated ${lastSyncedAt.toLocaleTimeString()}` : 'Waiting for sync'}
+              </div>
+              <Button
+                variant="outlined"
+                size="sm"
+                leadingIcon={RefreshCw}
+                onClick={onRefresh}
+                className="rounded-full px-4"
+                disabled={loading}
+              >
+                {loading ? 'Refreshing' : 'Refresh'}
+              </Button>
+            </div>
+          </motion.div>
+
+          {error ? (
+            <motion.div variants={fadeUp} className="mb-6 rounded-2xl border border-google-red/20 bg-google-red/10 px-5 py-4 text-sm font-medium text-google-red">
+              {error}
+            </motion.div>
+          ) : null}
+
+          <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+            <motion.div variants={fadeUp} className="panel rounded-[1.75rem] p-6 md:p-8">
+              <div className="mb-6 flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <Activity size={21} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-on-surface">Operational snapshot</h3>
+                  <p className="text-sm font-medium text-on-surface-variant">Live signals loaded through the frontend API client.</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                {cards.map((card) => (
+                  <div key={card.title} className="rounded-2xl border border-outline-variant/40 bg-surface-container-low p-5">
+                    <div className="text-[11px] font-black uppercase tracking-[0.16em] text-on-surface-variant/70">{card.title}</div>
+                    <div className={`mt-3 text-lg font-black ${card.tone}`}>{card.value}</div>
+                    <div className="mt-2 text-xs font-medium leading-relaxed text-on-surface-variant">{card.meta}</div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+
+            <motion.div variants={fadeUp} className="panel rounded-[1.75rem] p-6 md:p-8">
+              <div className="mb-6 flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-google-blue/10 text-google-blue">
+                  <Sparkles size={21} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-on-surface">Surfaced capability labels</h3>
+                  <p className="text-sm font-medium text-on-surface-variant">Representative runtime domains exposed to the workspace.</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                {skillInfo.labels.map((label) => (
+                  <span
+                    key={label}
+                    className="rounded-full border border-outline-variant/40 bg-surface-container-low px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-on-surface"
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        </motion.div>
+      </div>
+    </section>
+  );
+}
+
+function FinalCta({ onPrimaryCta, authenticated }) {
+  return (
+    <section className="px-6 pb-24 pt-4 md:px-10 md:pb-32">
+      <div className="mx-auto max-w-6xl">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.25 }}
+          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+          className="panel relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-surface-container-low to-surface-container-lowest p-8 md:p-14"
+        >
+          <div className="pointer-events-none absolute inset-0 bg-dot-pattern opacity-20" />
+          <div className="relative z-10 mx-auto max-w-3xl text-center">
+            <h2 className="mb-5 text-4xl font-black tracking-tight text-on-surface md:text-5xl">
+              Bring agentic coding into a workspace your team can actually govern.
+            </h2>
+            <p className="mb-9 text-base font-medium leading-relaxed text-on-surface-variant md:text-lg">
+              Start with live routing, controlled execution, and reviewable diffs instead of hidden mutation paths.
+            </p>
+            <div className="flex flex-col items-center justify-center gap-5 sm:flex-row">
+              <Button
+                size="lg"
+                variant="filled"
+                trailingIcon={authenticated ? LayoutDashboard : ArrowRight}
+                onClick={onPrimaryCta}
+                className="h-14 rounded-full px-9 shadow-xl shadow-google-blue/20"
+              >
+                {authenticated ? 'Open Workspace' : 'Start Workspace'}
+              </Button>
+              <a
+                href="https://github.com/johan-droid/Vibe-Hub"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-on-surface-variant transition-colors hover:text-primary"
+              >
+                <Github size={18} />
+                View on GitHub
+              </a>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </section>
+  );
+}
+
+function LandingFooter({ authenticated, statusPill }) {
+  return (
+    <footer className="border-t border-outline-variant/30 bg-surface-container-lowest">
+      <div className="border-b border-outline-variant/20 px-6 py-14 md:px-10 md:py-20">
+        <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[1.05fr_0.95fr]">
+          <div>
+            <p className="label-large mb-4 text-primary">Production posture</p>
+            <h2 className="max-w-3xl text-3xl font-black tracking-tight text-on-surface md:text-5xl">
+              Technical posture first. Marketing second.
+            </h2>
+            <p className="mt-5 max-w-2xl text-base font-medium leading-relaxed text-on-surface-variant">
+              Selina combines an authenticated workspace, local Docker execution, runtime diagnostics, MCP-aware routing, and staged
+              review so the system remains fast without becoming unaccountable.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {footerCommitments.map((item) => (
+              <div key={item.title} className="rounded-2xl border border-outline-variant/40 bg-surface-container-low p-5">
+                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <item.icon size={18} />
+                </div>
+                <h3 className="text-sm font-black text-on-surface">{item.title}</h3>
+                <p className="mt-2 text-xs font-medium leading-relaxed text-on-surface-variant">{item.text}</p>
+              </div>
+            ))}
+          </div>
         </div>
-      </nav>
-    </div>
+      </div>
+
+      <div className="px-6 py-16 md:px-10 md:py-24">
+        <div className="mx-auto max-w-7xl">
+          <div className="grid gap-12 lg:grid-cols-12">
+            <div className="lg:col-span-4">
+              <div className="mb-6 flex items-center gap-3">
+                <BrandMark />
+                <div>
+                  <div className="text-2xl font-black tracking-tight text-on-surface">{SELINA_BRAND.productName}</div>
+                  <div className="text-xs font-black uppercase tracking-[0.18em] text-on-surface-variant">{SELINA_BRAND.tagline}</div>
+                </div>
+              </div>
+
+              <p className="mb-6 max-w-sm text-base font-medium leading-relaxed text-on-surface-variant">
+                {SELINA_BRAND.shortDescription} Built for teams that want code generation, verification, and operator review inside one
+                governed loop.
+              </p>
+
+              <div className="mb-8 flex flex-wrap gap-3">
+                {[
+                  { icon: Github, href: 'https://github.com/johan-droid/Vibe-Hub', label: 'GitHub' },
+                  { icon: Mail, href: 'https://github.com/johan-droid/Vibe-Hub/issues/new', label: 'Contact' },
+                  { icon: Globe, href: '#platform', label: 'Platform' },
+                ].map((social) => {
+                  const external = social.href.startsWith('http');
+                  return (
+                    <a
+                      key={social.label}
+                      href={social.href}
+                      target={external ? '_blank' : undefined}
+                      rel={external ? 'noreferrer' : undefined}
+                      className="flex h-10 w-10 items-center justify-center rounded-xl border border-outline-variant/40 bg-surface-container-low text-on-surface-variant transition-all duration-300 hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+                      aria-label={social.label}
+                    >
+                      <social.icon size={18} />
+                    </a>
+                  );
+                })}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="inline-flex items-center gap-2 rounded-full border border-outline-variant/40 bg-surface-container-low px-3 py-1.5">
+                  <span className={`h-2 w-2 rounded-full ${statusPill.dot}`} />
+                  <span className={`text-xs font-black ${statusPill.tone}`}>{statusPill.label}</span>
+                </div>
+                <span className="rounded-full border border-outline-variant/40 bg-surface-container-low px-3 py-1.5 text-xs font-black text-on-surface-variant">
+                  {SELINA_BRAND.versionLabel}
+                </span>
+                <span className="rounded-full border border-outline-variant/40 bg-surface-container-low px-3 py-1.5 text-xs font-black text-on-surface-variant">
+                  {authenticated ? 'Authenticated session detected' : 'Guest view'}
+                </span>
+              </div>
+            </div>
+
+            <div className="lg:col-span-8">
+              <div className="grid gap-8 sm:grid-cols-2 xl:grid-cols-4">
+                {footerColumns.map((column) => (
+                  <div key={column.title}>
+                    <h4 className="mb-5 text-sm font-black uppercase tracking-widest text-on-surface">{column.title}</h4>
+                    <ul className="space-y-4">
+                      {column.links.map((link) => {
+                        const external = link.href.startsWith('http');
+                        return (
+                          <li key={link.label}>
+                            <a
+                              href={link.href}
+                              target={external ? '_blank' : undefined}
+                              rel={external ? 'noreferrer' : undefined}
+                              className="group block"
+                            >
+                              <span className="block text-sm font-black text-on-surface-variant transition-colors group-hover:text-primary">
+                                {link.label}
+                              </span>
+                              <span className="mt-1 block text-xs font-medium leading-relaxed text-on-surface-variant/60">
+                                {link.detail}
+                              </span>
+                            </a>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-outline-variant/20 bg-surface-container-low/40">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-6 py-6 text-center md:flex-row md:px-10 md:text-left">
+          <div className="text-sm font-medium text-on-surface-variant/70">
+            © {new Date().getFullYear()} {SELINA_BRAND.companyName}. All rights reserved.
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-black uppercase tracking-[0.14em] text-on-surface-variant/60">
+            <a href="/login#terms" className="transition-colors hover:text-primary">Terms</a>
+            <a href="/login#privacy" className="transition-colors hover:text-primary">Privacy</a>
+            <a href="/login#security-notice" className="transition-colors hover:text-primary">Security</a>
+            <span>Local Docker only</span>
+          </div>
+        </div>
+      </div>
+    </footer>
   );
 }
 
 export default function LandingPage() {
   const navigate = useNavigate();
-  const [backendHealth, setBackendHealth] = useState(null);
+  const user = useStore((state) => state.user);
+  const { health, diagnostics, skills, profile, loading, error, lastSyncedAt, refresh } = useBackendSignals();
 
-  useEffect(() => {
-    const fetchHealth = async () => {
-      try {
-        setBackendHealth(await api.health());
-      } catch {
-        setBackendHealth({ status: 'error' });
-      }
-    };
-    fetchHealth();
-  }, []);
+  const authenticated = Boolean(user) || profile?.authenticated === true;
 
-  const isOnline = backendHealth?.status === 'active';
+  const statusPill = useMemo(() => signalFromHealth(health), [health]);
+  const diagnosticsText = useMemo(() => diagnosticsSummary(diagnostics), [diagnostics]);
+  const skillInfo = useMemo(() => skillsSummary(skills), [skills]);
+
+  const handlePrimaryCta = () => {
+    navigate(authenticated ? '/dashboard' : '/login');
+  };
+
+  const handleArchitectureCta = () => {
+    document.getElementById('architecture')?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-surface text-on-surface selection:bg-primary/20 selection:text-primary">
-      <Navbar />
+    <div className="min-h-screen overflow-x-hidden bg-surface-container-lowest text-on-surface">
+      <LandingNav authenticated={authenticated} onPrimaryCta={handlePrimaryCta} />
 
-      <main className="pt-24 md:pt-32 relative">
-        <div className="absolute inset-0 bg-dot-pattern opacity-50 pointer-events-none" />
-        
-        {/* Hero Section */}
-        <section className="px-6 pb-20 md:px-10 md:pb-32 relative z-10">
-          <div className="mx-auto max-w-7xl text-center">
-            <motion.div 
-              initial="hidden" 
-              animate="show" 
-              variants={staggerContainer}
-              className="flex flex-col items-center"
-            >
-              <motion.div 
-                variants={fadeUp}
-                className="mb-8 inline-flex items-center gap-2.5 rounded-full border border-outline-variant/60 bg-surface-container-low px-4 py-2 backdrop-blur-md"
-              >
-                <Sparkles size={16} className="text-primary animate-pulse" />
-                <span className="text-[12px] font-black uppercase tracking-widest text-on-surface-variant">Your AI Coding Partner</span>
-              </motion.div>
-              
-              <motion.h1 variants={fadeUp} className="text-5xl md:text-7xl font-black tracking-tight mb-6">
-                Build software <br /> 
-                <span className="text-gradient-google">with intelligence.</span>
-              </motion.h1>
-              
-              <motion.p variants={fadeUp} className="max-w-xl text-lg font-medium leading-relaxed text-on-surface-variant/80 mb-10">
-                Selina brings planning, code review, terminal execution, MCP tools, and approval gates into one local-first agentic coding workspace.
-              </motion.p>
-              
-              <motion.div variants={fadeUp} className="flex flex-col sm:flex-row gap-5">
-                <Button size="lg" variant="filled" trailingIcon={ArrowRight} onClick={() => navigate('/login')} className="rounded-full px-10 h-16 text-lg shadow-xl shadow-primary/30 hover:scale-105 transition-transform duration-300">
-                  Start Building Now
-                </Button>
-                <Button
-                  size="lg"
-                  variant="outlined"
-                  leadingIcon={Play}
-                  onClick={() => document.getElementById('capabilities')?.scrollIntoView({ behavior: 'smooth' })}
-                  className="rounded-full px-10 h-16 text-lg border-2 hover:bg-surface-container-low transition-colors duration-300"
-                >
-                  Explore capabilities
-                </Button>
-              </motion.div>
-
-              <motion.div variants={fadeUp} className="mt-20 w-full max-w-5xl opacity-90 hover:opacity-100 transition-opacity duration-700">
-                 <div className="panel p-2 rounded-[2.5rem] bg-gradient-to-b from-outline-variant/30 to-transparent">
-                   <div className="rounded-[2rem] overflow-hidden bg-surface-container-lowest shadow-3xl border border-outline-variant/20">
-                      <img 
-                        src="https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&q=80&w=2000" 
-                        alt="Workspace Preview" 
-                        className="w-full h-auto"
-                      />
-                   </div>
-                 </div>
-              </motion.div>
-            </motion.div>
-          </div>
-        </section>
-
-        {/* Bento Grid Features */}
-        <section id="capabilities" className="bg-surface-container-lowest py-24 md:py-40 px-6 md:px-10 border-y border-outline-variant/20">
-          <div className="mx-auto max-w-7xl">
-            <motion.div 
-              initial="hidden" 
-              whileInView="show" 
-              viewport={{ once: true }}
-              variants={staggerContainer}
-            >
-              <div className="mb-16 md:mb-24 max-w-2xl">
-                <p className="label-large text-primary mb-4">Capabilities</p>
-                <h2 className="headline-large mb-6">Designed to help you <br /> <span className="text-gradient">create, not just code.</span></h2>
-                <p className="text-lg font-medium text-on-surface-variant leading-relaxed">
-                  We've built Selina around the philosophy of simplicity and power. No technical jargon, just results.
-                </p>
-              </div>
-
-              <div className="bento-grid">
-                {features.map((feature, idx) => (
-                  <BentoCard key={idx} feature={feature} />
-                ))}
-              </div>
-            </motion.div>
-          </div>
-        </section>
-
-        {/* Trust Signals Section */}
-        <section id="security" className="py-24 md:py-32 px-6 md:px-10 border-y border-outline-variant/20 bg-surface-container-lowest/50">
-          <div className="mx-auto max-w-7xl">
-            <motion.div 
-              initial="hidden"
-              whileInView="show"
-              viewport={{ once: true }}
-              variants={staggerContainer}
-              className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12"
-            >
-              {[
-                { value: 'Local', label: 'Docker sandbox policy' },
-                { value: 'Grant', label: 'Risky tool approvals' },
-                { value: 'JSON', label: 'RPC event envelopes' },
-                { value: 'Audit', label: 'Run artifacts and logs' },
-              ].map((stat, idx) => (
-                <motion.div 
-                  key={idx}
-                  variants={fadeUp}
-                  className="text-center"
-                >
-                  <div className="text-4xl md:text-5xl font-black text-gradient-google mb-2">{stat.value}</div>
-                  <div className="text-sm font-bold uppercase tracking-wider text-on-surface-variant">{stat.label}</div>
-                </motion.div>
-              ))}
-            </motion.div>
-          </div>
-        </section>
-
-        {/* Workspace Model Section */}
-        <section id="workspace" className="py-24 md:py-40 px-6 md:px-10">
-          <div className="mx-auto max-w-7xl">
-            <motion.div 
-              initial="hidden"
-              whileInView="show"
-              viewport={{ once: true }}
-              variants={staggerContainer}
-              className="text-center mb-16 md:mb-24"
-            >
-              <motion.p variants={fadeUp} className="label-large text-primary mb-4">Workspace Model</motion.p>
-              <motion.h2 variants={fadeUp} className="headline-large mb-6">
-                Built around the way <br />
-                <span className="text-gradient">production agents work</span>
-              </motion.h2>
-            </motion.div>
-
-            <motion.div 
-              initial="hidden"
-              whileInView="show"
-              viewport={{ once: true }}
-              variants={staggerContainer}
-              className="grid md:grid-cols-3 gap-6"
-            >
-              {[
-                {
-                  icon: Brain,
-                  title: 'Plan before edits',
-                  description: 'Selina records plans, implementation notes, and status artifacts so a run can be inspected or resumed without relying on hidden chat state.',
-                },
-                {
-                  icon: Terminal,
-                  title: 'Verify locally',
-                  description: 'Builds, tests, and generated code execute through the local sandbox boundary with sanitized subprocess environments.',
-                },
-                {
-                  icon: ShieldCheck,
-                  title: 'Pause for risk',
-                  description: 'Write, browser, GitHub, execution, and unknown MCP mutations require approval grants before they can cross the execution boundary.',
-                },
-              ].map((workflow, idx) => (
-                <motion.div
-                  key={idx}
-                  variants={bentoItem}
-                  className="panel p-8 flex flex-col"
-                >
-                  <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <workflow.icon size={22} />
-                  </div>
-                  <p className="text-base font-medium text-on-surface leading-relaxed mb-8 flex-grow">
-                    {workflow.description}
-                  </p>
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                      <span className="text-sm font-black text-primary">{String(idx + 1).padStart(2, '0')}</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-black text-on-surface">{workflow.title}</p>
-                      <p className="text-xs font-medium text-on-surface-variant">Selina operating loop</p>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </motion.div>
-          </div>
-        </section>
-
-        {/* Call to Action */}
-        <section className="py-24 md:py-40 px-6 md:px-10">
-          <div className="mx-auto max-w-6xl">
-            <motion.div 
-              initial={{ opacity: 0, y: 40 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
-              className="panel relative overflow-hidden bg-gradient-to-br from-surface-container-low to-surface-container-lowest p-8 text-center md:p-16"
-            >
-              {/* Decorative Background Icons - Even Subtler */}
-              <div className="absolute inset-0 z-0 opacity-[0.015] pointer-events-none">
-                <Code2 size={100} className="absolute -left-10 top-10 -rotate-12" />
-                <Zap size={80} className="absolute right-10 top-20 rotate-12" />
-              </div>
-
-              <div className="relative z-10 mx-auto max-w-3xl">
-                <h2 className="text-4xl md:text-5xl font-black mb-6 tracking-tight">
-                  Ready to join the <br /> 
-                  <span className="text-gradient-google">next wave of coding?</span>
-                </h2>
-                <p className="mb-10 text-lg font-medium leading-relaxed text-on-surface-variant/80">
-                  Start a governed local workspace for planning, editing, verifying, and reviewing agentic code changes.
-                </p>
-                <div className="flex flex-col items-center justify-center gap-6 sm:flex-row">
-                  <Button 
-                    size="lg" 
-                    variant="filled" 
-                    trailingIcon={ArrowRight} 
-                    onClick={() => navigate('/login')} 
-                    className="h-14 rounded-full px-10 text-lg shadow-xl shadow-primary/20 transition-all duration-500 hover:scale-105 hover:-translate-y-1"
-                  >
-                    Get Started for Free
-                  </Button>
-                  <a href="https://github.com/johan-droid/Vibe-Hub" target="_blank" rel="noreferrer" className="flex items-center gap-2.5 text-sm font-black uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors duration-300">
-                    <Github size={20} />
-                    View on GitHub
-                  </a>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </section>
+      <main>
+        <HeroTerminalPreview
+          authenticated={authenticated}
+          onPrimaryCta={handlePrimaryCta}
+          onSecondaryCta={handleArchitectureCta}
+          statusPill={statusPill}
+          diagnosticsText={diagnosticsText}
+          skillInfo={skillInfo}
+        />
+        <TrustStrip skillInfo={skillInfo} />
+        <div id="architecture">
+          <PrinciplesGrid />
+        </div>
+        <div id="security">
+          <HowItWorks />
+        </div>
+        <PlatformStatusPanel
+          health={health}
+          diagnostics={diagnostics}
+          skillInfo={skillInfo}
+          loading={loading}
+          error={error}
+          lastSyncedAt={lastSyncedAt}
+          onRefresh={refresh}
+        />
+        <FinalCta authenticated={authenticated} onPrimaryCta={handlePrimaryCta} />
       </main>
 
-      <footer id="status" className="border-t border-outline-variant/30 bg-surface-container-lowest">
-        <div className="px-6 py-14 md:px-10 md:py-20 border-b border-outline-variant/20">
-          <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
-            <div>
-              <p className="label-large mb-4 text-primary">Production Posture</p>
-              <h2 className="max-w-3xl text-3xl font-black tracking-tight text-on-surface md:text-5xl">
-                Agentic coding with the controls teams expect.
-              </h2>
-              <p className="mt-5 max-w-2xl text-base font-medium leading-relaxed text-on-surface-variant">
-                Selina combines a Monaco workspace, local Docker execution, MCP diagnostics, approval gates, and run-level audit artifacts so the product feels fast without becoming opaque.
-              </p>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              {footerSignals.map((signal) => (
-                <div key={signal.label} className="flex items-center gap-3 rounded-2xl border border-outline-variant/40 bg-surface-container-low px-4 py-3">
-                  <signal.icon size={18} className="text-primary" />
-                  <span className="text-sm font-black text-on-surface">{signal.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="px-6 py-16 md:px-10 md:py-24">
-          <div className="mx-auto max-w-7xl">
-            <div className="grid gap-12 lg:grid-cols-12">
-              <div className="lg:col-span-4">
-                <div className="mb-6 flex items-center gap-3">
-                  <BrandMark />
-                  <div>
-                    <span className="block text-2xl font-black tracking-tight text-on-surface">{SELINA_BRAND.productName}</span>
-                    <span className="text-xs font-black uppercase tracking-[0.18em] text-on-surface-variant">{SELINA_BRAND.tagline}</span>
-                  </div>
-                </div>
-
-                <p className="mb-6 max-w-sm text-base font-medium leading-relaxed text-on-surface-variant">
-                  {SELINA_BRAND.shortDescription} Built for local-first teams that need visibility into every agent decision.
-                </p>
-
-                <div className="mb-8 flex flex-wrap gap-3">
-                  {[
-                    { icon: Github, href: 'https://github.com/johan-droid/Vibe-Hub', label: 'GitHub' },
-                    { icon: Mail, href: 'https://github.com/johan-droid/Vibe-Hub/issues/new', label: 'Contact' },
-                    { icon: Globe, href: '#capabilities', label: 'Product overview' },
-                  ].map((social) => {
-                    const external = social.href.startsWith('http');
-                    return (
-                      <a
-                        key={social.label}
-                        href={social.href}
-                        target={external ? '_blank' : undefined}
-                        rel={external ? 'noreferrer' : undefined}
-                        className="flex h-10 w-10 items-center justify-center rounded-xl border border-outline-variant/40 bg-surface-container-low text-on-surface-variant transition-all duration-300 hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
-                        aria-label={social.label}
-                      >
-                        <social.icon size={18} />
-                      </a>
-                    );
-                  })}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-outline-variant/40 bg-surface-container-low px-3 py-1.5">
-                    <span className={`h-2 w-2 rounded-full ${isOnline ? 'bg-google-green' : 'bg-google-red'}`} />
-                    <span className="text-xs font-black text-on-surface-variant">
-                      {isOnline ? 'Backend ready' : 'Backend degraded'}
-                    </span>
-                  </div>
-                  <span className="rounded-full border border-outline-variant/40 bg-surface-container-low px-3 py-1.5 text-xs font-black text-on-surface-variant">
-                    {SELINA_BRAND.versionLabel}
-                  </span>
-                </div>
-              </div>
-
-              <div className="lg:col-span-8">
-                <div className="grid gap-8 sm:grid-cols-2 xl:grid-cols-4">
-                  {footerColumns.map((column) => (
-                    <div key={column.title}>
-                      <h4 className="mb-5 text-sm font-black uppercase tracking-widest text-on-surface">{column.title}</h4>
-                      <ul className="space-y-4">
-                        {column.links.map((link) => {
-                          const external = link.href.startsWith('http');
-                          return (
-                            <li key={link.label}>
-                              <a
-                                href={link.href}
-                                target={external ? '_blank' : undefined}
-                                rel={external ? 'noreferrer' : undefined}
-                                className="group block"
-                              >
-                                <span className="block text-sm font-black text-on-surface-variant transition-colors group-hover:text-primary">{link.label}</span>
-                                <span className="mt-1 block text-xs font-medium leading-relaxed text-on-surface-variant/60">{link.detail}</span>
-                              </a>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-14 grid gap-4 border-t border-outline-variant/20 pt-10 md:grid-cols-2 xl:grid-cols-4">
-              {footerCommitments.map((item) => (
-                <div key={item.title} className="rounded-2xl border border-outline-variant/40 bg-surface-container-low p-5">
-                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <item.icon size={19} />
-                  </div>
-                  <h5 className="text-sm font-black text-on-surface">{item.title}</h5>
-                  <p className="mt-2 text-xs font-medium leading-relaxed text-on-surface-variant">{item.text}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="border-t border-outline-variant/20 bg-surface-container-low/50">
-          <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-6 py-6 text-center md:flex-row md:px-10 md:text-left">
-            <div className="text-sm font-medium text-on-surface-variant/70">
-              © {new Date().getFullYear()} {SELINA_BRAND.companyName}. All rights reserved.
-            </div>
-            <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-black uppercase tracking-[0.14em] text-on-surface-variant/60">
-              <a href="/login#terms" className="transition-colors hover:text-primary">Terms</a>
-              <a href="/login#privacy" className="transition-colors hover:text-primary">Privacy</a>
-              <a href="/login#security-notice" className="transition-colors hover:text-primary">Security</a>
-              <span>Local Docker only</span>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <LandingFooter authenticated={authenticated} statusPill={statusPill} />
     </div>
   );
 }

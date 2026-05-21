@@ -1,221 +1,438 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Terminal as TerminalIcon, 
-  Sparkles, 
-  Search as SearchIcon, 
-  Activity, 
-  ShieldAlert, 
-  Code2, 
-  Sidebar as SidebarIcon, 
-  Cpu,
-  MessageSquare,
-  Plug,
-  Layout
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+  Activity,
+  FolderGit2,
+  GitPullRequest,
+  LayoutPanelLeft,
+  Loader2,
+  PanelRight,
+  PlugZap,
+  RefreshCw,
+  Settings2,
+  TerminalSquare,
 } from 'lucide-react';
 import { useAgent } from '../hooks/useAgent';
-import { useStore } from '../store/useStore';
 import { useMediaQuery } from '../hooks/useMediaQuery';
-
-import Titlebar from '../features/shared/components/Titlebar';
-import StatusBar from '../features/shared/components/StatusBar';
-import SettingsModal from '../features/shared/components/SettingsModal';
-import { Surface } from '../features/shared/components/Surface';
+import { useStore } from '../store/useStore';
+import { initializeVfsSocket, useVfsStore } from '../store/useVfsStore';
+import { api } from '../services/api';
 import { ResizeHandle } from '../features/shared/components/ResizeHandle';
-import { NavIcon } from '../features/shared/components/NavIcon';
-import NeuralProjection from '../features/shared/components/NeuralProjection';
-
-import ChatHistorySidebar from '../features/chat/components/ChatHistorySidebar';
-import ConnectorsPanel from '../features/chat/components/ConnectorsPanel';
-import ChatInterface from '../features/chat/components/ChatInterface';
-import { EditorTabs } from '../features/editor/components/EditorTabs';
-import { FileViewer } from '../features/editor/components/FileViewer';
-import ActivityFeed from '../features/swarm/components/ActivityFeed';
-import TerminalSessionsPanel from '../features/terminal/components/TerminalSessionsPanel';
+import SettingsModal from '../features/shared/components/SettingsModal';
+import ApprovalGateModal from '../features/dashboard/components/ApprovalGateModal';
+import ActivityFeed from '../features/dashboard/components/ActivityFeed';
 import ToolVisualizer from '../features/dashboard/components/ToolVisualizer';
+import ChatHistorySidebar from '../features/chat/components/ChatHistorySidebar';
+import ChatInterface from '../features/chat/components/ChatInterface';
+import TerminalSessionsPanel from '../features/terminal/components/TerminalSessionsPanel';
+import DiffViewer from '../features/editor/components/DiffViewer';
 
-const DiffViewer = React.lazy(() => import('../features/editor/components/DiffViewer'));
+const MIN_LEFT = 260;
+const MAX_LEFT = 420;
+const MIN_RIGHT = 340;
+const MAX_RIGHT = 560;
+const DEFAULT_LEFT = 290;
+const DEFAULT_RIGHT = 420;
 
-const MIN_SIDEBAR_W = 260;
-const MAX_SIDEBAR_W = 400;
-const MIN_CHAT_W = 400;
-const MAX_CHAT_W = 1000;
-const DEFAULT_SIDEBAR_W = 280;
-const DEFAULT_CONNECTORS_W = 320;
+function Pill({ icon: Icon, label, value, tone = 'default' }) {
+  const toneClass = tone === 'warning'
+    ? 'border-amber-400/25 bg-amber-400/10 text-amber-200'
+    : 'border-outline-variant/50 bg-surface-container-low text-on-surface-variant';
+
+  return (
+    <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${toneClass}`}>
+      <Icon size={13} />
+      <span>{label}</span>
+      {value !== undefined && value !== null && <span className="text-on-surface">{value}</span>}
+    </div>
+  );
+}
+
+function ContextSection({ title, action, children }) {
+  return (
+    <section className="rounded-3xl border border-outline-variant/50 bg-surface-container-lowest">
+      <header className="flex items-center justify-between border-b border-outline-variant/40 px-4 py-3">
+        <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">{title}</h3>
+        {action}
+      </header>
+      <div className="p-4">{children}</div>
+    </section>
+  );
+}
+
+function ContextPanel({ repos, uploads, mcpServers, diagnostics, loading, onRefresh, onOpenTerminal }) {
+  return (
+    <div className="space-y-4 overflow-y-auto p-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-3xl border border-outline-variant/50 bg-surface-container-low px-4 py-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+            <FolderGit2 size={16} className="text-primary" />
+            Repositories
+          </div>
+          <p className="mt-2 text-2xl font-semibold text-on-surface">{repos.length}</p>
+          <p className="mt-1 text-xs text-on-surface-variant">Cloned and indexed for agent context.</p>
+        </div>
+
+        <div className="rounded-3xl border border-outline-variant/50 bg-surface-container-low px-4 py-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+            <PlugZap size={16} className="text-primary" />
+            MCP Tools
+          </div>
+          <p className="mt-2 text-2xl font-semibold text-on-surface">{diagnostics?.toolCount ?? 0}</p>
+          <p className="mt-1 text-xs text-on-surface-variant">Across {diagnostics?.serverCount ?? mcpServers.length} connected servers.</p>
+        </div>
+      </div>
+
+      <ContextSection
+        title="Live Context"
+        action={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="rounded-full border border-outline-variant/50 p-2 text-on-surface-variant transition hover:text-on-surface"
+              aria-label="Refresh context"
+            >
+              {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            </button>
+            <button
+              type="button"
+              onClick={onOpenTerminal}
+              className="rounded-full border border-outline-variant/50 p-2 text-on-surface-variant transition hover:text-on-surface"
+              aria-label="Open terminal"
+            >
+              <TerminalSquare size={14} />
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-on-surface-variant">Repositories</p>
+            {repos.length === 0 ? (
+              <p className="text-sm text-on-surface-variant">No repositories linked yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {repos.map((repo) => (
+                  <div key={repo.id} className="rounded-2xl border border-outline-variant/40 bg-surface-container-low px-3 py-3">
+                    <div className="text-sm font-semibold text-on-surface">{repo.name}</div>
+                    <div className="mt-1 text-xs text-on-surface-variant">{repo.path}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-on-surface-variant">Uploads</p>
+            {uploads.length === 0 ? (
+              <p className="text-sm text-on-surface-variant">No files or images imported yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {uploads.slice(-10).map((file) => (
+                  <div key={file.id} className="rounded-2xl border border-outline-variant/40 bg-surface-container-low px-3 py-3">
+                    <div className="text-sm font-semibold text-on-surface">{file.name}</div>
+                    <div className="mt-1 text-xs text-on-surface-variant">{file.path || 'Imported into the workspace'}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-on-surface-variant">MCP Connectors</p>
+            {mcpServers.length === 0 ? (
+              <p className="text-sm text-on-surface-variant">No MCP servers are registered yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {mcpServers.map((server) => (
+                  <div key={server.name} className="rounded-2xl border border-outline-variant/40 bg-surface-container-low px-3 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-semibold text-on-surface">{server.name}</div>
+                      <span className={`inline-flex h-2.5 w-2.5 rounded-full ${server.status === 'connected' ? 'bg-emerald-400' : server.status === 'degraded' ? 'bg-amber-300' : 'bg-red-400'}`} />
+                    </div>
+                    <div className="mt-1 text-xs text-on-surface-variant">
+                      {server.toolCount || 0} tools
+                      {server.lastError ? ` · ${server.lastError}` : ''}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </ContextSection>
+    </div>
+  );
+}
 
 export default function Workspace() {
-  const navigate = useNavigate();
+  const isMobile = useMediaQuery('(max-width: 900px)');
+  const { sendPrompt, sendPlanApproval } = useAgent();
   const {
     user,
     sidebarCollapsed,
     setSidebarCollapsed,
     chatCollapsed,
     setChatCollapsed,
-    setActiveTab,
-    activeTab,
-    activeFileContent,
-    activeFilePath,
-    openFiles,
-    terminalPanelVisible,
+    orchestratorEvents,
     toolGraph,
+    linkedProjects,
+    uploadedFiles,
+    terminalPanelVisible,
     toggleTerminalPanel,
+    pendingApproval,
+    settings,
+    setProjects,
+    diffData,
   } = useStore();
+  const { pendingFiles, activeDiff, fetchPendingFiles } = useVfsStore();
 
-  const isMobile = useMediaQuery('(max-width: 768px)');
-  const [sidebarW, setSidebarW] = useState(DEFAULT_SIDEBAR_W);
-  const [connectorsW, setConnectorsW] = useState(DEFAULT_CONNECTORS_W);
-  const [terminalH, setTerminalH] = useState(240);
+  const [leftWidth, setLeftWidth] = useState(DEFAULT_LEFT);
+  const [rightWidth, setRightWidth] = useState(DEFAULT_RIGHT);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const { sendPrompt } = useAgent();
+  const [inspectorTab, setInspectorTab] = useState('activity');
+  const [mcpServers, setMcpServers] = useState([]);
+  const [mcpDiagnostics, setMcpDiagnostics] = useState(null);
+  const [connectionsLoading, setConnectionsLoading] = useState(false);
 
-  const [viewMode, setViewMode] = useState('chat'); // 'chat' or 'editor'
+  const pendingDiffCount = pendingFiles.length + (Array.isArray(diffData) ? diffData.length : diffData ? 1 : 0);
+  const effectiveExperienceMode = settings.workflow?.experienceMode || 'professional';
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      // Ctrl+` to toggle terminal panel
-      if (e.ctrlKey && e.key === '`') {
-        e.preventDefault();
-        toggleTerminalPanel();
+  const refreshConnections = useCallback(async () => {
+    setConnectionsLoading(true);
+    try {
+      const [repoResponse, serverResponse, diagnosticsResponse] = await Promise.all([
+        api.listRepos(),
+        api.listMcpServers(),
+        api.mcpDiagnostics(),
+      ]);
+
+      if (repoResponse?.success) {
+        setProjects(repoResponse.repos || []);
       }
-    };
+      if (serverResponse?.success) {
+        setMcpServers(serverResponse.servers || []);
+      }
+      if (diagnosticsResponse?.success || diagnosticsResponse?.diagnostics) {
+        setMcpDiagnostics(diagnosticsResponse.diagnostics || diagnosticsResponse);
+      }
+      await fetchPendingFiles();
+    } catch (error) {
+      console.error('Failed to refresh workspace connections:', error);
+    } finally {
+      setConnectionsLoading(false);
+    }
+  }, [fetchPendingFiles, setProjects]);
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleTerminalPanel]);
+  useEffect(() => {
+    initializeVfsSocket(user?.id || null);
+  }, [user?.id]);
 
-  const onSidebarDrag = useCallback((delta) => {
-    setSidebarW((w) => Math.max(MIN_SIDEBAR_W, Math.min(MAX_SIDEBAR_W, w + delta)));
+  useEffect(() => {
+    refreshConnections();
+  }, [refreshConnections]);
+
+  useEffect(() => {
+    if ((activeDiff || diffData) && chatCollapsed) {
+      setChatCollapsed(false);
+    }
+  }, [activeDiff, chatCollapsed, diffData, setChatCollapsed]);
+
+  useEffect(() => {
+    if (isMobile) {
+      setSidebarCollapsed(true);
+      setChatCollapsed(true);
+    }
+  }, [isMobile, setChatCollapsed, setSidebarCollapsed]);
+
+  const onLeftDrag = useCallback((delta) => {
+    setLeftWidth((current) => Math.max(MIN_LEFT, Math.min(MAX_LEFT, current + delta)));
   }, []);
 
-  const onConnectorsDrag = useCallback((delta) => {
-    setConnectorsW((w) => Math.max(MIN_SIDEBAR_W, Math.min(MAX_SIDEBAR_W, w - delta)));
+  const onRightDrag = useCallback((delta) => {
+    setRightWidth((current) => Math.max(MIN_RIGHT, Math.min(MAX_RIGHT, current - delta)));
   }, []);
 
-  const onTerminalDrag = useCallback((delta) => {
-    setTerminalH((h) => Math.max(140, Math.min(600, h - delta)));
-  }, []);
+  const liveEventCount = orchestratorEvents.length;
+  const latestEvent = useMemo(() => orchestratorEvents[orchestratorEvents.length - 1] || null, [orchestratorEvents]);
 
   return (
-    <div className="isolate flex h-dvh w-full flex-col overflow-hidden bg-surface font-sans text-on-surface selection:bg-primary/10 selection:text-primary">
-      <Titlebar onOpenSettings={() => setIsSettingsOpen(true)} />
+    <div className="flex h-dvh w-full flex-col overflow-hidden bg-surface text-on-surface">
+      <header className="border-b border-outline-variant/50 bg-surface-container-low/80 px-4 py-3 backdrop-blur md:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((value) => !value)}
+              className="flex h-10 w-10 items-center justify-center rounded-2xl border border-outline-variant/50 bg-surface-container-low text-on-surface-variant transition hover:text-on-surface"
+              aria-label="Toggle history panel"
+            >
+              <LayoutPanelLeft size={18} />
+            </button>
+            <div>
+              <h1 className="text-lg font-semibold tracking-tight text-on-surface">Workspace</h1>
+              <p className="text-sm text-on-surface-variant">
+                {latestEvent?.summary || 'Chat, clone, diff, and review changes from one place.'}
+              </p>
+            </div>
+          </div>
 
-      <div className="relative z-0 flex min-h-0 flex-1 overflow-hidden bg-surface">
-        {/* ── Fixed Sidebar Strip ── */}
-        <div className="hidden md:flex relative z-40 w-14 shrink-0 flex-col items-center py-4 border-r border-outline-variant bg-surface-container-lowest/95 backdrop-blur-xl gap-4">
-          <NavIcon icon={MessageSquare} active={viewMode === 'chat'} onClick={() => setViewMode('chat')} ariaLabel="Chat" />
-          <NavIcon icon={Code2} active={viewMode === 'editor'} onClick={() => setViewMode('editor')} ariaLabel="Editor" />
-          <div className="mx-2 h-px w-6 bg-outline-variant" />
-          <NavIcon icon={SidebarIcon} active={!sidebarCollapsed} onClick={() => setSidebarCollapsed(!sidebarCollapsed)} ariaLabel="History" />
-          <NavIcon icon={Plug} active={!chatCollapsed} onClick={() => setChatCollapsed(!chatCollapsed)} ariaLabel="Connectors" />
-          
-          <div className="mt-auto">
-            <NavIcon icon={Sparkles} active={false} onClick={() => {}} ariaLabel="Ai Pulse" />
+          <div className="flex flex-wrap items-center gap-2">
+            <Pill icon={Activity} label="Events" value={liveEventCount} />
+            <Pill icon={GitPullRequest} label="Pending Diffs" value={pendingDiffCount} tone={pendingDiffCount > 0 ? 'warning' : 'default'} />
+            <Pill icon={FolderGit2} label="Repos" value={linkedProjects.length} />
+            <Pill icon={PlugZap} label="MCP Servers" value={mcpDiagnostics?.serverCount ?? mcpServers.length} />
+
+            <button
+              type="button"
+              onClick={toggleTerminalPanel}
+              className="flex h-10 w-10 items-center justify-center rounded-2xl border border-outline-variant/50 bg-surface-container-low text-on-surface-variant transition hover:text-on-surface"
+              aria-label="Toggle terminal panel"
+            >
+              <TerminalSquare size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setChatCollapsed((value) => !value)}
+              className="flex h-10 w-10 items-center justify-center rounded-2xl border border-outline-variant/50 bg-surface-container-low text-on-surface-variant transition hover:text-on-surface"
+              aria-label="Toggle live inspector"
+            >
+              <PanelRight size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsSettingsOpen(true)}
+              className="flex h-10 w-10 items-center justify-center rounded-2xl border border-outline-variant/50 bg-surface-container-low text-on-surface-variant transition hover:text-on-surface"
+              aria-label="Open settings"
+            >
+              <Settings2 size={18} />
+            </button>
           </div>
         </div>
+      </header>
 
-        {/* ── Main Layout ── */}
-        <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
-          
-          {/* Left Sidebar: Chat History */}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <AnimatePresence initial={false}>
+          {!sidebarCollapsed && !isMobile && (
+            <motion.aside
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: leftWidth, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              className="relative flex h-full shrink-0 overflow-hidden border-r border-outline-variant/50 bg-surface-container-lowest"
+            >
+              <ChatHistorySidebar />
+              <ResizeHandle direction="horizontal" onDrag={onLeftDrag} className="absolute right-0 top-0 h-full" />
+            </motion.aside>
+          )}
+        </AnimatePresence>
+
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <ChatInterface onSend={sendPrompt} onContextChange={refreshConnections} />
           <AnimatePresence initial={false}>
-            {!sidebarCollapsed && !isMobile && (
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: sidebarW }}
-                exit={{ width: 0 }}
-                transition={{ type: 'spring', damping: 35, stiffness: 400 }}
-                className="relative z-30 flex h-full shrink-0 flex-col overflow-hidden border-r border-outline-variant"
-              >
-                <ChatHistorySidebar />
-                <ResizeHandle direction="horizontal" onDrag={onSidebarDrag} className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/20 transition-colors" />
-              </motion.div>
-            )}
+            {terminalPanelVisible && <TerminalSessionsPanel />}
           </AnimatePresence>
+        </main>
 
-          {/* Central Workspace */}
-          <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface">
-            
-            {/* View Switching */}
-            <div className="flex flex-1 min-h-0 overflow-hidden">
-              
-              {/* Chat View */}
-              <AnimatePresence mode="wait">
-                {viewMode === 'chat' ? (
-                  <motion.div 
-                    key="chat-view"
-                    initial={{ opacity: 0, scale: 0.98 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.98 }}
-                    className="flex-1 h-full overflow-hidden flex flex-col"
-                  >
-                    <ChatInterface onSend={sendPrompt} />
-                  </motion.div>
-                ) : (
-                  /* Editor View */
-                  <motion.div 
-                    key="editor-view"
-                    initial={{ opacity: 0, scale: 0.98 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.98 }}
-                    className="flex-1 h-full overflow-hidden flex flex-col"
-                  >
-                    {openFiles.length > 0 ? (
-                      <div className="flex-1 flex flex-col min-h-0">
-                        <EditorTabs />
-                        <div className="relative flex-1 min-h-0 overflow-hidden">
-                          <NeuralProjection />
-                          <div className="relative z-10 h-full">
-                            <React.Suspense fallback={<div className="h-full animate-pulse bg-surface-container-lowest" />}>
-                              {activeTab === 'diff' ? <DiffViewer onApply={() => {}} onDiscard={() => {}} /> : <FileViewer path={activeFilePath} content={activeFileContent} />}
-                            </React.Suspense>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <ToolVisualizer toolGraph={toolGraph} experienceMode="professional" />
+        <AnimatePresence initial={false}>
+          {!chatCollapsed && !isMobile && (
+            <motion.aside
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: rightWidth, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              className="relative flex h-full shrink-0 overflow-hidden border-l border-outline-variant/50 bg-surface-container-lowest"
+            >
+              <ResizeHandle direction="horizontal" onDrag={onRightDrag} className="absolute left-0 top-0 h-full" />
+
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="flex h-[47%] min-h-[18rem] flex-col border-b border-outline-variant/50">
+                  <div className="flex items-center justify-between border-b border-outline-variant/40 px-4 py-3">
+                    <div>
+                      <h2 className="text-sm font-semibold text-on-surface">Live Diff</h2>
+                      <p className="text-xs text-on-surface-variant">Staged file changes stream here for approval.</p>
+                    </div>
+                    <Pill icon={GitPullRequest} label="Queue" value={pendingDiffCount} tone={pendingDiffCount > 0 ? 'warning' : 'default'} />
+                  </div>
+                  <div className="min-h-0 flex-1">
+                    <DiffViewer
+                      onApply={() => useStore.getState().setDiffData(null)}
+                      onDiscard={() => useStore.getState().setDiffData(null)}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <div className="flex items-center gap-2 border-b border-outline-variant/40 px-4 py-3">
+                    {[
+                      { id: 'activity', label: 'Activity' },
+                      { id: 'graph', label: 'Tool Map' },
+                      { id: 'context', label: 'Context' },
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setInspectorTab(tab.id)}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                          inspectorTab === tab.id
+                            ? 'border-primary/30 bg-primary/10 text-primary'
+                            : 'border-outline-variant/50 bg-surface-container-low text-on-surface-variant hover:text-on-surface'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="min-h-0 flex-1">
+                    {inspectorTab === 'activity' && (
+                      <ActivityFeed
+                        agentLoopStatus={{ history: orchestratorEvents, currentIteration: 0 }}
+                        events={orchestratorEvents}
+                        experienceMode={effectiveExperienceMode}
+                        onExpandTerminal={toggleTerminalPanel}
+                      />
                     )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
 
-            {/* Internal Terminal Sessions - Hidden by default, toggle with Ctrl+` */}
-            <AnimatePresence>
-              {terminalPanelVisible && <TerminalSessionsPanel />}
-            </AnimatePresence>
+                    {inspectorTab === 'graph' && (
+                      <div className="h-full">
+                        <ToolVisualizer toolGraph={toolGraph} experienceMode={effectiveExperienceMode} />
+                      </div>
+                    )}
 
-            {/* Nova Devs Branding */}
-            <div className="absolute bottom-4 right-4 z-40 pointer-events-none select-none">
-              <span className="text-xs tracking-wide text-white/30 transition-colors hover:text-white/70">
-                Backed by Nova Devs
-              </span>
-            </div>
-
-          </main>
-
-          {/* Right Sidebar: Connectors */}
-          <AnimatePresence initial={false}>
-            {!chatCollapsed && !isMobile && (
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: connectorsW }}
-                exit={{ width: 0 }}
-                transition={{ type: 'spring', damping: 35, stiffness: 400 }}
-                className="relative z-30 flex h-full shrink-0 flex-col overflow-hidden"
-              >
-                <ResizeHandle direction="horizontal" onDrag={onConnectorsDrag} className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/20 transition-colors" />
-                <ConnectorsPanel />
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-        </div>
+                    {inspectorTab === 'context' && (
+                      <ContextPanel
+                        repos={linkedProjects}
+                        uploads={uploadedFiles}
+                        mcpServers={mcpServers}
+                        diagnostics={mcpDiagnostics}
+                        loading={connectionsLoading}
+                        onRefresh={refreshConnections}
+                        onOpenTerminal={toggleTerminalPanel}
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.aside>
+          )}
+        </AnimatePresence>
       </div>
 
-      {!isMobile && <StatusBar />}
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <AnimatePresence>
+        {isSettingsOpen && (
+          <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {pendingApproval && (
+          <ApprovalGateModal
+            approval={pendingApproval}
+            experienceMode={effectiveExperienceMode}
+            onResolve={(approved) => sendPlanApproval(pendingApproval.planId, approved)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

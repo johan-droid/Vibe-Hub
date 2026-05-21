@@ -1,3 +1,5 @@
+import { createSecretProvider } from './secret-provider.js';
+
 const PROVIDER_CREDENTIALS = Object.freeze({
   gemini: ['GEMINI_API_KEY', 'LLM_API_KEY'],
   openai: ['OPENAI_API_KEY'],
@@ -41,10 +43,13 @@ export class AgentAuthManager {
     env = process.env,
     forcedLoginMethod = env.SELINA_FORCED_LOGIN_METHOD || null,
     refreshOAuth,
+    secretProvider = createSecretProvider(env),
   } = {}) {
     this.env = env;
     this.forcedLoginMethod = forcedLoginMethod;
     this.refreshOAuth = refreshOAuth;
+    this.secretProvider = secretProvider;
+    this.secretsLoaded = false;
     this.state = new Map();
     this.refreshPromises = new Map();
     this.listeners = new Set();
@@ -56,6 +61,15 @@ export class AgentAuthManager {
       const value = envNames.map(name => env[name]).find(Boolean);
       if (value) this.loadApiKey(provider, value);
     }
+  }
+
+  async loadFromSecretProvider() {
+    if (!this.secretProvider?.getFirstAvailable) return;
+    for (const [provider, envNames] of Object.entries(PROVIDER_CREDENTIALS)) {
+      const found = await this.secretProvider.getFirstAvailable(envNames);
+      if (found?.value) this.loadApiKey(provider, found.value);
+    }
+    this.secretsLoaded = true;
   }
 
   loadApiKey(provider, value) {
@@ -112,6 +126,9 @@ export class AgentAuthManager {
 
   async auth(provider) {
     const normalized = normalizeProvider(provider);
+    if (!this.state.has(normalized) && !this.secretsLoaded) {
+      await this.loadFromSecretProvider();
+    }
     await this.ensureFresh(normalized);
     const snapshot = this.state.get(normalized);
     if (!snapshot) throw new AuthError(`${normalized || 'provider'} is not authenticated`);

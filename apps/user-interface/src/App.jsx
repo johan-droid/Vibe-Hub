@@ -59,7 +59,7 @@ export default function App() {
 
     async function verifySession() {
       try {
-        const profile = await api.authStatus();
+        const profile = await api.resolveSession();
         if (cancelled) return;
         const authenticatedUser = profile.authenticated ? profile.user : null;
         setUser(authenticatedUser);

@@ -1,18 +1,55 @@
-import Parser from 'tree-sitter';
-import JavaScript from 'tree-sitter-javascript';
-import TypeScript from 'tree-sitter-typescript';
 import fs from 'fs/promises';
 import path from 'path';
 import pool, { insertAgentMemoryItem } from '../db.js';
 import { hashValue, withJsonCache } from '../utils/cache.js';
+import { escapeLikePattern } from './query-sanitizer.js';
+
+let treeSitterRuntime = null;
+let treeSitterRuntimePromise = null;
+
+async function ensureTreeSitterRuntime() {
+  if (treeSitterRuntime) return treeSitterRuntime;
+  if (treeSitterRuntimePromise) return treeSitterRuntimePromise;
+
+  treeSitterRuntimePromise = (async () => {
+    try {
+      const [parserModule, jsModule, tsModule] = await Promise.all([
+        import('tree-sitter'),
+        import('tree-sitter-javascript'),
+        import('tree-sitter-typescript'),
+      ]);
+
+      treeSitterRuntime = {
+        Parser: parserModule.default || parserModule,
+        JavaScript: jsModule.default || jsModule,
+        TypeScript: tsModule.default || tsModule,
+      };
+      return treeSitterRuntime;
+    } catch (error) {
+      throw new Error(
+        `Tree-sitter runtime failed to load: ${error.message}. ` +
+        'Verify the deploy Node version matches project engines and run a clean dependency install.'
+      );
+    }
+  })();
+
+  return treeSitterRuntimePromise;
+}
 
 class SemanticGraphBuilder {
   constructor() {
-    this.languages = new Map([
-      ['javascript', JavaScript],
-      ['typescript', TypeScript.typescript],
-      ['tsx', TypeScript.tsx],
-    ]);
+    this.languages = new Map();
+  }
+
+  async ensureCoreLanguages() {
+    if (this.languages.has('javascript') && this.languages.has('typescript') && this.languages.has('tsx')) {
+      return;
+    }
+
+    const { JavaScript, TypeScript } = await ensureTreeSitterRuntime();
+    this.languages.set('javascript', JavaScript);
+    this.languages.set('typescript', TypeScript.typescript);
+    this.languages.set('tsx', TypeScript.tsx);
   }
 
   getLanguageKey(filePath) {
@@ -26,6 +63,7 @@ class SemanticGraphBuilder {
   }
 
   async loadLanguage(filePath) {
+    await this.ensureCoreLanguages();
     const key = this.getLanguageKey(filePath);
     if (this.languages.has(key)) return { key, language: this.languages.get(key) };
 
@@ -119,6 +157,7 @@ class SemanticGraphBuilder {
   async analyzeCode(code, filename) {
     try {
       const { key: languageKey, language } = await this.loadLanguage(filename);
+      const { Parser } = await ensureTreeSitterRuntime();
       const cacheKey = `cache:ast:${languageKey}:${hashValue(code)}`;
 
       const { value } = await withJsonCache(cacheKey, Number.parseInt(process.env.AST_CACHE_TTL_SECONDS || '3600', 10), async () => {
@@ -233,25 +272,28 @@ export async function loadMemory(userId, projectName, query = null) {
     }
 
     if (query) {
-      const recall = await pool.query(
-        `SELECT kind, content, metadata, created_at
-         FROM agent_memory_items
-         WHERE user_id = $1
-           AND project_name = $2
-           AND content ILIKE $3
-         ORDER BY created_at DESC
-         LIMIT 5`,
-        [userId, projectName, `%${String(query).slice(0, 200)}%`]
-      );
+      const sanitizedQuery = escapeLikePattern(query, { maxLength: 200 });
+      if (sanitizedQuery) {
+        const recall = await pool.query(
+          `SELECT kind, content, metadata, created_at
+           FROM agent_memory_items
+           WHERE user_id = $1
+             AND project_name = $2
+             AND content ILIKE $3 ESCAPE '\\'
+           ORDER BY created_at DESC
+           LIMIT 5`,
+          [userId, projectName, `%${sanitizedQuery}%`]
+        );
 
-      if (recall.rows.length > 0) {
-        recentJournal = recentJournal.concat(recall.rows.map(row => ({
-          type: row.kind,
-          content: row.content,
-          metadata: row.metadata,
-          timestamp: row.created_at,
-          source: 'agent_memory_items',
-        }))).slice(-10);
+        if (recall.rows.length > 0) {
+          recentJournal = recentJournal.concat(recall.rows.map(row => ({
+            type: row.kind,
+            content: row.content,
+            metadata: row.metadata,
+            timestamp: row.created_at,
+            source: 'agent_memory_items',
+          }))).slice(-10);
+        }
       }
     }
 

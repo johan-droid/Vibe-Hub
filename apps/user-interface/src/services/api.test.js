@@ -4,6 +4,7 @@ import ApiClient from './api.js';
 describe('ApiClient cookie auth', () => {
   beforeEach(() => {
     localStorage.clear();
+    vi.unstubAllGlobals();
   });
 
   it('does not persist access, refresh, or session tokens to localStorage', () => {
@@ -35,6 +36,59 @@ describe('ApiClient cookie auth', () => {
       credentials: 'include',
       body: JSON.stringify({}),
     }));
-    vi.unstubAllGlobals();
+  });
+
+  it('treats auth status 401 as unauthenticated instead of forcing logout', async () => {
+    const client = new ApiClient();
+    const fetchMock = vi.fn(async () => ({
+      status: 401,
+      ok: false,
+      json: async () => ({ error: 'Authentication required' }),
+      text: async () => 'Authentication required',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const status = await client.authStatus();
+
+    expect(status).toMatchObject({
+      success: true,
+      authenticated: false,
+      user: null,
+      sessionId: null,
+    });
+  });
+
+  it('can recover bootstrap auth by refreshing before giving up', async () => {
+    const client = new ApiClient();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: 401,
+        ok: false,
+        json: async () => ({ error: 'Authentication required' }),
+        text: async () => 'Authentication required',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          authenticated: true,
+          user: { id: 'user-1', email: 'dev@example.com' },
+          sessionId: 'session-1',
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const status = await client.resolveSession();
+
+    expect(status.authenticated).toBe(true);
+    expect(status.user.id).toBe('user-1');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });
