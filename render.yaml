@@ -244,7 +244,7 @@ services:
     region: oregon
     plan: free
     rootDir: apps/user-interface
-    buildCommand: npm install --legacy-peer-deps --no-audit --no-fund && npm run build
+    buildCommand: npm ci --legacy-peer-deps --no-audit --no-fund && npm run build
     staticPublishPath: dist
     envVars:
       - key: NODE_VERSION
