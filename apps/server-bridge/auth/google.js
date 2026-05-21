@@ -16,6 +16,7 @@ import {
   setOAuthReturnOriginCookie,
 } from './oauth-return.js';
 import logger from '../utils/detailed-logger.js';
+import { powGuard } from './pow-middleware.js';
 
 const router = Router();
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -29,14 +30,26 @@ const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
  */
 router.get('/config', (req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.json({ clientId: process.env.GOOGLE_CLIENT_ID });
+  res.json({
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    providers: {
+      google: {
+        configured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REDIRECT_URI),
+        clientId: process.env.GOOGLE_CLIENT_ID || '',
+      },
+      github: {
+        configured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET && process.env.GITHUB_REDIRECT_URI && process.env.UI_ORIGIN),
+        mockEnabled: ['1', 'true', 'yes', 'on'].includes(String(process.env.SELINA_ENABLE_GITHUB_MOCK_AUTH || '').toLowerCase()),
+      },
+    },
+  });
 });
 
 /**
  * POST /api/auth/google/verify-token
  * Support both ID token (credential) and Access Token
  */
-router.post('/verify-token', async (req, res) => {
+router.post('/verify-token', powGuard(4), async (req, res) => {
   const { credential, access_token } = req.body;
   logger.debug('GoogleAuth', 'Verify token request received', {
     hasCredential: !!credential,

@@ -2,6 +2,8 @@ import { AGENT_TOOLS } from './tools.js';
 import { modelService } from './models.js';
 import { validateToolCallArguments } from './tool_schema.js';
 import { ContextPruner } from './utils/context-pruner.js';
+import { hardenSystemPrompt, wrapUserQuery } from './prompt-hardening.js';
+import { sanitizeCompletionForRetention } from './secure-memory.js';
 
 function textFromHistoryPart(turn) {
   if (typeof turn?.content === 'string') return turn.content;
@@ -30,6 +32,7 @@ export class EmployeeBase {
     this.effortLevel = 'standard';
     this._summarizing = false;
     this.providerOverride = null;
+    this.executionContext = {};
     this.contextPruner = new ContextPruner();
   }
 
@@ -53,16 +56,21 @@ export class EmployeeBase {
       domain,
       provider: this.providerOverride,
     });
-    const fullSystemPrompt = `${systemPrompt}\n\n---\n\n${this.domainInstruction}`;
+    const fullSystemPrompt = hardenSystemPrompt(`${systemPrompt}\n\n---\n\n${this.domainInstruction}`);
+    const wrappedPrompt = wrapUserQuery(prompt);
     const profiles = [profile, ...modelService.selectFallbackProfiles(profile)];
     let lastError = null;
 
     for (let index = 0; index < profiles.length; index++) {
       const candidate = profiles[index];
+      const budgetAwareCandidate = modelService.prepareProfileForCall(candidate, this.executionContext);
       if (emitState) emitState('thinking', `Routing through ${candidate.provider}:${candidate.model}...`);
       try {
-        return await this.executeWithProfile(prompt, fullSystemPrompt, candidate, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, additionalTools);
+        return await this.executeWithProfile(wrappedPrompt, fullSystemPrompt, budgetAwareCandidate, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, additionalTools);
       } catch (error) {
+        if (['DAILY_TOKEN_QUOTA_EXCEEDED', 'LLM_RATE_LIMIT_EXCEEDED', 'USER_COST_SUSPENDED'].includes(error.code)) {
+          throw error;
+        }
         lastError = error;
         const hasNext = index < profiles.length - 1;
         const canFallback = hasNext && modelService.shouldFallback(error);
@@ -110,7 +118,7 @@ export class EmployeeBase {
 
     const sendMessage = (msg, phase = 'agent') => modelService.sendGeminiStream(chat, msg, profile, {
       onStream,
-      meta: { phase },
+      meta: { ...this.executionContext, phase },
     });
 
     if (emitState) emitState('thinking', 'Reasoning about prompt...');
@@ -179,7 +187,7 @@ export class EmployeeBase {
     const maxIterations = 16;
 
     for (let iteration = 0; iteration < maxIterations; iteration++) {
-      const result = await modelService.openAICompatibleChat({ profile, messages, tools: combinedTools });
+      const result = await modelService.openAICompatibleChat({ profile, messages, tools: combinedTools, meta: this.executionContext });
       finalText = result.content || '';
 
       if (!result.toolCalls.length) {
@@ -218,6 +226,7 @@ export class EmployeeBase {
         instructions: fullSystemPrompt,
         input,
         tools: combinedTools,
+        meta: this.executionContext,
       });
       finalText = result.content || '';
 
@@ -249,7 +258,13 @@ export class EmployeeBase {
     const maxIterations = 16;
 
     for (let iteration = 0; iteration < maxIterations; iteration++) {
-      const result = await modelService.anthropicChat({ profile, system: fullSystemPrompt, messages, tools: combinedTools });
+      const result = await modelService.anthropicChat({
+        profile,
+        system: fullSystemPrompt,
+        messages,
+        tools: combinedTools,
+        meta: this.executionContext,
+      });
       finalText = result.content || '';
 
       if (!result.toolCalls.length) {
@@ -308,7 +323,7 @@ export class EmployeeBase {
 
   commitHistory(prompt, finalText) {
     this.history.push({ role: 'user', parts: [{ text: prompt }] });
-    this.history.push({ role: 'model', parts: [{ text: finalText }] });
+    this.history.push({ role: 'model', parts: [{ text: sanitizeCompletionForRetention(finalText) }] });
     if (this.sharedContext) this.sharedContext.history = this.history;
   }
 

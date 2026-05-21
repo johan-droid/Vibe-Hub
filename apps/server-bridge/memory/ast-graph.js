@@ -13,6 +13,15 @@ import JavaScript from 'tree-sitter-javascript';
 import TypeScript from 'tree-sitter-typescript';
 import path from 'path';
 import { v4 as uuid } from 'uuid';
+import pool, { withTenantContext } from '../db.js';
+import { hashValue, withJsonCache } from '../utils/cache.js';
+import { TokenBudgetBroker } from './token-budget-broker.js';
+import { buildVectorCollectionName } from './vector-store.js';
+import { getActiveSemanticIndexVersion } from './semantic-index-registry.js';
+import { recordRagRecallDuration } from '../utils/metrics.js';
+import { withSpan } from '../utils/tracing.js';
+import { sanitizeRagQuery } from './query-sanitizer.js';
+import { recordBillingEvent } from '../orchestrator/cost-controls.js';
 
 const parser = new TreeSitter();
 
@@ -786,8 +795,6 @@ export class ASTParser {
 
 // ─── Graph Storage ────────────────────────────────────────────────────────────
 
-import pool from '../db.js';
-
 export class ASTGraphStore {
   /**
    * Save graph to database
@@ -863,23 +870,40 @@ export class ASTGraphStore {
 // ─── Hybrid Retrieval (AST-first, embeddings fallback) ───────────────────────
 
 export class HybridContextRetriever {
-  constructor(astGraph, embeddingsService) {
+  constructor(astGraph, embeddingsService, options = {}) {
     this.astGraph = astGraph;
     this.embeddings = embeddingsService;
+    this.vectorStore = options.vectorStore || null;
+    this.tokenBudget = options.tokenBudget || new TokenBudgetBroker();
+    this.reranker = options.reranker || null;
+    this.projectName = options.projectName || 'default';
+    this.namespace = options.namespace || 'default';
+    this.tenantId = options.tenantId || 'shared';
+    this.indexVersion = options.indexVersion || null;
+    this.semanticCacheTtlSeconds = options.semanticCacheTtlSeconds || Number.parseInt(process.env.SEMANTIC_QUERY_CACHE_TTL_SECONDS || '300', 10);
+    this.semanticCandidateLimit = options.semanticCandidateLimit || Number.parseInt(process.env.SEMANTIC_SEARCH_LIMIT || '8', 10);
+    this.semanticRerankThreshold = options.semanticRerankThreshold || Number.parseInt(process.env.SEMANTIC_RERANK_THRESHOLD || '6', 10);
+    this.semanticContextTokens = options.semanticContextTokens || Number.parseInt(process.env.HYBRID_CONTEXT_MAX_TOKENS || '1800', 10);
+    this.resolveScope = options.resolveScope || this.defaultResolveScope.bind(this);
   }
 
   /**
    * Get context for a target function/file
    * Strategy: 100% AST-first, embeddings only if AST empty
    */
-  async getContext(targetFilePath, targetFunctionName = null, query = null) {
+  async getContext(targetFilePath, targetFunctionName = null, query = null, options = {}) {
+    const recallStarted = Date.now();
+    let recallSource = 'ast';
+    let cacheResult = 'none';
     const results = {
       astDependencies: [],
       astDependents: [],
       astStateContext: [],
       astExports: [],
       relatedFiles: [],
-      embeddingResults: []
+      embeddingResults: [],
+      semanticCache: null,
+      semanticScope: null,
     };
 
     // 1. AST-first: Get exact dependencies
@@ -916,31 +940,124 @@ export class HybridContextRetriever {
     // 2. Embeddings fallback: Only if AST results are sparse
     const astResultCount = results.astDependencies.length + results.astDependents.length + results.astStateContext.length;
     
-    if (astResultCount === 0 && query) {
-      // Fall back to embeddings for semantic search
-      const embedding = await this.embeddings.getEmbedding(query);
+    const sanitizedQuery = sanitizeRagQuery(query, { maxLength: 240 });
 
-      // Enforce V6 Isolation: Never fetch user_env constraints
-      const res = await pool.query(
-        `SELECT id, file_path, node_name, content,
-                1 - (embedding <=> $1::vector) as similarity
-         FROM semantic_embeddings
-         WHERE context_type != 'user_env'
-         ORDER BY embedding <=> $1::vector
-         LIMIT 5`,
-        [`[${embedding.join(',')}]`]
-      );
+    if (astResultCount === 0 && sanitizedQuery) {
+      recallSource = 'semantic';
+      const semanticScope = await this.resolveScope(options.scope || {});
+      const semanticCacheKey = `cache:hybrid-context:semantic:${hashValue({
+        query: sanitizedQuery,
+        targetFilePath,
+        targetFunctionName,
+        semanticScope,
+        limit: this.semanticCandidateLimit,
+      })}`;
+      const { value, hit } = await withJsonCache(semanticCacheKey, this.semanticCacheTtlSeconds, async () => withSpan('rag.semantic_recall', {
+        projectName: semanticScope.projectName,
+        tenantId: semanticScope.tenantId,
+        namespace: semanticScope.namespace,
+        indexVersion: semanticScope.indexVersion,
+      }, async () => {
+        const embedding = await this.embeddings.getEmbedding(sanitizedQuery, {
+          cacheKeyNamespace: `${semanticScope.collection}:query`,
+        });
+        const candidates = await this.searchSemanticCandidates({
+          embedding,
+          query: sanitizedQuery,
+          limit: options.semanticCandidateLimit || this.semanticCandidateLimit,
+          scope: semanticScope,
+        });
+        return this.maybeRerankSemanticCandidates(sanitizedQuery, candidates);
+      }));
 
-      results.embeddingResults = res.rows;
+      results.embeddingResults = value;
+      results.semanticCache = { hit, key: semanticCacheKey };
+      results.semanticScope = semanticScope;
+      cacheResult = hit ? 'hit' : 'miss';
     }
 
+    recordRagRecallDuration((Date.now() - recallStarted) / 1000, {
+      source: recallSource,
+      cache: cacheResult,
+    });
+    recordBillingEvent({
+      kind: 'vector_query',
+      userId: options.userId || 'anonymous',
+      sessionId: options.sessionId || null,
+      source: recallSource,
+      cache: cacheResult,
+      tenantId: this.tenantId,
+      projectName: this.projectName,
+      durationMs: Date.now() - recallStarted,
+      resultCount: (results.embeddingResults || []).length,
+    });
     return results;
   }
 
   /**
    * Format context for LLM prompt
    */
-  static formatContext(results) {
+  async defaultResolveScope(scope = {}) {
+    const projectName = scope.projectName || this.projectName;
+    const tenantId = scope.tenantId || this.tenantId;
+    const namespace = scope.namespace || this.namespace;
+    const indexVersion = scope.indexVersion
+      || this.indexVersion
+      || await getActiveSemanticIndexVersion({ projectName, tenantId, namespace });
+
+    return {
+      projectName,
+      tenantId,
+      namespace,
+      indexVersion,
+      collection: buildVectorCollectionName({ projectName, tenantId, namespace, indexVersion }),
+    };
+  }
+
+  async searchSemanticCandidates({ embedding, query, limit, scope }) {
+    if (this.vectorStore) {
+      const points = await this.vectorStore.search({
+        collection: scope.collection,
+        vector: embedding,
+        limit,
+        filter: buildSemanticFilter(scope),
+      });
+      return points.map(normalizeVectorCandidate);
+    }
+
+    const res = await withTenantContext(scope.tenantId, client => client.query(
+      `SELECT id, file_path, node_name, content, context_type, namespace, tenant_id, index_version,
+              1 - (embedding <=> $1::vector) as similarity
+       FROM semantic_embeddings
+       WHERE context_type != 'user_env'
+         AND project_name = $2
+         AND namespace = $3
+         AND tenant_id = $4
+         AND index_version = $5
+       ORDER BY embedding <=> $1::vector
+       LIMIT $6`,
+      [`[${embedding.join(',')}]`, scope.projectName, scope.namespace, scope.tenantId, scope.indexVersion, limit]
+    )
+    );
+    return res.rows.map(row => ({
+      ...row,
+      query,
+    }));
+  }
+
+  async maybeRerankSemanticCandidates(query, candidates = []) {
+    if (!this.reranker || candidates.length < this.semanticRerankThreshold) {
+      return candidates;
+    }
+
+    const reranked = await this.reranker.rerank({
+      query,
+      candidates,
+    });
+    return Array.isArray(reranked) ? reranked : candidates;
+  }
+
+  static formatContext(results, options = {}) {
     const sections = [];
 
     if (results.astDependencies.length > 0) {
@@ -973,8 +1090,50 @@ ${results.relatedFiles.map(f => `- ${f}`).join('\n')}`);
 ${results.embeddingResults.map(r => `- ${r.content?.slice(0, 100)}...`).join('\n')}`);
     }
 
-    return sections.join('\n\n');
+    const text = sections.join('\n\n');
+    const tokenBudget = options.tokenBudget || new TokenBudgetBroker();
+    const maxTokens = options.maxTokens || Number.parseInt(process.env.HYBRID_CONTEXT_MAX_TOKENS || '1800', 10);
+    const fitted = tokenBudget.fitForLayer('retrieval_context', text, maxTokens, { mode: 'head-tail' });
+
+    if (options.includeReport) {
+      return {
+        text: fitted.text,
+        report: withoutText(fitted),
+      };
+    }
+
+    return fitted.text;
   }
+}
+
+function buildSemanticFilter(scope) {
+  return {
+    must: [
+      { key: 'project_name', match: { value: scope.projectName } },
+      { key: 'namespace', match: { value: scope.namespace } },
+      { key: 'tenant_id', match: { value: scope.tenantId } },
+      { key: 'index_version', match: { value: scope.indexVersion } },
+    ],
+  };
+}
+
+function normalizeVectorCandidate(point = {}) {
+  return {
+    id: point.id,
+    file_path: point.payload?.file_path || point.payload?.filePath || null,
+    node_name: point.payload?.node_name || point.payload?.nodeName || null,
+    content: point.payload?.content || '',
+    context_type: point.payload?.context_type || point.payload?.contextType || null,
+    namespace: point.payload?.namespace || 'default',
+    tenant_id: point.payload?.tenant_id || point.payload?.tenantId || 'shared',
+    index_version: point.payload?.index_version || point.payload?.indexVersion || 'live',
+    similarity: point.score ?? 0,
+  };
+}
+
+function withoutText(result) {
+  const { text: _text, ...rest } = result;
+  return rest;
 }
 
 export default { ASTGraph, ASTParser, ASTGraphStore, HybridContextRetriever };

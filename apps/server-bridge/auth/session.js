@@ -14,15 +14,15 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import {
   createUserSession,
-  getUserSessionByToken,
   getUserSessionById,
+  getUserSessionByToken,
   updateSessionActivity,
   revokeUserSession,
   revokeAllUserSessions,
   listUserSessions,
   countActiveUserSessions,
   createRefreshToken,
-  getRefreshTokenByHash,
+  findRefreshTokenByHash,
   revokeRefreshToken,
   revokeRefreshTokenFamily,
   markRefreshTokenUsed,
@@ -34,6 +34,10 @@ const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'test' ||
 const SESSION_EXPIRY_DAYS = parseInt(process.env.SESSION_EXPIRY_DAYS || '30', 10);
 const REFRESH_TOKEN_EXPIRY_DAYS = parseInt(process.env.REFRESH_TOKEN_EXPIRY_DAYS || '90', 10);
 const MAX_CONCURRENT_SESSIONS = parseInt(process.env.MAX_CONCURRENT_SESSIONS || '10', 10);
+export const ACCESS_TOKEN_TTL_SECONDS = Math.max(
+  60,
+  Math.min(parseInt(process.env.ACCESS_TOKEN_TTL_SECONDS || '240', 10), 299),
+);
 
 if (!JWT_SECRET) {
   logger.error('Auth', 'FATAL: JWT_SECRET environment variable is not set.');
@@ -54,16 +58,95 @@ export function hashToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
+export const sessionCleanupRegistry = new Map(); // sessionId -> Set<cleanupCallback>
+
+function issueAccessToken({ userId, sessionId }) {
+  return jwt.sign(
+    {
+      id: userId,
+      sessionId,
+      type: 'access'
+    },
+    JWT_SECRET,
+    { expiresIn: `${ACCESS_TOKEN_TTL_SECONDS}s`, issuer: 'vibe-hub-auth' }
+  );
+}
+
+export function registerSessionCleanup(sessionId, cleanupCallback) {
+  if (!sessionId || typeof cleanupCallback !== 'function') return cleanupCallback;
+  const callbacks = sessionCleanupRegistry.get(sessionId) || new Set();
+  callbacks.add(cleanupCallback);
+  sessionCleanupRegistry.set(sessionId, callbacks);
+  return cleanupCallback;
+}
+
+export function unregisterSessionCleanup(sessionId, cleanupCallback = null) {
+  if (!sessionId) return;
+
+  if (!cleanupCallback) {
+    sessionCleanupRegistry.delete(sessionId);
+    return;
+  }
+
+  const callbacks = sessionCleanupRegistry.get(sessionId);
+  if (!callbacks) return;
+
+  callbacks.delete(cleanupCallback);
+  if (callbacks.size === 0) {
+    sessionCleanupRegistry.delete(sessionId);
+  }
+}
+
+export function triggerFingerprintMismatchCleanup(sessionId) {
+  const callbacks = sessionCleanupRegistry.get(sessionId);
+  if (callbacks?.size) {
+    for (const cleanup of callbacks) {
+      try {
+        cleanup();
+      } catch (err) {
+        console.error(`[Security] Failed running fingerprint mismatch cleanup for session ${sessionId}:`, err);
+      }
+    }
+    sessionCleanupRegistry.delete(sessionId);
+  }
+}
+
+export function computeCompoundFingerprint(req) {
+  if (!req) return 'no-req-fingerprint';
+  const ip = getClientIp(req);
+  let ipRange = '0.0.0.0';
+  if (ip.includes('.')) {
+    ipRange = ip.split('.').slice(0, 3).join('.'); // first 3 octets (/24)
+  } else if (ip.includes(':')) {
+    ipRange = ip.split(':').slice(0, 4).join(':'); // first 4 segments (/64)
+  }
+  const ua = req.headers['user-agent'] || '';
+  const deviceId = req.headers['x-device-id'] || 'no-device-id';
+  const hmacDeviceId = crypto.createHmac('sha256', JWT_SECRET).update(deviceId).digest('hex');
+  const rawFingerprint = `${ipRange}|${ua}|${hmacDeviceId}`;
+  return crypto.createHash('sha256').update(rawFingerprint).digest('hex');
+}
+
 /**
  * Generate device fingerprint from request headers
  */
 export function generateDeviceFingerprint(req) {
-  const components = [
-    req.headers['user-agent'] || '',
-    req.headers['accept-language'] || '',
-    req.headers['accept-encoding'] || ''
-  ];
-  return hashToken(components.join('|')).slice(0, 32);
+  return computeCompoundFingerprint(req);
+}
+
+async function revokeSessionForFingerprintMismatch(session, req) {
+  await revokeUserSession(session.id, session.user_id, 'fingerprint_changed');
+  await revokeRefreshTokenFamily(session.id, 'fingerprint_changed');
+  await logAuthEvent({
+    userId: session.user_id,
+    sessionId: session.id,
+    eventType: 'failed',
+    provider: session.provider,
+    deviceInfo: extractDeviceInfo(req),
+    ipAddress: getClientIp(req),
+    details: { reason: 'fingerprint_changed' }
+  });
+  triggerFingerprintMismatchCleanup(session.id);
 }
 
 /**
@@ -181,15 +264,10 @@ export async function createSession({ userId, provider, req, deviceFingerprint =
   });
   
   // Generate JWT (short-lived access token)
-  const accessToken = jwt.sign(
-    {
-      id: userId,
-      sessionId: session.id,
-      type: 'access'
-    },
-    JWT_SECRET,
-    { expiresIn: '15m' }
-  );
+  const accessToken = issueAccessToken({
+    userId,
+    sessionId: session.id
+  });
   
   return {
     accessToken,
@@ -205,7 +283,7 @@ export async function createSession({ userId, provider, req, deviceFingerprint =
  */
 export function validateAccessToken(token) {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return jwt.verify(token, JWT_SECRET, { issuer: 'vibe-hub-auth' });
   } catch {
     return null;
   }
@@ -228,13 +306,32 @@ function normalizeSession(session) {
  * A JWT alone is not enough: revoked or expired sessions must stop working
  * immediately instead of waiting for access-token expiry.
  */
-export async function validateAccessTokenSession(token) {
+export async function validateAccessTokenSession(token, req) {
   const decoded = validateAccessToken(token);
   if (!decoded?.id || !decoded?.sessionId || decoded.type !== 'access') return null;
 
   const session = await getUserSessionById(decoded.sessionId);
   if (!session || String(session.user_id) !== String(decoded.id)) return null;
 
+  // Enforce fingerprint verification if req is provided
+  if (req && session.device_fingerprint) {
+    const incomingFingerprint = computeCompoundFingerprint(req);
+    if (session.device_fingerprint !== incomingFingerprint) {
+      console.warn(`[Security] Session fingerprint mismatch for user ${session.user_id}, session ${session.id}. Revoking session.`);
+      await revokeSessionForFingerprintMismatch(session, req);
+      return null;
+    }
+  }
+
+  await updateSessionActivity(session.id);
+  return normalizeSession(session);
+}
+
+export async function assertSessionStillValid(sessionId, userId = null) {
+  if (!sessionId) return null;
+  const session = await getUserSessionById(sessionId);
+  if (!session) return null;
+  if (userId && String(session.user_id) !== String(userId)) return null;
   await updateSessionActivity(session.id);
   return normalizeSession(session);
 }
@@ -244,22 +341,45 @@ export async function validateAccessTokenSession(token) {
  */
 export async function rotateRefreshToken(refreshToken) {
   const tokenHash = hashToken(refreshToken);
-  
-  const existingToken = await getRefreshTokenByHash(tokenHash);
+
+  const existingToken = await findRefreshTokenByHash(tokenHash);
   if (!existingToken) {
     throw new Error('INVALID_REFRESH_TOKEN');
   }
-  
+
+  const refreshExpired = new Date(existingToken.expires_at).getTime() <= Date.now();
+  const sessionExpired = !existingToken.session_expires_at || new Date(existingToken.session_expires_at).getTime() <= Date.now();
+  const sessionInactive = existingToken.session_active === false;
+  const refreshAlreadyUsed = Boolean(existingToken.used_at);
+  const refreshRevoked = Boolean(existingToken.is_revoked);
+
+  if (refreshExpired || sessionExpired || sessionInactive) {
+    throw new Error('INVALID_REFRESH_TOKEN');
+  }
+
+  if (refreshAlreadyUsed || refreshRevoked) {
+    if (existingToken.session_id && existingToken.user_id) {
+      await revokeRefreshTokenFamily(existingToken.session_id, 'refresh_token_reuse_detected');
+      await revokeUserSession(existingToken.session_id, existingToken.user_id, 'refresh_token_reuse_detected');
+      await logAuthEvent({
+        userId: existingToken.user_id,
+        sessionId: existingToken.session_id,
+        eventType: 'failed',
+        provider: existingToken.provider,
+        details: { reason: 'refresh_token_reuse_detected' }
+      });
+      triggerFingerprintMismatchCleanup(existingToken.session_id);
+    }
+    throw new Error('SUSPICIOUS_ACTIVITY');
+  }
+
+  await markRefreshTokenUsed(tokenHash);
+
   // Generate new tokens
-  const newAccessToken = jwt.sign(
-    {
-      id: existingToken.user_id,
-      sessionId: existingToken.session_id,
-      type: 'access'
-    },
-    JWT_SECRET,
-    { expiresIn: '15m' }
-  );
+  const newAccessToken = issueAccessToken({
+    userId: existingToken.user_id,
+    sessionId: existingToken.session_id
+  });
   
   const newRefreshToken = generateSecureToken(48);
   const newRefreshTokenHash = hashToken(newRefreshToken);
@@ -301,12 +421,22 @@ export async function rotateRefreshToken(refreshToken) {
 /**
  * Validate a session token from cookie
  */
-export async function validateSession(sessionToken) {
+export async function validateSession(sessionToken, req) {
   if (!sessionToken) return null;
   
   const session = await getUserSessionByToken(hashToken(sessionToken));
   if (!session) return null;
   
+  // Enforce fingerprint verification if req is provided
+  if (req && session.device_fingerprint) {
+    const incomingFingerprint = computeCompoundFingerprint(req);
+    if (session.device_fingerprint !== incomingFingerprint) {
+      console.warn(`[Security] Session fingerprint mismatch for session ${session.id}. Revoking session.`);
+      await revokeSessionForFingerprintMismatch(session, req);
+      return null;
+    }
+  }
+
   // Update last activity
   await updateSessionActivity(session.id);
   

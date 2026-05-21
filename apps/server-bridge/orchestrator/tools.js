@@ -444,7 +444,7 @@ DO NOT USE for:
         },
         timeoutMs: {
           type: 'NUMBER',
-          description: 'Maximum execution time in milliseconds (1000–60000). Defaults to 10000. Lower for simple scripts.',
+          description: 'Maximum execution time in milliseconds (1000-10000). Defaults to 10000. Lower for simple scripts.',
         },
         provider: {
           type: 'STRING',

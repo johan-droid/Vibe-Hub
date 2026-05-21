@@ -1,9 +1,11 @@
 import CircuitBreaker from 'opossum';
 import { PromptOrchestrator } from './context.js';
-import { recordLlmCost, recordLlmDuration } from '../utils/metrics.js';
+import { recordLlmCost, recordLlmDuration, recordLlmTokenUsage } from '../utils/metrics.js';
 import { getJson, hashValue, setJson, withJsonCache } from '../utils/cache.js';
 import { agentAuthManager, authToken, callWithAuthRetry } from '../auth/agent-auth.js';
 import { countTokens } from '../memory/tokenizer.js';
+import { withSpan } from '../utils/tracing.js';
+import { hardenSystemPrompt, wrapUserQuery } from './prompt-hardening.js';
 
 class LLMClient {
   constructor() {
@@ -39,12 +41,12 @@ class LLMClient {
 
     // 1. Compile the strict prompt structures
     const prunedAstGraph = PromptOrchestrator.pruneAstGraphForTask(astGraph, taskPrompt);
-    const systemInstruction = PromptOrchestrator.buildSystemPrompt(orgContext, userContext);
+    const systemInstruction = hardenSystemPrompt(PromptOrchestrator.buildSystemPrompt(orgContext, userContext));
     const staticContext = PromptOrchestrator.buildAstContext(prunedAstGraph);
-    const userInstruction = PromptOrchestrator.buildTaskPrompt(taskPrompt, prunedAstGraph, sandboxError, {
+    const userInstruction = wrapUserQuery(PromptOrchestrator.buildTaskPrompt(taskPrompt, prunedAstGraph, sandboxError, {
       includeAstContext: false,
-    });
-    const fallbackUserInstruction = PromptOrchestrator.buildTaskPrompt(taskPrompt, prunedAstGraph, sandboxError);
+    }));
+    const fallbackUserInstruction = wrapUserQuery(PromptOrchestrator.buildTaskPrompt(taskPrompt, prunedAstGraph, sandboxError));
     const cacheKey = `cache:llm:${hashValue({
       model: this.model,
       openaiModel: this.openaiModel,
@@ -79,7 +81,10 @@ class LLMClient {
     for (const [provider, providerPayload] of providers) {
       const started = Date.now();
       try {
-        const result = await this.breakers.get(provider).fire(providerPayload);
+        const result = await withSpan('llm.generate', {
+          provider,
+          model: providerPayload.model,
+        }, () => this.breakers.get(provider).fire(providerPayload));
         recordLlmDuration((Date.now() - started) / 1000, { provider, model: providerPayload.model, success: true });
         return result;
       } catch (error) {
@@ -92,6 +97,7 @@ class LLMClient {
   }
 
   async callGemini({ systemInstruction, staticContext = '', userInstruction, fallbackUserInstruction = null, endpoint, model }) {
+    const started = Date.now();
     try {
       const auth = await this.authManager.auth('gemini');
       const apiKey = authToken(auth);
@@ -131,6 +137,14 @@ class LLMClient {
 
       const data = await response.json();
       const totalTokens = data.usageMetadata?.totalTokenCount || 0;
+      recordLlmTokenUsage({
+        provider: 'gemini',
+        model,
+        inputTokens: data.usageMetadata?.promptTokenCount || 0,
+        outputTokens: data.usageMetadata?.candidatesTokenCount || 0,
+        totalTokens,
+        durationSeconds: (Date.now() - started) / 1000,
+      });
       if (totalTokens > 0) {
         const costPerThousand = Number.parseFloat(process.env.LLM_COST_PER_1K_TOKENS || '0');
         recordLlmCost((totalTokens / 1000) * costPerThousand, {
@@ -185,6 +199,7 @@ class LLMClient {
   }
 
   async callOpenAI({ systemInstruction, userInstruction, model }) {
+    const started = Date.now();
     const response = await callWithAuthRetry(this.authManager, 'openai', auth => fetch(`${process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -206,10 +221,19 @@ class LLMClient {
     }
 
     const data = await response.json();
+    recordLlmTokenUsage({
+      provider: 'openai',
+      model,
+      inputTokens: data.usage?.prompt_tokens || 0,
+      outputTokens: data.usage?.completion_tokens || 0,
+      totalTokens: data.usage?.total_tokens || 0,
+      durationSeconds: (Date.now() - started) / 1000,
+    });
     return data.choices?.[0]?.message?.content?.trim() || '';
   }
 
   async callAnthropic({ systemInstruction, staticContext = '', userInstruction, fallbackUserInstruction = null, model }) {
+    const started = Date.now();
     const systemText = [systemInstruction, staticContext].filter(Boolean).join('\n\n');
     const minCacheTokens = Number.parseInt(process.env.SELINA_ANTHROPIC_CACHE_MIN_TOKENS || '1024', 10);
     const usePromptCache = process.env.SELINA_ANTHROPIC_PROMPT_CACHE !== 'false' && countTokens(systemText) >= minCacheTokens;
@@ -238,6 +262,13 @@ class LLMClient {
     }
 
     const data = await response.json();
+    recordLlmTokenUsage({
+      provider: 'anthropic',
+      model,
+      inputTokens: data.usage?.input_tokens || 0,
+      outputTokens: data.usage?.output_tokens || 0,
+      durationSeconds: (Date.now() - started) / 1000,
+    });
     return data.content?.map(part => part.text || '').join('').trim() || '';
   }
 }

@@ -1,6 +1,19 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AgentAuthManager, agentAuthManager, authToken, callWithAuthRetry } from '../auth/agent-auth.js';
 import { countTokens } from '../memory/tokenizer.js';
+import { hardenSystemPrompt, wrapUserQuery } from './prompt-hardening.js';
+import {
+  applyBudgetPolicyToProfile,
+  enforceLlmRateLimit,
+  recordBillingEvent,
+  recordSessionTokenUsage,
+} from './cost-controls.js';
+import {
+  recordLlmCost,
+  recordLlmDuration,
+  recordLlmTokenUsage,
+} from '../utils/metrics.js';
+import { redactPromptLikeFields } from './prompt-secrets.js';
 
 const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
@@ -226,6 +239,14 @@ function extractResponseToolCalls(data = {}) {
     }));
 }
 
+function estimateCostUsd(profile, inputTokens = 0, outputTokens = 0) {
+  const inputPerMillion = Number.parseFloat(process.env[`COST_${String(profile.provider).toUpperCase()}_INPUT_PER_MILLION`] || '0');
+  const outputPerMillion = Number.parseFloat(process.env[`COST_${String(profile.provider).toUpperCase()}_OUTPUT_PER_MILLION`] || '0');
+  if (!inputPerMillion && !outputPerMillion) return 0;
+  return ((Number(inputTokens || 0) / 1_000_000) * inputPerMillion)
+    + ((Number(outputTokens || 0) / 1_000_000) * outputPerMillion);
+}
+
 /**
  * ModelService is the SaaS-grade provider gateway for Selina agents.
  * It centralizes model selection, token budgeting, retries/timeouts, and audit logs.
@@ -355,6 +376,8 @@ export class ModelService {
     meta = {},
     jsonMode = false,
   } = {}) {
+    const hardenedSystem = hardenSystemPrompt(system);
+    const wrappedPrompt = wrapUserQuery(prompt);
     const primary = this.selectProfile({ modelName, effortLevel, domain, provider });
     const profiles = [primary, ...this.selectFallbackProfiles(primary)];
     let lastError = null;
@@ -362,53 +385,67 @@ export class ModelService {
     for (let index = 0; index < profiles.length; index++) {
       const candidate = profiles[index];
       try {
+        const budgetAware = this.prepareProfileForCall(candidate, meta);
         if (this.providerKind(candidate) === 'gemini') {
           const model = this.getGeminiGenerativeModel({
-            model: candidate.model,
-            systemInstruction: system,
-            maxOutputTokens: candidate.maxOutputTokens,
+            model: budgetAware.model,
+            systemInstruction: hardenedSystem,
+            maxOutputTokens: budgetAware.maxOutputTokens,
             responseMimeType: jsonMode ? 'application/json' : undefined,
           });
+          const started = Date.now();
           const result = await this.withRetry(
-            () => model.generateContent(prompt),
-            candidate,
+            () => model.generateContent(wrappedPrompt),
+            budgetAware,
             { phase: 'complete_text', ...meta }
           );
+          this.recordUsageFromText({
+            profile: budgetAware,
+            inputText: `${hardenedSystem}\n${wrappedPrompt}`,
+            outputText: result.response.text(),
+            durationMs: Date.now() - started,
+            meta,
+          });
           return {
             content: result.response.text(),
-            profile: candidate,
+            profile: budgetAware,
           };
         }
 
-        if (this.providerKind(candidate) === 'anthropic') {
+        if (this.providerKind(budgetAware) === 'anthropic') {
           const result = await this.anthropicChat({
-            profile: candidate,
-            system,
-            messages: [{ role: 'user', content: prompt }],
+            profile: budgetAware,
+            system: hardenedSystem,
+            messages: [{ role: 'user', content: wrappedPrompt }],
             tools: [],
             jsonMode,
+            meta,
           });
-          return { content: result.content, profile: candidate };
+          return { content: result.content, profile: budgetAware };
         }
 
-        if (candidate.provider === 'openai' && candidate.apiMode === 'responses') {
+        if (budgetAware.provider === 'openai' && budgetAware.apiMode === 'responses') {
           const result = await this.openAIResponses({
-            profile: candidate,
-            instructions: system,
-            input: [{ role: 'user', content: prompt }],
+            profile: budgetAware,
+            instructions: hardenedSystem,
+            input: [{ role: 'user', content: wrappedPrompt }],
             tools: [],
             jsonMode,
+            meta,
           });
-          return { content: result.content, profile: candidate };
+          return { content: result.content, profile: budgetAware };
         }
 
         const messages = [
-          ...(system ? [{ role: 'system', content: system }] : []),
-          { role: 'user', content: prompt },
+          ...(hardenedSystem ? [{ role: 'system', content: hardenedSystem }] : []),
+          { role: 'user', content: wrappedPrompt },
         ];
-        const result = await this.openAICompatibleChat({ profile: candidate, messages, tools: [], jsonMode });
-        return { content: result.content, profile: candidate };
+        const result = await this.openAICompatibleChat({ profile: budgetAware, messages, tools: [], jsonMode, meta });
+        return { content: result.content, profile: budgetAware };
       } catch (error) {
+        if (['DAILY_TOKEN_QUOTA_EXCEEDED', 'LLM_RATE_LIMIT_EXCEEDED', 'USER_COST_SUSPENDED'].includes(error.code)) {
+          throw error;
+        }
         lastError = error;
         const hasNext = index < profiles.length - 1;
         const classification = classifyModelError(error);
@@ -432,10 +469,10 @@ export class ModelService {
   }
 
   recordAudit(event) {
-    const safe = {
+    const safe = redactPromptLikeFields({
       ts: new Date().toISOString(),
       ...event,
-    };
+    });
     delete safe.apiKey;
     this.audit.push(safe);
     if (this.audit.length > AUDIT_LIMIT) this.audit.splice(0, this.audit.length - AUDIT_LIMIT);
@@ -490,6 +527,17 @@ export class ModelService {
   }
 
   async withRetry(operation, profile, meta = {}) {
+    enforceLlmRateLimit({ userId: meta.userId || 'anonymous' });
+    recordBillingEvent({
+      kind: 'llm_call_started',
+      userId: meta.userId,
+      sessionId: meta.sessionId,
+      provider: profile.provider,
+      model: profile.model,
+      domain: profile.domain,
+      effortLevel: profile.effortLevel,
+      phase: meta.phase || meta.apiMode || 'model_call',
+    });
     let lastErr;
     for (let attempt = 0; attempt <= profile.retries; attempt++) {
       const started = Date.now();
@@ -509,6 +557,11 @@ export class ModelService {
           durationMs: Date.now() - started,
           ok: true,
           ...meta,
+        });
+        recordLlmDuration((Date.now() - started) / 1000, {
+          provider: profile.provider,
+          model: profile.model,
+          success: true,
         });
         return result;
       } catch (err) {
@@ -530,6 +583,11 @@ export class ModelService {
           error: message.slice(0, 220),
           ...meta,
         });
+        recordLlmDuration((Date.now() - started) / 1000, {
+          provider: profile.provider,
+          model: profile.model,
+          success: false,
+        });
         if (!retryable || attempt >= profile.retries) break;
         const retryCapMs = asInt(this.env.SELINA_MODEL_MAX_RETRY_AFTER_MS, DEFAULT_RETRY_AFTER_CAP_MS);
         const retryDelayMs = classification.retryAfterMs
@@ -542,6 +600,8 @@ export class ModelService {
   }
 
   async sendGeminiStream(chat, message, profile, { onStream, meta } = {}) {
+    const inputTokens = this.estimateTokens(message);
+    const started = Date.now();
     return this.withRetry(async () => {
       const result = await chat.sendMessageStream(message);
       let streamed = 0;
@@ -555,6 +615,13 @@ export class ModelService {
       }
       const response = await result.response;
       this.recordAudit({ kind: 'token_estimate', provider: 'gemini', model: profile.model, streamedTokens: streamed });
+      this.recordUsageFromText({
+        profile,
+        inputTokens,
+        outputText: response.text(),
+        durationMs: Date.now() - started,
+        meta,
+      });
       return response;
     }, profile, meta);
   }
@@ -630,7 +697,8 @@ export class ModelService {
     return body;
   }
 
-  async openAICompatibleChat({ profile, messages, tools = [], jsonMode = false, responseFormat = null }) {
+  async openAICompatibleChat({ profile, messages, tools = [], jsonMode = false, responseFormat = null, meta = {} }) {
+    profile = this.prepareProfileForCall(profile, meta);
     const providerConfig = {
       openai: {
         baseUrl: this.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
@@ -661,6 +729,7 @@ export class ModelService {
     const body = this.buildOpenAIRequest({ profile, messages, tools, jsonMode, responseFormat });
     const promptTokens = this.estimateTokens(messages);
 
+    const started = Date.now();
     const data = await this.fetchJsonWithAuth(profile.provider, `${baseUrl}/chat/completions`, (auth) => ({
       method: 'POST',
       headers: {
@@ -669,9 +738,17 @@ export class ModelService {
         [providerConfig.headerName]: `Bearer ${authToken(auth)}`,
       },
       body: JSON.stringify(body),
-    }), profile, { promptTokens });
+    }), profile, { promptTokens, ...meta });
 
     const message = data.choices?.[0]?.message || {};
+    this.recordUsageFromProvider({
+      profile,
+      usage: data.usage,
+      inputTokens: promptTokens,
+      outputText: message.content || '',
+      durationMs: Date.now() - started,
+      meta,
+    });
     return {
       content: message.content || '',
       toolCalls: (message.tool_calls || []).map(call => ({
@@ -685,7 +762,8 @@ export class ModelService {
     };
   }
 
-  async openAIResponses({ profile, instructions, input, tools = [], jsonMode = false }) {
+  async openAIResponses({ profile, instructions, input, tools = [], jsonMode = false, meta = {} }) {
+    profile = this.prepareProfileForCall(profile, meta);
     if (!this.authManager.hasProvider('openai')) throw new Error('OPENAI_API_KEY is missing');
     if (!profile.model) throw new Error('OPENAI_MODEL is missing');
 
@@ -693,6 +771,7 @@ export class ModelService {
     const body = this.buildOpenAIResponsesRequest({ profile, instructions, input, tools, jsonMode });
     const promptTokens = this.estimateTokens({ instructions, input });
 
+    const started = Date.now();
     const data = await this.fetchJsonWithAuth('openai', `${baseUrl}/responses`, (auth) => ({
       method: 'POST',
       headers: {
@@ -700,10 +779,19 @@ export class ModelService {
         Authorization: `Bearer ${authToken(auth)}`,
       },
       body: JSON.stringify(body),
-    }), profile, { promptTokens, apiMode: 'responses' });
+    }), profile, { promptTokens, apiMode: 'responses', ...meta });
+    const outputText = extractResponseText(data);
+    this.recordUsageFromProvider({
+      profile,
+      usage: data.usage,
+      inputTokens: promptTokens,
+      outputText,
+      durationMs: Date.now() - started,
+      meta,
+    });
 
     return {
-      content: extractResponseText(data),
+      content: outputText,
       toolCalls: extractResponseToolCalls(data),
       rawItems: data.output || [],
       responseId: data.id,
@@ -711,7 +799,8 @@ export class ModelService {
     };
   }
 
-  async anthropicChat({ profile, system, messages, tools = [], jsonMode = false, promptCache = null }) {
+  async anthropicChat({ profile, system, messages, tools = [], jsonMode = false, promptCache = null, meta = {} }) {
+    profile = this.prepareProfileForCall(profile, meta);
     if (!this.authManager.hasProvider('anthropic')) throw new Error('ANTHROPIC_API_KEY is missing');
     if (!profile.model) throw new Error('ANTHROPIC_MODEL is missing');
 
@@ -724,6 +813,7 @@ export class ModelService {
       this.estimateTokens(system) >= minCacheTokens
     );
     const anthropicSystem = toAnthropicSystem(system, usePromptCache);
+    const started = Date.now();
     const data = await this.fetchJsonWithAuth('anthropic', `${baseUrl}/v1/messages`, (auth) => ({
       method: 'POST',
       headers: {
@@ -740,11 +830,20 @@ export class ModelService {
         max_tokens: profile.maxOutputTokens,
         temperature: 0.2,
       }),
-    }), profile, { promptTokens, promptCache: Boolean(usePromptCache), jsonMode });
+    }), profile, { promptTokens, promptCache: Boolean(usePromptCache), jsonMode, ...meta });
 
     const blocks = data.content || [];
+    const content = blocks.filter(b => b.type === 'text').map(b => b.text).join('\n');
+    this.recordUsageFromProvider({
+      profile,
+      usage: data.usage,
+      inputTokens: promptTokens,
+      outputText: content,
+      durationMs: Date.now() - started,
+      meta,
+    });
     return {
-      content: blocks.filter(b => b.type === 'text').map(b => b.text).join('\n'),
+      content,
       toolCalls: blocks.filter(b => b.type === 'tool_use').map(b => ({
         id: b.id,
         name: b.name,
@@ -760,6 +859,51 @@ export class ModelService {
     if (profile.provider === 'qwen' || profile.provider === 'deepseek' || profile.provider === 'openai' || profile.provider === 'nim') return 'openai-compatible';
     if (profile.provider === 'anthropic') return 'anthropic';
     return 'gemini';
+  }
+
+  prepareProfileForCall(profile, meta = {}) {
+    return applyBudgetPolicyToProfile(profile, {
+      userId: meta.userId,
+      sessionId: meta.sessionId || meta.runId || meta.requestId,
+    });
+  }
+
+  recordUsageFromProvider({ profile, usage = {}, inputTokens = 0, outputText = '', durationMs = 0, meta = {} }) {
+    const estimatedOutput = this.estimateTokens(outputText);
+    const promptTokens = usage.prompt_tokens ?? usage.input_tokens ?? inputTokens;
+    const completionTokens = usage.completion_tokens ?? usage.output_tokens ?? estimatedOutput;
+    this.recordUsageFromText({
+      profile,
+      inputTokens: promptTokens,
+      outputTokens: completionTokens,
+      durationMs,
+      meta,
+    });
+  }
+
+  recordUsageFromText({ profile, inputText = '', outputText = '', inputTokens = null, outputTokens = null, durationMs = 0, meta = {} }) {
+    const measuredInput = Number(inputTokens ?? this.estimateTokens(inputText));
+    const measuredOutput = Number(outputTokens ?? this.estimateTokens(outputText));
+    const durationSeconds = durationMs > 0 ? durationMs / 1000 : null;
+    recordLlmTokenUsage({
+      provider: profile.provider,
+      model: profile.model,
+      inputTokens: measuredInput,
+      outputTokens: measuredOutput,
+      durationSeconds,
+    });
+    recordLlmCost(estimateCostUsd(profile, measuredInput, measuredOutput), {
+      provider: profile.provider,
+      model: profile.model,
+    });
+    recordSessionTokenUsage({
+      userId: meta.userId || 'anonymous',
+      sessionId: meta.sessionId || meta.runId || meta.requestId,
+      provider: profile.provider,
+      model: profile.model,
+      inputTokens: measuredInput,
+      outputTokens: measuredOutput,
+    });
   }
 
   providerSecretPreview(provider) {

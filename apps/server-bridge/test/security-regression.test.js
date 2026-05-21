@@ -39,7 +39,7 @@ describe('security regression: auth-boundary', () => {
 describe('security regression: tool-auth', () => {
   it('fails closed for prompt-injected unknown mutation tools', async () => {
     await expect(authorizeToolCall('postgres__drop_all_tables', {}, {
-      authSnapshot: { type: 'user-session', userId: 'user-a' },
+      authSnapshot: { type: 'user-session', userId: 'user-a', permissions: ['tool:sql'] },
       toolDefinition: { serverName: 'postgres', metadata: {} },
       approvalFn: async () => false,
     })).rejects.toThrow(ToolAuthError);

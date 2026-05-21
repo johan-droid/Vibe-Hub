@@ -6,6 +6,7 @@ import {
   updateAgentRunStatus,
   upsertAgentRun,
 } from '../db.js';
+import { setTraceAgentRun } from '../utils/tracing.js';
 
 async function bestEffort(operation) {
   try {
@@ -17,12 +18,14 @@ async function bestEffort(operation) {
 
 export function persistRun(runIdentity, {
   userId,
+  tenantId,
   projectName,
   prompt,
   status = 'running',
   metadata = {},
 } = {}) {
   if (!runIdentity?.runId) return null;
+  setTraceAgentRun(runIdentity.runId);
   return bestEffort(() => upsertAgentRun({
     id: runIdentity.runId,
     rootRunId: runIdentity.rootRunId || runIdentity.runId,
@@ -30,6 +33,7 @@ export function persistRun(runIdentity, {
     depth: runIdentity.depth || 0,
     sequence: runIdentity.sequence || 0,
     userId,
+    tenantId: tenantId || metadata.tenantId || 'shared',
     projectName,
     expert: runIdentity.expert,
     provider: runIdentity.provider,
@@ -42,6 +46,7 @@ export function persistRun(runIdentity, {
 
 export function persistRunStatus(runIdentity, status, metadata = {}) {
   if (!runIdentity?.runId) return null;
+  setTraceAgentRun(runIdentity.runId);
   return bestEffort(() => updateAgentRunStatus(runIdentity.runId, status, metadata));
 }
 
@@ -60,10 +65,10 @@ export function persistRunEvent(envelope, runIdentity) {
   }));
 }
 
-export async function fetchRunForUser(runId, userId) {
-  return getAgentRun(runId, userId);
+export async function fetchRunForUser(runId, userId, tenantId = null) {
+  return getAgentRun(runId, userId, tenantId);
 }
 
-export async function fetchRunEventsForUser(runId, userId) {
-  return getAgentRunEvents(runId, userId);
+export async function fetchRunEventsForUser(runId, userId, tenantId = null) {
+  return getAgentRunEvents(runId, userId, tenantId);
 }

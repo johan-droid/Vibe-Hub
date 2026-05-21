@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ASTGraph, ASTParser, HybridContextRetriever } from '../memory/ast-graph.js';
+import { InMemoryVectorStore, buildVectorCollectionName } from '../memory/vector-store.js';
+import { TokenBudgetBroker } from '../memory/token-budget-broker.js';
 
 function mergeGraphs(graphs) {
   const merged = new ASTGraph('test');
@@ -96,5 +98,115 @@ describe('AST graph state context', () => {
       'HeaderContext',
     ]));
     expect(HybridContextRetriever.formatContext(context)).toContain('STATE CONTEXT');
+  });
+
+  it('uses scoped semantic fallback through the vector store and caches repeated queries', async () => {
+    const graph = new ASTGraph('test');
+    const vectorStore = new InMemoryVectorStore();
+    const collection = buildVectorCollectionName({
+      projectName: 'test',
+      tenantId: 'tenant-a',
+      namespace: 'docs',
+      indexVersion: 'v2',
+    });
+    const vector = [0.3, 0.8, 0.1];
+    await vectorStore.upsert({
+      collection,
+      points: [
+        {
+          id: 'doc-1',
+          vector,
+          payload: {
+            project_name: 'test',
+            tenant_id: 'tenant-a',
+            namespace: 'docs',
+            index_version: 'v2',
+            file_path: 'docs/api.md',
+            node_name: 'PostRequestsContract',
+            content: 'POST /api/v6/integration/code/run accepts prompt, targetFile, and effortLevel.',
+          },
+        },
+      ],
+    });
+
+    let embeddingsCalls = 0;
+    const retriever = new HybridContextRetriever(graph, {
+      getEmbedding: async () => {
+        embeddingsCalls += 1;
+        return vector;
+      },
+    }, {
+      vectorStore,
+      projectName: 'test',
+      tenantId: 'tenant-a',
+      namespace: 'docs',
+      indexVersion: 'v2',
+      semanticCacheTtlSeconds: 60,
+    });
+
+    const first = await retriever.getContext('src/Empty.jsx', null, 'how do i post code run requests');
+    const second = await retriever.getContext('src/Empty.jsx', null, 'how do i post code run requests');
+
+    expect(first.embeddingResults[0]?.file_path).toBe('docs/api.md');
+    expect(first.semanticScope?.collection).toBe(collection);
+    expect(first.semanticCache?.hit).toBe(false);
+    expect(second.semanticCache?.hit).toBe(true);
+    expect(embeddingsCalls).toBe(1);
+  });
+
+  it('only reranks large semantic candidate sets and trims context to token budget', async () => {
+    const graph = new ASTGraph('test');
+    const vectorStore = new InMemoryVectorStore();
+    const collection = buildVectorCollectionName({
+      projectName: 'test',
+      tenantId: 'tenant-a',
+      namespace: 'docs',
+      indexVersion: 'v3',
+    });
+    const baseVector = [0.5, 0.5, 0.5];
+    const points = Array.from({ length: 7 }, (_, index) => ({
+      id: `doc-${index}`,
+      vector: baseVector,
+      payload: {
+        project_name: 'test',
+        tenant_id: 'tenant-a',
+        namespace: 'docs',
+        index_version: 'v3',
+        file_path: `docs/${index}.md`,
+        node_name: `Doc${index}`,
+        content: `Candidate ${index} ${'alpha '.repeat(30)}`,
+      },
+    }));
+    await vectorStore.upsert({ collection, points });
+
+    let rerankCalls = 0;
+    const retriever = new HybridContextRetriever(graph, {
+      getEmbedding: async () => baseVector,
+    }, {
+      vectorStore,
+      projectName: 'test',
+      tenantId: 'tenant-a',
+      namespace: 'docs',
+      indexVersion: 'v3',
+      semanticCandidateLimit: 7,
+      semanticRerankThreshold: 6,
+      reranker: {
+        rerank: async ({ candidates }) => {
+          rerankCalls += 1;
+          return [...candidates].reverse();
+        },
+      },
+    });
+
+    const context = await retriever.getContext('src/Empty.jsx', null, 'show me the docs');
+    const formatted = HybridContextRetriever.formatContext(context, {
+      tokenBudget: new TokenBudgetBroker(),
+      maxTokens: 25,
+    });
+
+    expect(rerankCalls).toBe(1);
+    expect(context.embeddingResults[0]?.file_path).toBe('docs/6.md');
+    expect(formatted.length).toBeGreaterThan(0);
+    expect(formatted.length).toBeLessThan(400);
   });
 });

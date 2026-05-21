@@ -53,3 +53,12 @@ export async function withJsonCache(key, ttlSeconds, compute) {
   await setJson(key, value, ttlSeconds);
   return { value, hit: false };
 }
+
+export async function deleteKey(key) {
+  if (redisClient) {
+    await redisClient.del(key);
+    return;
+  }
+  memoryCache.delete(key);
+}
+

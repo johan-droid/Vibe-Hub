@@ -16,9 +16,11 @@ export class InMemoryVectorStore {
     return { success: true, provider: 'memory', upserted: points.length };
   }
 
-  async search({ collection = 'default', vector = [], limit = 5 } = {}) {
+  async search({ collection = 'default', vector = [], limit = 5, filter = null } = {}) {
+    enforceTenantFilter(filter);
     const existing = [...(this.collections.get(collection)?.values() || [])];
     return existing
+      .filter(point => payloadMatchesFilter(point.payload, filter))
       .map(point => ({
         ...point,
         score: cosineSimilarity(vector, point.vector),
@@ -50,6 +52,7 @@ export class QdrantVectorStore {
 
   async search({ collection = 'default', vector = [], limit = 5, filter = null } = {}) {
     this.assertConfigured();
+    enforceTenantFilter(filter);
     const response = await this.request(`/collections/${encodeURIComponent(collection)}/points/search`, {
       method: 'POST',
       body: JSON.stringify({
@@ -90,6 +93,56 @@ export function createVectorStore({ provider = process.env.SELINA_VECTOR_STORE |
   const normalized = String(provider || 'memory').toLowerCase();
   if (normalized === 'qdrant') return new QdrantVectorStore(options);
   return new InMemoryVectorStore();
+}
+
+export function buildVectorCollectionName({
+  tenantId = 'shared',
+  namespace = 'default',
+  projectName = 'default',
+  indexVersion = 'live',
+} = {}) {
+  return [tenantId, namespace, projectName, indexVersion]
+    .map(normalizeCollectionPart)
+    .join('__');
+}
+
+export class TenantIsolationError extends Error {
+  constructor(message = 'Vector search requires a tenant_id filter at the storage driver boundary.') {
+    super(message);
+    this.name = 'TenantIsolationError';
+    this.code = 'TENANT_FILTER_REQUIRED';
+  }
+}
+
+export function enforceTenantFilter(filter = null) {
+  const tenantCondition = findTenantFilterCondition(filter);
+  const tenantId = tenantCondition?.match?.value;
+  if (!tenantId || typeof tenantId !== 'string') {
+    throw new TenantIsolationError();
+  }
+  return tenantId;
+}
+
+function normalizeCollectionPart(value) {
+  return String(value || 'default')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/gu, '-')
+    .replace(/^-+|-+$/gu, '') || 'default';
+}
+
+function payloadMatchesFilter(payload = {}, filter = null) {
+  if (!filter?.must?.length) return true;
+
+  return filter.must.every(condition => {
+    if (!condition?.key || !condition?.match) return true;
+    return payload[condition.key] === condition.match.value;
+  });
+}
+
+function findTenantFilterCondition(filter = null) {
+  const clauses = Array.isArray(filter?.must) ? filter.must : [];
+  return clauses.find(condition => condition?.key === 'tenant_id' && condition?.match);
 }
 
 function cosineSimilarity(a = [], b = []) {

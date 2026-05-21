@@ -5,6 +5,12 @@ import { authorizeToolCall, ToolAuthError, getToolAuthPolicy } from '../orchestr
 import { sanitizeEnvironment } from '../utils/env-sanitizer.js';
 
 describe('Agent auth gate', () => {
+  const authSnapshot = {
+    type: 'user-session',
+    userId: 'user-1',
+    permissions: ['tool:read', 'tool:write', 'tool:execute'],
+  };
+
   it('centralizes provider credentials and returns cloned snapshots', async () => {
     const manager = new AgentAuthManager({
       env: {
@@ -72,12 +78,12 @@ describe('Agent auth gate', () => {
     })).rejects.toThrow(ToolAuthError);
 
     await expect(authorizeToolCall('run_command', { command: 'npm' }, {
-      authSnapshot: { type: 'user-session', userId: 'user-1' },
+      authSnapshot,
       approvalFn: async () => false,
     })).rejects.toThrow('user denied write operation');
 
     await expect(authorizeToolCall('read_file', { path: 'package.json' }, {
-      authSnapshot: { type: 'user-session', userId: 'user-1' },
+      authSnapshot,
     })).resolves.toMatchObject({ approved: true });
 
     expect(getToolAuthPolicy('create_file')).toMatchObject({ type: 'write', requireApproval: true });

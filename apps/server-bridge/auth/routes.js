@@ -23,6 +23,7 @@ import {
 import { consumeOAuthHandoff } from './oauth-store.js';
 import { getUserAuthHistory } from '../db.js';
 import logger from '../utils/detailed-logger.js';
+import { powGuard } from './pow-middleware.js';
 
 const router = Router();
 
@@ -46,7 +47,7 @@ router.post('/refresh', handleRefreshToken);
  * POST /api/auth/handoff
  * Exchange a short-lived OAuth handoff code for HTTP-only session cookies.
  */
-router.post('/handoff', async (req, res) => {
+router.post('/handoff', powGuard(4), async (req, res) => {
   try {
     const record = await consumeOAuthHandoff(req.body?.code);
     if (!record) {

@@ -19,6 +19,11 @@ import { resolveExpertProfile } from './expert-routing.js';
 import { persistRun, persistRunStatus } from './run_store.js';
 import { modelService } from './models.js';
 import { BrainSystemOrchestrator } from './brain-system.js';
+import { assertPromptSafe } from './prompt-guard.js';
+import {
+  recordBillingEvent,
+  requireExpensiveStepConfirmation,
+} from './cost-controls.js';
 
 
 /**
@@ -51,12 +56,25 @@ export class AgentOrchestrator {
     this.projectTree = null;
     this.packageJson = null;
     this.userId = null;
+    this.authUser = null;
+    this.sessionId = null;
+    this.tenantId = 'shared';
     this.projectName = 'default';
     this.brainSystem = new BrainSystemOrchestrator();
   }
 
   setUser(userId) {
     this.userId = userId;
+  }
+
+  setAuthContext(user = null, sessionId = null) {
+    this.authUser = user;
+    this.userId = user?.id || this.userId;
+    this.sessionId = sessionId || this.sessionId;
+  }
+
+  setTenant(tenantId) {
+    this.tenantId = tenantId || 'shared';
   }
 
   /**
@@ -161,6 +179,8 @@ export class AgentOrchestrator {
       }
     }
 
+    await assertPromptSafe(prompt, { modelService });
+
     const triage = await triageAndRoute(prompt);
     const preFlight = await runPreFlight(triage.target_files);
     if (preFlight.errors) {
@@ -175,6 +195,7 @@ export class AgentOrchestrator {
     const runIdentity = runContext || createRootRunIdentity({ expert: 'manager' });
     await persistRun(runIdentity, {
       userId: this.userId || 'anonymous',
+      tenantId: this.tenantId,
       projectName: this.projectName,
       prompt,
       status: 'running',
@@ -217,6 +238,7 @@ export class AgentOrchestrator {
         sessionId: runIdentity.rootRunId,
         parentRolloutId: runIdentity.parentRunId,
         userId: this.userId || 'anonymous',
+        tenantId: this.tenantId,
         projectName: this.projectName,
         prompt,
         effortLevel,
@@ -255,8 +277,42 @@ export class AgentOrchestrator {
         modelService,
       });
       Object.assign(runIdentity, withRunExpert(runIdentity, routedProfile));
+      const sessionId = runContext?.sessionId || this.sessionId || runContext?.rootRunId || runContext?.runId;
+      const billingContext = {
+        userId: this.userId || 'anonymous',
+        sessionId,
+        runId: runIdentity.runId,
+        tenantId: this.tenantId,
+        projectName: this.projectName,
+      };
+      recordBillingEvent({
+        kind: 'agent_run_started',
+        ...billingContext,
+        effortLevel,
+        routeDomain: domain,
+      });
+
+      if (effortLevel === 'deep' || (swarm?.length || 0) > 1) {
+        await requireExpensiveStepConfirmation({
+          user: this.authUser || { id: this.userId },
+          operation: effortLevel === 'deep' ? 'deep_agent_loop' : 'multi_expert_swarm',
+          reason: 'This run may use long context retrieval or multiple LLM turns.',
+          confirmFn: async ({ operation, reason, requiresCaptcha }) => {
+            if (!onPlan) return false;
+            return onPlan(
+              [{
+                file: operation,
+                action: requiresCaptcha ? `${reason} CAPTCHA verification is required before continuing.` : reason,
+                reason: 'Expensive operations require explicit confirmation for non-trusted users.',
+              }],
+              ['Approving may materially increase token, vector, and sandbox usage.']
+            );
+          },
+        });
+      }
       await persistRun(runIdentity, {
         userId: this.userId || 'anonymous',
+        tenantId: this.tenantId,
         projectName: this.projectName,
         prompt,
         status: 'running',
@@ -291,11 +347,20 @@ export class AgentOrchestrator {
           ? withRunExpert(runIdentity, expertProfile)
           : createChildRunIdentity(runIdentity, expertProfile);
         const previousProviderOverride = expert.providerOverride;
+        const previousExecutionContext = expert.executionContext;
         expert.providerOverride = expertProfile.provider;
         expert.effortLevel = effortLevel;
+        expert.executionContext = {
+          ...billingContext,
+          runId: expertRunIdentity.runId,
+          rootRunId: runIdentity.rootRunId,
+          domain: targetDomain,
+          effortLevel,
+        };
         if (emitState) emitState('thinking', `Projecting expertise to the ${targetDomain}Expert...`);
         await persistRun(expertRunIdentity, {
           userId: this.userId || 'anonymous',
+          tenantId: this.tenantId,
           projectName: this.projectName,
           prompt,
           status: 'running',
@@ -410,8 +475,21 @@ export class AgentOrchestrator {
           if (emitState) emitState('debating', 'Peer review in progress...');
           
           const reviewPrompt = `PRIME PROMPT: ${prompt}\nACTIONS: ${JSON.stringify(finalResult.toolCalls)}\nTHOUGHTS: ${finalResult.thoughts}\nAudit these actions. If logic flaws exist, return REVIEW_FAILED. If perfect, return REVIEW_PASSED.`;
+          const previousReviewerContext = this.experts.reviewer.executionContext;
           this.experts.reviewer.effortLevel = effortLevel;
-          const reviewResult = await this.experts.reviewer.execute(reviewPrompt, "Pedantic Auditor", async () => {}, (t) => onThought(`[Reviewer] ${t}`), () => {}, () => {}, onMemoryUpdateInternal, emitState, onStream);
+          this.experts.reviewer.executionContext = {
+            ...billingContext,
+            runId: `${expertRunIdentity.runId}:review`,
+            rootRunId: runIdentity.rootRunId,
+            domain: 'reviewer',
+            effortLevel,
+          };
+          let reviewResult;
+          try {
+            reviewResult = await this.experts.reviewer.execute(reviewPrompt, "Pedantic Auditor", async () => {}, (t) => onThought(`[Reviewer] ${t}`), () => {}, () => {}, onMemoryUpdateInternal, emitState, onStream);
+          } finally {
+            this.experts.reviewer.executionContext = previousReviewerContext;
+          }
           await recordRollout('peer_review_completed', {
             targetDomain,
             iteration: currentIter,
@@ -460,6 +538,7 @@ export class AgentOrchestrator {
           throw error;
         } finally {
           expert.providerOverride = previousProviderOverride;
+          expert.executionContext = previousExecutionContext;
         }
     };
 

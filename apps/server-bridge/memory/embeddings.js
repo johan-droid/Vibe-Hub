@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { agentAuthManager } from '../auth/agent-auth.js';
 import { countTokens, tokenize } from './tokenizer.js';
 import { logger } from '../utils/detailed-logger.js';
+import { hashValue, withJsonCache } from '../utils/cache.js';
 
 let _geminiClient = null;
 function getGeminiClient() {
@@ -19,8 +20,10 @@ function getGeminiClient() {
  * EmbeddingsService — Semantic Brain v1.0
  */
 export class EmbeddingsService {
-  constructor(modelName = 'text-embedding-004') {
+  constructor(modelName = 'text-embedding-004', options = {}) {
     this.modelName = modelName;
+    this.cacheTtlSeconds = options.cacheTtlSeconds || Number.parseInt(process.env.EMBEDDING_CACHE_TTL_SECONDS || '86400', 10);
+    this.maxBatchSize = options.maxBatchSize || Number.parseInt(process.env.EMBEDDING_BATCH_SIZE || '8', 10);
   }
 
   /**
@@ -28,7 +31,35 @@ export class EmbeddingsService {
    * @param {string} text 
    * @returns {Promise<number[]>}
    */
-  async getEmbedding(text) {
+  async getEmbedding(text, { cacheKeyNamespace = 'default' } = {}) {
+    const normalizedText = String(text || '');
+    const cacheKey = `cache:embedding:${this.modelName}:${cacheKeyNamespace}:${hashValue(normalizedText)}`;
+    const { value } = await withJsonCache(cacheKey, this.cacheTtlSeconds, async () => {
+      return this.computeEmbedding(normalizedText);
+    });
+    return value;
+  }
+
+  async getEmbeddings(texts = [], { cacheKeyNamespace = 'default' } = {}) {
+    const batches = [];
+    for (let index = 0; index < texts.length; index += this.maxBatchSize) {
+      batches.push(texts.slice(index, index + this.maxBatchSize));
+    }
+
+    const embeddings = [];
+    for (const [batchIndex, batch] of batches.entries()) {
+      logger.info('EmbeddingsService', `Processing embedding batch ${batchIndex + 1}/${batches.length} (${batch.length} items).`);
+      const batchResults = await Promise.all(
+        batch.map(text => this.getEmbedding(text, {
+          cacheKeyNamespace,
+        }))
+      );
+      embeddings.push(...batchResults);
+    }
+    return embeddings;
+  }
+
+  async computeEmbedding(text) {
     const tokens = tokenize(text);
     const tokenCount = countTokens(text);
     logger.info('EmbeddingsService', `Pre-tokenized text into ${tokens.length} discrete tokens (est. ${tokenCount} budget tokens).`);

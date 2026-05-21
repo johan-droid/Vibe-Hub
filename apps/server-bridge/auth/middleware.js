@@ -1,6 +1,10 @@
 import logger from '../utils/detailed-logger.js';
 import jwt from 'jsonwebtoken';
+import { setTraceUser } from '../utils/tracing.js';
+import { verifyExternalJwt, isExternalJwtConfigured } from './external-jwt.js';
+import { attachTenantContext, TenantContextError } from './tenant.js';
 import {
+  ACCESS_TOKEN_TTL_SECONDS,
   validateAccessTokenSession,
   validateSession,
   rotateRefreshToken,
@@ -30,7 +34,7 @@ export function generateToken(user) {
   return jwt.sign(
     { id: user.id, email: user.email, name: user.name },
     JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn: `${ACCESS_TOKEN_TTL_SECONDS}s`, issuer: 'vibe-hub-auth' }
   );
 }
 
@@ -60,6 +64,26 @@ function readBearerToken(header) {
   return null;
 }
 
+function csv(value, fallback = []) {
+  const parsed = String(value || '')
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean);
+  return parsed.length ? parsed : fallback;
+}
+
+function defaultLocalPermissions() {
+  return csv(process.env.AUTH_DEFAULT_USER_PERMISSIONS, [
+    'tool:read',
+    'tool:write',
+    'tool:execute',
+    'tool:github',
+    'tool:browser',
+    'tool:mcp',
+    'tool:memory',
+  ]);
+}
+
 /**
  * Read refresh token from HTTP-only cookie
  */
@@ -74,11 +98,14 @@ function normalizeUser(session) {
     email: session.email,
     name: session.name,
     avatarUrl: session.avatarUrl,
-    provider: session.provider
+    provider: session.provider,
+    roles: Array.isArray(session.roles) ? session.roles : ['user'],
+    permissions: Array.isArray(session.permissions) ? session.permissions : defaultLocalPermissions(),
+    tenantId: session.tenantId || session.tenant_id || session.userId,
   };
 }
 
-export async function authenticateFromHeaders(headers = {}, explicitAccessToken = null) {
+export async function authenticateFromHeaders(headers = {}, explicitAccessToken = null, req = null) {
   const cookies = parseCookies(headers.cookie);
   const accessToken =
     explicitAccessToken ||
@@ -86,18 +113,26 @@ export async function authenticateFromHeaders(headers = {}, explicitAccessToken 
     cookies[AUTH_COOKIES.access];
 
   if (accessToken) {
-    const session = await validateAccessTokenSession(accessToken);
+    const session = await validateAccessTokenSession(accessToken, req);
     if (session) {
       return {
         user: normalizeUser(session),
         sessionId: session.sessionId
       };
     }
+
+    if (isExternalJwtConfigured()) {
+      try {
+        return await verifyExternalJwt(accessToken);
+      } catch (error) {
+        logger.warn('Auth', 'External JWT validation failed', { error: error.message });
+      }
+    }
   }
 
   const sessionToken = cookies[AUTH_COOKIES.session];
   if (sessionToken) {
-    const session = await validateSession(sessionToken);
+    const session = await validateSession(sessionToken, req);
     if (session) {
       return {
         user: normalizeUser(session),
@@ -121,7 +156,7 @@ export function setAuthCookies(res, { accessToken, refreshToken, sessionToken })
     httpOnly: true,
     secure,
     sameSite,
-    maxAge: 15 * 60 * 1000, // 15 minutes
+    maxAge: ACCESS_TOKEN_TTL_SECONDS * 1000,
     path: '/',
   });
 
@@ -143,7 +178,8 @@ export function setAuthCookies(res, { accessToken, refreshToken, sessionToken })
       secure,
       sameSite,
       maxAge: 90 * 24 * 60 * 60 * 1000, // 90 days
-      path: '/api/auth/refresh', // Only sent to refresh endpoint
+      // This route is mounted under both /api/auth and /api/v6/auth.
+      path: '/',
     });
   }
 }
@@ -157,7 +193,7 @@ export function clearAuthCookies(res) {
 
   res.clearCookie(AUTH_COOKIES.access, { path: '/', secure, sameSite });
   res.clearCookie(AUTH_COOKIES.session, { path: '/', secure, sameSite });
-  res.clearCookie(AUTH_COOKIES.refresh, { path: '/api/auth/refresh', secure, sameSite });
+  res.clearCookie(AUTH_COOKIES.refresh, { path: '/', secure, sameSite });
 }
 
 /**
@@ -165,11 +201,24 @@ export function clearAuthCookies(res) {
  * Supports both JWT Bearer tokens and HTTP-only session cookies
  */
 export async function requireAuth(req, res, next) {
-  const auth = await authenticateFromHeaders(req.headers);
+  const auth = await authenticateFromHeaders(req.headers, null, req);
   if (auth) {
     req.user = auth.user;
     req.sessionId = auth.sessionId;
-    return next();
+    try {
+      attachTenantContext(req);
+      setTraceUser(auth.user.id);
+      return next();
+    } catch (error) {
+      if (error instanceof TenantContextError) {
+        return res.status(error.code === 'TENANT_CONTEXT_FORBIDDEN' ? 403 : 400).json({
+          error: error.message,
+          code: error.code,
+          requestId: req.id,
+        });
+      }
+      return next(error);
+    }
   }
 
   // No valid auth found
@@ -181,11 +230,24 @@ export async function requireAuth(req, res, next) {
  * Useful for endpoints that work differently for authenticated users
  */
 export async function optionalAuth(req, res, next) {
-  const auth = await authenticateFromHeaders(req.headers);
+  const auth = await authenticateFromHeaders(req.headers, null, req);
   if (auth) {
     req.user = auth.user;
     req.sessionId = auth.sessionId;
-    return next();
+    try {
+      attachTenantContext(req);
+      setTraceUser(auth.user.id);
+      return next();
+    } catch (error) {
+      if (error instanceof TenantContextError) {
+        return res.status(error.code === 'TENANT_CONTEXT_FORBIDDEN' ? 403 : 400).json({
+          error: error.message,
+          code: error.code,
+          requestId: req.id,
+        });
+      }
+      return next(error);
+    }
   }
 
   // No auth - continue without user
@@ -229,9 +291,8 @@ export async function handleRefreshToken(req, res) {
  */
 export function verifyToken(token) {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return jwt.verify(token, JWT_SECRET, { issuer: 'vibe-hub-auth' });
   } catch {
     return null;
   }
 }
-

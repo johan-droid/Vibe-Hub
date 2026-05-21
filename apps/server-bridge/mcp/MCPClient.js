@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import { v4 as uuid } from 'uuid';
 import { sanitizeEnvironment } from '../utils/env-sanitizer.js';
+import { validateMcpProcessInvocation } from '../orchestrator/command-guard.js';
 
 /**
  * MCPClient — High Reliability Implementation
@@ -22,9 +23,10 @@ class MCPClient {
   async connect() {
     return new Promise((resolve, reject) => {
       console.log(`[MCP] Connecting to ${this.name}...`);
-      this.child = spawn(this.command, this.args, {
+      const safeInvocation = validateMcpProcessInvocation(this.command, this.args);
+      this.child = spawn(safeInvocation.command, safeInvocation.args, {
         stdio: ['pipe', 'pipe', 'inherit'],
-        shell: true,
+        shell: false,
         env: sanitizeEnvironment(this.options.env || process.env, {
           inherit: this.options.env ? 'all' : 'core',
         })

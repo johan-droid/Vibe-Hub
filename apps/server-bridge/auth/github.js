@@ -23,6 +23,68 @@ const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 const GITHUB_USER_URL = 'https://api.github.com/user';
 const GITHUB_EMAILS_URL = 'https://api.github.com/user/emails';
 
+function githubMockEnabled(env = process.env) {
+  return ['1', 'true', 'yes', 'on'].includes(String(env.SELINA_ENABLE_GITHUB_MOCK_AUTH || '').toLowerCase());
+}
+
+function buildMockGithubProfile(env = process.env) {
+  const login = env.GITHUB_MOCK_LOGIN || 'selina-dev';
+  const providerId = env.GITHUB_MOCK_PROVIDER_ID || `mock-${login}`;
+
+  return {
+    id: providerId,
+    login,
+    email: env.GITHUB_MOCK_EMAIL || `${login}@example.test`,
+    name: env.GITHUB_MOCK_NAME || 'Selina GitHub Test User',
+    avatar_url: env.GITHUB_MOCK_AVATAR_URL || 'https://avatars.githubusercontent.com/u/9919?v=4',
+  };
+}
+
+async function finalizeGithubSignIn({ req, res, returnOrigin, profile, logMode = 'oauth' }) {
+  const user = await upsertUser({
+    email: profile.email || `${profile.login}@github.noreply`,
+    name: profile.name || profile.login,
+    avatarUrl: profile.avatar_url,
+    provider: 'github',
+    providerId: String(profile.id),
+  });
+
+  const session = await createSession({
+    userId: user.id,
+    provider: 'github',
+    req,
+  });
+
+  setAuthCookies(res, {
+    accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
+    sessionToken: session.sessionToken,
+  });
+
+  const userPayload = {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    avatarUrl: user.avatar_url,
+    provider: user.provider,
+  };
+
+  const handoffCode = await createOAuthHandoff({
+    provider: 'github',
+    session,
+    user: userPayload,
+  });
+
+  logger.info('GitHubAuth', `Completed ${logMode} GitHub sign-in`, {
+    userId: user.id,
+    returnOrigin,
+  });
+
+  const redirectUrl = new URL('/auth/callback', returnOrigin);
+  redirectUrl.searchParams.set('code', handoffCode);
+  res.redirect(redirectUrl.toString());
+}
+
 function redirectWithError(req, res, error) {
   return res.redirect(buildOAuthCallbackUrl(getOAuthReturnOrigin(req), error));
 }
@@ -46,6 +108,25 @@ const requiredEnvVars = ['GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', 'GITHUB_RED
  * Redirect user to GitHub's consent screen
  */
 router.get('/github', async (req, res) => {
+  if (githubMockEnabled()) {
+    const returnOrigin = getOAuthRequestOrigin(req);
+    logger.warn('GitHubAuth', 'GitHub mock auth enabled; issuing local test session', { returnOrigin });
+
+    try {
+      await finalizeGithubSignIn({
+        req,
+        res,
+        returnOrigin,
+        profile: buildMockGithubProfile(),
+        logMode: 'mock',
+      });
+      return;
+    } catch (err) {
+      logger.error('GitHubAuth', 'Mock GitHub sign-in failed', err);
+      return redirectWithError(req, res, 'provider_failed');
+    }
+  }
+
   const missingVars = requiredEnvVars.filter(v => !process.env[v]);
   if (missingVars.length > 0) {
     return handleOAuthConfigError(req, res);
@@ -129,48 +210,16 @@ router.get('/github/callback', async (req, res) => {
       email = primary?.email;
     }
 
-    const user = await upsertUser({
-      email: email || `${profile.login}@github.noreply`,
-      name: profile.name || profile.login,
-      avatarUrl: profile.avatar_url,
-      provider: 'github',
-      providerId: String(profile.id),
+    await finalizeGithubSignIn({
+      req,
+      res,
+      returnOrigin,
+      profile: {
+        ...profile,
+        email,
+      },
+      logMode: 'oauth',
     });
-
-    // Create SaaS-grade session
-    const session = await createSession({
-      userId: user.id,
-      provider: 'github',
-      req
-    });
-
-    // Set secure cookies
-    setAuthCookies(res, {
-      accessToken: session.accessToken,
-      refreshToken: session.refreshToken,
-      sessionToken: session.sessionToken
-    });
-
-    const userPayload = {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      avatarUrl: user.avatar_url,
-      provider: user.provider
-    };
-
-    const handoffCode = await createOAuthHandoff({
-      provider: 'github',
-      session,
-      user: userPayload
-    });
-
-    // Redirect with only an opaque one-time code; the frontend exchanges it
-    // against the API host to set cookies reliably on localhost/127.0.0.1.
-    const redirectUrl = new URL('/auth/callback', returnOrigin);
-    redirectUrl.searchParams.set('code', handoffCode);
-
-    res.redirect(redirectUrl.toString());
   } catch (err) {
     logger.error('GitHubAuth', 'Callback error', err);
     if (err.message === 'MAX_SESSIONS_EXCEEDED') {

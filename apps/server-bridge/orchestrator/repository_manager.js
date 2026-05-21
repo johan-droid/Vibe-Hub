@@ -1,11 +1,42 @@
 import logger from '../utils/detailed-logger.js';
 import fs from 'fs/promises';
 import path from 'path';
-import { exec } from 'child_process';
+import crypto from 'crypto';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import semanticGraphBuilder from '../memory/loader.js';
 
-const execPromise = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+function safePathSegment(value, label) {
+  const segment = String(value || '').replace(/\.git$/i, '');
+  if (!/^[a-zA-Z0-9_.-]{1,120}$/.test(segment)) {
+    throw new Error(`${label} contains invalid characters`);
+  }
+  return segment;
+}
+
+function safeUserSegment(value) {
+  const raw = String(value || '');
+  if (/^[a-zA-Z0-9_.-]{1,120}$/.test(raw)) return raw;
+  return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 32);
+}
+
+function normalizeRepoUrl(repoUrl) {
+  const parsed = new URL(repoUrl);
+  if (!['https:', 'http:'].includes(parsed.protocol)) {
+    throw new Error('Only http(s) Git repository URLs are supported');
+  }
+  const repoName = safePathSegment(path.basename(parsed.pathname), 'Repository name');
+  return { url: parsed.toString(), repoName };
+}
+
+function assertInside(parent, child) {
+  const relative = path.relative(parent, child);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('Repository path escapes storage root');
+  }
+}
 
 /**
  * RepositoryManager — Principal Architect Implementation
@@ -27,25 +58,28 @@ class RepositoryManager {
    * Link a repository by URL
    */
   async linkRepository(repoUrl, userId) {
-    const repoName = repoUrl.split('/').pop().replace('.git', '');
-    const localPath = path.join(this.storagePath, userId, repoName);
+    const { url, repoName } = normalizeRepoUrl(repoUrl);
+    const userSegment = safeUserSegment(userId);
+    const userPath = path.join(this.storagePath, userSegment);
+    const localPath = path.join(userPath, repoName);
+    assertInside(this.storagePath, localPath);
 
     try {
       // Check if already exists
       const exists = await fs.access(localPath).then(() => true).catch(() => false);
       
       if (!exists) {
-        logger.info('RepoManager', `Cloning ${repoUrl} to ${localPath}`);
+        logger.info('RepoManager', `Cloning ${url} to ${localPath}`);
         await fs.mkdir(path.dirname(localPath), { recursive: true });
-        await execPromise(`git clone --depth 1 ${repoUrl} ${localPath}`);
+        await execFileAsync('git', ['clone', '--depth', '1', url, localPath]);
       } else {
         logger.info('RepoManager', `Updating ${repoName}`);
-        await execPromise(`git -C ${localPath} pull`);
+        await execFileAsync('git', ['-C', localPath, 'pull', '--ff-only']);
       }
 
       // Index the repo
       const graph = await this.indexRepository(localPath);
-      this.indexes.set(`${userId}:${repoName}`, graph);
+      this.indexes.set(`${userSegment}:${repoName}`, graph);
 
       return {
         id: repoName,
@@ -89,11 +123,12 @@ class RepositoryManager {
   }
 
   getContext(userId, repoName) {
-    return this.indexes.get(`${userId}:${repoName}`) || null;
+    return this.indexes.get(`${safeUserSegment(userId)}:${safePathSegment(repoName, 'Repository name')}`) || null;
   }
 
   async listRepositories(userId) {
-    const userPath = path.join(this.storagePath, userId);
+    const userPath = path.join(this.storagePath, safeUserSegment(userId));
+    assertInside(this.storagePath, userPath);
     try {
       const exists = await fs.access(userPath).then(() => true).catch(() => false);
       if (!exists) return [];

@@ -26,6 +26,11 @@ const envSchema = z.object({
   SELINA_MODEL_PROVIDER: optionalProvider,
   SELINA_AGENT_PROVIDER: optionalProvider,
   SENTRY_DSN: optionalUrl,
+  EDGE_PROTECTION_REQUIRED: z.enum(['true', 'false']).optional(),
+  EDGE_PROVIDER: z.string().optional(),
+  CONTROL_PLANE_ALLOWED_CIDRS: z.string().optional(),
+  CONTROL_PLANE_INTERNAL_TOKEN: z.string().optional(),
+  ALLOW_PUBLIC_CONTROL_PLANE: z.enum(['true', 'false']).optional(),
 });
 
 const PROVIDER_ENV_KEYS = {

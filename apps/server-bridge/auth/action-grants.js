@@ -39,6 +39,7 @@ export function hashToolParams(params = {}) {
 
 export function createActionGrant({
   userId,
+  tenantId = null,
   runId,
   toolName,
   paramsHash,
@@ -55,6 +56,7 @@ export function createActionGrant({
   const payload = {
     grantId: uuid(),
     userId: String(userId),
+    tenantId: tenantId ? String(tenantId) : null,
     runId: String(runId),
     toolName: String(toolName),
     paramsHash: String(paramsHash),
@@ -73,6 +75,7 @@ export function createActionGrant({
 
 export function verifyActionGrant(token, {
   userId,
+  tenantId,
   runId,
   toolName,
   paramsHash,
@@ -99,6 +102,7 @@ export function verifyActionGrant(token, {
 
   const mismatches = [];
   if (userId && String(payload.userId) !== String(userId)) mismatches.push('userId');
+  if (tenantId && String(payload.tenantId) !== String(tenantId)) mismatches.push('tenantId');
   if (runId && String(payload.runId) !== String(runId)) mismatches.push('runId');
   if (toolName && String(payload.toolName) !== String(toolName)) mismatches.push('toolName');
   if (paramsHash && String(payload.paramsHash) !== String(paramsHash)) mismatches.push('paramsHash');
