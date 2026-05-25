@@ -13,7 +13,7 @@ import logger from '../utils/detailed-logger.js';
  * Central registry for all Model Context Protocol (MCP) connections.
  * Orchestrates cross-server tool discovery and execution.
  */
-class MCPManager {
+export class MCPManager {
   constructor() {
     this.clients = new Map(); // name -> MCPClient
     this.tools = []; // Cached list of all available tools

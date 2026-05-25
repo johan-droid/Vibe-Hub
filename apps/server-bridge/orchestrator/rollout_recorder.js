@@ -78,7 +78,7 @@ function normalizePlan(plan) {
   return String(plan || '').trim();
 }
 
-function renderInitialPlan({ prompt, effortLevel, projectName, runId, sessionId, parentRolloutId }) {
+function renderInitialPlan({ prompt, effortLevel, projectName, runId, sessionId, parentRolloutId, auditMode = 'standard' }) {
   return `# Selina Agent Plan
 
 Run: \`${runId}\`
@@ -86,6 +86,7 @@ Session: \`${sessionId || runId}\`
 Parent rollout: \`${parentRolloutId || 'root'}\`
 Project: \`${projectName}\`
 Effort: \`${effortLevel || 'standard'}\`
+Audit mode: \`${auditMode}\`
 
 ## User Request
 
@@ -119,6 +120,7 @@ export class RolloutRecorder {
     parentRolloutId = null,
     userId = 'anonymous',
     projectName = 'default',
+    auditMode = 'standard',
   } = {}) {
     this.rootDir = path.resolve(rootDir);
     this.runId = sanitizeSegment(runId || `${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomUUID().slice(0, 8)}`, 'run');
@@ -126,6 +128,7 @@ export class RolloutRecorder {
     this.parentRolloutId = parentRolloutId ? sanitizeSegment(parentRolloutId, 'parent') : null;
     this.userId = sanitizeSegment(userId, 'anonymous');
     this.projectName = sanitizeSegment(projectName, 'default');
+    this.auditMode = sanitizeSegment(auditMode, 'standard');
     this.dir = this.sessionId
       ? resolveInside(this.rootDir, this.sessionId, this.runId)
       : resolveInside(this.rootDir, this.userId, this.projectName, this.runId);
@@ -154,6 +157,7 @@ export class RolloutRecorder {
       runId: this.runId,
       sessionId: this.sessionId,
       parentRolloutId: this.parentRolloutId,
+      auditMode: this.auditMode,
     }), 'utf-8');
     await fs.writeFile(this.implementationFile, `# Selina Implementation Log\n\nRun: \`${this.runId}\`\nSession: \`${this.sessionId || this.runId}\`\nParent rollout: \`${this.parentRolloutId || 'root'}\`\n\n`, 'utf-8');
     await fs.writeFile(this.statusFile, renderStatus({ state: 'planning', details: 'Rollout initialized.' }), 'utf-8');
@@ -167,6 +171,7 @@ export class RolloutRecorder {
       runId: this.runId,
       sessionId: this.sessionId || this.runId,
       parent_rollout_id: this.parentRolloutId,
+      auditMode: this.auditMode,
       type: sanitizeSegment(type, 'event'),
       payload: redactValue(payload, this.sensitiveValues),
     };
@@ -196,6 +201,7 @@ export class RolloutRecorder {
       runId: this.runId,
       sessionId: this.sessionId || this.runId,
       parentRolloutId: this.parentRolloutId,
+      auditMode: this.auditMode,
       directory: this.dir,
       events: this.eventsFile,
       plan: this.planFile,

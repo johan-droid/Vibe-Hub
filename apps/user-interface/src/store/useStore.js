@@ -149,6 +149,7 @@ export const useStore = create(
       agentState: 'idle',
       statusMessage: '',
       effortLevel: 'standard',
+      auditMode: 'standard',
       terminalOutput: [],
       terminalSessions: new Map(),
       activeTerminalSession: null,
@@ -478,6 +479,7 @@ export const useStore = create(
         return nextState;
       }),
       setEffortLevel: (l) => set({ effortLevel: l }),
+      setAuditMode: (mode) => set({ auditMode: mode }),
 
       // Thoughts & Logs
       addThought: (thought) => set((state) => {

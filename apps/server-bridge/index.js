@@ -18,8 +18,8 @@ import { Server as SocketIOServer } from 'socket.io';
 import { v4 as uuid }     from 'uuid';
 import { logger, requestContext, logError } from './utils/logger.js';
 import { logger as detailedLogger, requestLogger } from './utils/detailed-logger.js';
-import { codeRequestSchema, vfsCommitSchema, validateRequest } from './utils/validation.js';
-import { handleCodeJobStatus, handleCodeRequest, handleCommitRequest, handleGetPendingFiles, handleGetVfsStats, handleLinkRepo, handleListRepos, handleListTools, handleListServers, handleMcpDiagnostics, handleCallTool, handleRegisterServer, router } from './orchestrator/router.js';
+import { codeRequestSchema, contentHarnessSchema, vfsCommitSchema, validateRequest } from './utils/validation.js';
+import { handleCodeJobStatus, handleCodeRequest, handleCommitRequest, handleGetPendingFiles, handleGetVfsStats, handleHarnessContent, handleLinkRepo, handleListRepos, handleListTools, handleListServers, handleMcpDiagnostics, handleCallTool, handleRegisterServer, router } from './orchestrator/router.js';
 
 
 import { csrfProtection, csrfTokenHandler } from './utils/csrf.js';
@@ -281,6 +281,8 @@ app.use('/api/v6/integration/code', agentLimiter);
 app.use('/api/fs/', vfsLimiter);
 app.use('/api/v6/fs/', vfsLimiter);
 app.use('/api/v6/integration/vfs/', vfsLimiter);
+app.use('/api/v6/content/', vfsLimiter);
+app.use('/api/v6/integration/content/', vfsLimiter);
 app.use('/api/terminal/', terminalLimiter);
 app.use('/api/v6/terminal/', terminalLimiter);
 
@@ -579,6 +581,9 @@ app.get('/api/v6/fs/pending', requireAuth, handleGetPendingFiles);
 app.get('/api/fs/stats', requireAuth, handleGetVfsStats);
 app.get('/api/v6/fs/stats', requireAuth, handleGetVfsStats);
 
+const contentHarnessPipeline = [requireAuth, csrfProtection, validateRequest(contentHarnessSchema), handleHarnessContent];
+app.post('/api/v6/content/harness', ...contentHarnessPipeline);
+
 // ── Repository Management (V6) ────────────────────────────────────────────────
 app.post('/api/v6/repos/link', requireAuth, handleLinkRepo);
 app.get('/api/v6/repos/list', requireAuth, handleListRepos);
@@ -695,7 +700,7 @@ async function handleCopilotChat(req, res) {
 
     // Stream Gemini tokens as OpenAI-compatible SSE events
     await orchestrator.handlePrompt(
-      lastUserMsg, 
+      lastUserMsg,
       'quick',
       async () => '{}', // Tool calls disabled in REST fallback for now
       () => {},         // onThought
@@ -705,7 +710,9 @@ async function handleCopilotChat(req, res) {
       () => {},         // emitState
       (delta) => {
         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: delta }, finish_reason: null }] })}\n\n`);
-      }
+      },
+      null,
+      { auditMode: 'standard' }
     );
 
     res.write(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`);
@@ -785,6 +792,7 @@ const codeQueue = createCodeQueue({
         data.requestId,
         data.effortLevel || 'standard',
         {
+          auditMode: data.auditMode,
           onAbortReady: (abortHandler) => {
             abortRun = abortHandler;
           }
@@ -1620,7 +1628,7 @@ wss.on('connection', async (ws, req) => {
         }
         session.promptHistory.push(now);
 
-        const { prompt, effortLevel = 'standard' } = msg;
+        const { prompt, effortLevel = 'standard', auditMode = 'standard' } = msg;
         const previousRunIdentity = session.currentRunIdentity;
         const rootRunIdentity = createRootRunIdentity({ expert: 'manager' });
         rootRunIdentity.sessionId = auth.sessionId;
@@ -1660,7 +1668,7 @@ wss.on('connection', async (ws, req) => {
           projectName: 'default',
           prompt,
           status: 'running',
-          metadata: { effortLevel, transport: 'websocket' },
+          metadata: { effortLevel, auditMode, transport: 'websocket' },
         });
         send({
           type: 'state_change',
@@ -1687,6 +1695,7 @@ wss.on('connection', async (ws, req) => {
             emitState,
             (delta) => send({ type: 'stream_chunk', delta }),
             rootRunIdentity,
+            { auditMode },
           );
 
           // handlePrompt returns the expert's final result object.

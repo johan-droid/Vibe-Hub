@@ -6,6 +6,7 @@ const MESSAGE_OVERHEAD_TOKENS = 4;
 const TOKEN_COUNT_CACHE_LIMIT = 2500;
 const encoderCache = new Map();
 const tokenCountCache = new Map();
+const fitTextCache = new Map();
 const tokenCacheStats = {
   hits: 0,
   misses: 0,
@@ -54,24 +55,49 @@ export function countMessageTokens(message, options = {}) {
 export function fitTextToTokenBudget(text, maxTokens, options = {}) {
   const normalized = normalizeTokenText(text);
   const budget = Math.max(0, Number.parseInt(maxTokens, 10) || 0);
+  
+  const cacheKey = `${tokenCacheKey(normalized, options)}:${budget}:${options.mode || 'head-tail'}`;
+  if (fitTextCache.has(cacheKey)) {
+    const value = fitTextCache.get(cacheKey);
+    fitTextCache.delete(cacheKey);
+    fitTextCache.set(cacheKey, value);
+    tokenCacheStats.hits += 1;
+    return value;
+  }
+  tokenCacheStats.misses += 1;
+
   const originalTokens = countTokens(normalized, options);
   if (!normalized || budget <= 0) {
-    return {
+    const res = {
       text: '',
       originalTokens,
       tokens: 0,
       truncated: Boolean(normalized),
       savedTokens: originalTokens,
     };
+    if (fitTextCache.size >= TOKEN_COUNT_CACHE_LIMIT) {
+      const firstKey = fitTextCache.keys().next().value;
+      fitTextCache.delete(firstKey);
+      tokenCacheStats.evictions += 1;
+    }
+    fitTextCache.set(cacheKey, res);
+    return res;
   }
   if (originalTokens <= budget) {
-    return {
+    const res = {
       text: normalized,
       originalTokens,
       tokens: originalTokens,
       truncated: false,
       savedTokens: 0,
     };
+    if (fitTextCache.size >= TOKEN_COUNT_CACHE_LIMIT) {
+      const firstKey = fitTextCache.keys().next().value;
+      fitTextCache.delete(firstKey);
+      tokenCacheStats.evictions += 1;
+    }
+    fitTextCache.set(cacheKey, res);
+    return res;
   }
 
   const mode = options.mode || 'head-tail';
@@ -104,13 +130,21 @@ export function fitTextToTokenBudget(text, maxTokens, options = {}) {
     fittedCount = countTokens(fittedText, options);
   }
 
-  return {
+  const finalRes = {
     text: fittedText,
     originalTokens,
     tokens: fittedCount,
     truncated: true,
     savedTokens: Math.max(0, originalTokens - fittedCount),
   };
+  
+  if (fitTextCache.size >= TOKEN_COUNT_CACHE_LIMIT) {
+    const firstKey = fitTextCache.keys().next().value;
+    fitTextCache.delete(firstKey);
+    tokenCacheStats.evictions += 1;
+  }
+  fitTextCache.set(cacheKey, finalRes);
+  return finalRes;
 }
 
 export function chunkTextByTokenBudget(source, text, tokenBudget, options = {}) {

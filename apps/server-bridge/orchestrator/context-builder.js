@@ -13,6 +13,146 @@
 
 import pool from '../db.js';
 import { hardenSystemPrompt } from './prompt-hardening.js';
+import { formatEvidencePacketForPrompt } from '../memory/rag-layers.js';
+import { countTokens, fitTextToTokenBudget } from '../memory/tokenizer.js';
+
+export const CONTEXT_SECTION_TOKEN_BUDGETS = Object.freeze({
+  orgConstraints: 320,
+  userPreferences: 220,
+  projectTree: 320,
+  packageJson: 220,
+  userMemory: 180,
+  retrievalPlan: 120,
+  evidencePacket: 900,
+  brainJournal: 160,
+  mcpTools: 320,
+  linkedProjects: 140,
+});
+
+const MCP_TOOL_SUMMARY_LIMIT = 12;
+const LINKED_PROJECT_SUMMARY_LIMIT = 8;
+const EVIDENCE_FIRST_PATH_LIMIT = 6;
+
+function compactText(value, tokenBudget, options = {}) {
+  const fitted = fitTextToTokenBudget(String(value || ''), tokenBudget, {
+    mode: 'head-tail',
+    ...options,
+  });
+  return fitted.text;
+}
+
+function compactJson(value, tokenBudget) {
+  if (value === undefined || value === null) return '';
+  try {
+    return compactText(JSON.stringify(value, null, 2), tokenBudget);
+  } catch {
+    return compactText(String(value), tokenBudget);
+  }
+}
+
+function summarizeMcpSchema(parameters) {
+  if (!parameters || typeof parameters !== 'object') return 'No structured parameters';
+
+  const properties = parameters.properties && typeof parameters.properties === 'object'
+    ? parameters.properties
+    : {};
+  const required = Array.isArray(parameters.required) ? parameters.required.slice(0, 6) : [];
+  const topLevelFields = Object.entries(properties)
+    .slice(0, 6)
+    .map(([name, definition]) => `${name}:${definition?.type || 'any'}`);
+
+  const parts = [];
+  if (required.length > 0) parts.push(`required=${required.join(', ')}`);
+  if (topLevelFields.length > 0) parts.push(`fields=${topLevelFields.join(', ')}`);
+  if (parameters.additionalProperties === false) parts.push('strict-object');
+  return parts.join(' | ') || 'No structured parameters';
+}
+
+function inferToolRisk(tool = {}) {
+  const text = `${tool.name || ''} ${tool.description || ''}`.toLowerCase();
+  if (/(delete|remove|destroy|write|patch|commit|deploy|execute|command|shell|approve)/u.test(text)) return 'high';
+  if (/(create|update|edit|run|trigger|push|merge)/u.test(text)) return 'medium';
+  return 'low';
+}
+
+function summarizeMcpTool(tool = {}) {
+  const description = compactText(tool.description || 'No description provided.', 40);
+  const schemaSummary = summarizeMcpSchema(tool.parameters);
+  return `- ${tool.name} [risk:${inferToolRisk(tool)}]\n  ${description}\n  ${schemaSummary}`;
+}
+
+function hasPackedEvidence(evidencePacket) {
+  return Number(evidencePacket?.selectedCount || 0) > 0;
+}
+
+function summarizePackageInfo(packageJson) {
+  if (!packageJson || typeof packageJson !== 'object') return 'No package.json found';
+
+  const summary = {
+    name: packageJson.name || null,
+    type: packageJson.type || null,
+    scripts: packageJson.scripts ? Object.keys(packageJson.scripts).slice(0, 8) : [],
+    dependencies: packageJson.dependencies ? Object.keys(packageJson.dependencies).slice(0, 12) : [],
+    devDependencies: packageJson.devDependencies ? Object.keys(packageJson.devDependencies).slice(0, 8) : [],
+  };
+
+  return compactJson(summary, CONTEXT_SECTION_TOKEN_BUDGETS.packageJson);
+}
+
+function buildEvidenceAnchors(evidencePacket) {
+  if (!hasPackedEvidence(evidencePacket)) return [];
+
+  return [...new Set(
+    (evidencePacket.evidence || [])
+      .map(item => item.sourcePath || item.sourceName)
+      .filter(Boolean)
+  )].slice(0, EVIDENCE_FIRST_PATH_LIMIT);
+}
+
+export function buildContextAuditSummary({
+  projectTree,
+  packageJson,
+  userMemory,
+  retrievalPlan,
+  evidencePacket,
+  brainJournal,
+  mcpTools,
+  linkedProjects,
+} = {}) {
+  const evidenceText = formatEvidencePacketForPrompt(evidencePacket);
+  const evidenceFirstMode = hasPackedEvidence(evidencePacket);
+  const projectContextText = evidenceFirstMode
+    ? `Evidence-first mode is active. Broad project context is suppressed because grounded evidence is already available.\n${buildEvidenceAnchors(evidencePacket).join('\n') || 'No source anchors were available'}`
+    : compactText(projectTree || 'Not scanned yet', CONTEXT_SECTION_TOKEN_BUDGETS.projectTree);
+  const mcpContextText = evidenceFirstMode && retrievalPlan?.queryType && retrievalPlan.queryType !== 'tooling'
+    ? 'Evidence-first mode is active. Tool inventory is intentionally compressed until a tooling-specific query requires broader MCP context.'
+    : compactText((mcpTools || []).slice(0, MCP_TOOL_SUMMARY_LIMIT).map(summarizeMcpTool).join('\n\n'), CONTEXT_SECTION_TOKEN_BUDGETS.mcpTools);
+  const linkedRepoText = evidenceFirstMode
+    ? 'Evidence-first mode is active. Linked repository summaries are suppressed unless the retrieved evidence does not ground the task sufficiently.'
+    : compactText((linkedProjects || []).slice(0, LINKED_PROJECT_SUMMARY_LIMIT).map(p => `- ${p.name} (${p.type})`).join('\n'), CONTEXT_SECTION_TOKEN_BUDGETS.linkedProjects);
+
+  return {
+    budgets: CONTEXT_SECTION_TOKEN_BUDGETS,
+    tokens: {
+      projectTree: countTokens(projectContextText),
+      packageJson: countTokens(packageJson
+        ? compactJson(packageJson, CONTEXT_SECTION_TOKEN_BUDGETS.packageJson)
+        : 'No package.json found'),
+      userMemory: countTokens(compactText(userMemory || '', CONTEXT_SECTION_TOKEN_BUDGETS.userMemory)),
+      retrievalPlan: countTokens(compactText(retrievalPlan ? JSON.stringify(retrievalPlan, null, 2) : '', CONTEXT_SECTION_TOKEN_BUDGETS.retrievalPlan)),
+      evidencePacket: countTokens(compactText(evidenceText || '', CONTEXT_SECTION_TOKEN_BUDGETS.evidencePacket)),
+      brainJournal: countTokens(compactText((brainJournal || []).slice(-3).map(j => `- ${j.content || j}`).join('\n'), CONTEXT_SECTION_TOKEN_BUDGETS.brainJournal)),
+      mcpTools: countTokens(mcpContextText),
+      linkedProjects: countTokens(linkedRepoText),
+    },
+    counts: {
+      evidence: evidencePacket?.selectedCount || 0,
+      mcpTools: Array.isArray(mcpTools) ? mcpTools.length : 0,
+      linkedProjects: Array.isArray(linkedProjects) ? linkedProjects.length : 0,
+      brainJournalEntries: Array.isArray(brainJournal) ? brainJournal.length : 0,
+    },
+  };
+}
 
 // ─── Strict Language Enforcement ─────────────────────────────────────────────
 
@@ -88,17 +228,17 @@ export class OrgConstraintsLoader {
       const priorityLabel = c.priority >= 500 ? 'CRITICAL' : 
                            c.priority >= 300 ? 'HIGH' : 'STANDARD';
       
-      return `[${priorityLabel}] ${c.type.toUpperCase()}:\n${JSON.stringify(c.content, null, 2)}`;
+      return `[${priorityLabel}] ${c.type.toUpperCase()}:\n${compactJson(c.content, 120)}`;
     });
 
-    return `=== ORGANIZATIONAL CONSTRAINTS (MUST FOLLOW - HIGHEST PRIORITY) ===
+    return compactText(`=== ORGANIZATIONAL CONSTRAINTS (MUST FOLLOW - HIGHEST PRIORITY) ===
 The following constraints are non-negotiable organizational standards.
 You MUST adhere to these rules regardless of user preferences.
 
 ${sections.join('\n\n')}
 
 IMPORTANT: These constraints override any conflicting user preferences.
-`;
+`, CONTEXT_SECTION_TOKEN_BUDGETS.orgConstraints);
   }
 }
 
@@ -152,21 +292,21 @@ export class UserPreferencesLoader {
       if (type === 'language') {
         sections.push(`LANGUAGE: ${data.content.code} (${data.allowedLanguages.join(', ')})`);
       } else if (type === 'aesthetic') {
-        sections.push(`AESTHETIC: ${JSON.stringify(data.content)}`);
+        sections.push(`AESTHETIC: ${compactJson(data.content, 60)}`);
       } else if (type === 'env') {
-        sections.push(`ENVIRONMENT: ${JSON.stringify(data.content)}`);
+        sections.push(`ENVIRONMENT: ${compactJson(data.content, 60)}`);
       } else {
-        sections.push(`${type.toUpperCase()}: ${JSON.stringify(data.content)}`);
+        sections.push(`${type.toUpperCase()}: ${compactJson(data.content, 60)}`);
       }
     }
 
-    return `=== USER PREFERENCES (FLEXIBLE - LOWER PRIORITY) ===
+    return compactText(`=== USER PREFERENCES (FLEXIBLE - LOWER PRIORITY) ===
 The following are user preferences. Apply these ONLY when they do not conflict with organizational constraints.
 
 ${sections.join('\n')}
 
 IMPORTANT: If user preferences conflict with organizational constraints above, ALWAYS prioritize the organizational constraints.
-`;
+`, CONTEXT_SECTION_TOKEN_BUDGETS.userPreferences);
   }
 }
 
@@ -191,10 +331,14 @@ export class ContextBuilder {
     packageJson,
     userMemory,
     brainJournal,
+    retrievalPlan,
+    evidencePacket,
     skillProfile,
     mcpTools,
     linkedProjects
   }) {
+    const evidenceFirstMode = hasPackedEvidence(evidencePacket);
+
     // Load both systems independently
     const [orgConstraints, userPrefs] = await Promise.all([
       OrgConstraintsLoader.load(projectName),
@@ -215,16 +359,16 @@ export class ContextBuilder {
       UserPreferencesLoader.formatPrompt(userPrefs),
       
       // 4. Project context
-      this._buildProjectContext(projectTree, packageJson),
+      this._buildProjectContext(projectTree, packageJson, evidencePacket),
       
       // 5. Memory
-      this._buildMemoryContext(userMemory, brainJournal),
+      this._buildMemoryContext(userMemory, brainJournal, retrievalPlan, evidencePacket),
       
       // 6. MCP Tools
-      this._buildMcpContext(mcpTools),
+      this._buildMcpContext(mcpTools, retrievalPlan, evidenceFirstMode),
 
       // 7. Linked Repositories
-      this._buildRepositoryContext(linkedProjects),
+      this._buildRepositoryContext(linkedProjects, evidenceFirstMode),
       
       // 8. Domain expertise
       this._buildDomainContext(domain, skillProfile)
@@ -233,30 +377,66 @@ export class ContextBuilder {
     return hardenSystemPrompt(sections.filter(Boolean).join('\n\n'));
   }
 
-  static _buildProjectContext(projectTree, packageJson) {
+  static _buildProjectContext(projectTree, packageJson, evidencePacket) {
+    if (hasPackedEvidence(evidencePacket)) {
+      const anchors = buildEvidenceAnchors(evidencePacket);
+      const anchorBlock = anchors.length > 0
+        ? anchors.map(item => `- ${item}`).join('\n')
+        : '- No source anchors were available';
+
+      return `=== PROJECT CONTEXT ===
+Evidence-first mode is active. Broad project context is suppressed because grounded evidence is already available.
+
+Evidence Anchors:
+${anchorBlock}
+
+Package Summary:
+${summarizePackageInfo(packageJson)}
+`;
+    }
+
+    const compactTree = compactText(projectTree || 'Not scanned yet', CONTEXT_SECTION_TOKEN_BUDGETS.projectTree);
+    const compactPkg = summarizePackageInfo(packageJson);
+
     return `=== PROJECT CONTEXT ===
 Directory Structure:
-${projectTree || 'Not scanned yet'}
+${compactTree}
 
 Package Info:
-${packageJson ? JSON.stringify(packageJson, null, 2) : 'No package.json found'}
+${compactPkg}
 `;
   }
 
-  static _buildMemoryContext(userMemory, brainJournal) {
-    const memory = [];
+  static _buildMemoryContext(userMemory, brainJournal, retrievalPlan, evidencePacket) {
+    const sections = [];
     
     if (userMemory) {
-      memory.push(`User Memory:\n${userMemory}`);
+      sections.push(`User Memory:\n${compactText(userMemory, CONTEXT_SECTION_TOKEN_BUDGETS.userMemory)}`);
+    }
+
+    if (retrievalPlan) {
+      sections.push(compactText(`Retrieval Plan:
+- Query Type: ${retrievalPlan.queryType}
+- Recall Strategy: ${retrievalPlan.recallStrategy || 'lexical_first'}
+- Risk Level: ${retrievalPlan.riskLevel || 'medium'}
+- Rationale: ${retrievalPlan.rationale}
+- Requires Source Evidence: ${retrievalPlan.requireSourceEvidence === true ? 'yes' : 'no'}
+- Preferred Memory Classes: ${(retrievalPlan.preferredMemoryClasses || []).join(', ') || 'none'}
+- Recall Terms: ${(retrievalPlan.terms || []).join(', ') || 'none'}`, CONTEXT_SECTION_TOKEN_BUDGETS.retrievalPlan));
+    }
+
+    const evidenceBlock = formatEvidencePacketForPrompt(evidencePacket);
+    if (evidenceBlock) {
+      sections.push(compactText(evidenceBlock, CONTEXT_SECTION_TOKEN_BUDGETS.evidencePacket));
     }
     
     if (brainJournal && brainJournal.length > 0) {
-      const recent = brainJournal.slice(-5);
-      memory.push(`Recent Learnings:\n${recent.map(j => `- ${j.content || j}`).join('\n')}`);
+      const recent = brainJournal.slice(-3);
+      sections.push(`Recent Learnings:\n${compactText(recent.map(j => `- ${j.content || j}`).join('\n'), CONTEXT_SECTION_TOKEN_BUDGETS.brainJournal)}`);
     }
 
-    return memory.length > 0 
-      ? `=== MEMORY ===\n${memory.join('\n\n')}`
+    return sections.length > 0 
+      ? `=== MEMORY AND EVIDENCE ===\n${sections.join('\n\n')}`
       : '';
   }
 
@@ -279,36 +459,53 @@ ${skillProfile ? `Skills: ${skillProfile.selectedSkills?.map(s => s.label).join(
 `;
   }
 
-  static _buildMcpContext(mcpTools) {
+  static _buildMcpContext(mcpTools, retrievalPlan = null, evidenceFirstMode = false) {
     if (!mcpTools || mcpTools.length === 0) return '';
 
-    const toolsStr = mcpTools.map(t => {
-      return `- ${t.name}: ${t.description}\n  Schema: ${JSON.stringify(t.parameters)}`;
-    }).join('\n\n');
+    if (evidenceFirstMode && retrievalPlan?.queryType && retrievalPlan.queryType !== 'tooling') {
+      return `=== AVAILABLE MCP TOOLS ===
+Evidence-first mode is active. Tool inventory is intentionally compressed until a tooling-specific query requires broader MCP context.
+`;
+    }
 
-    return `=== AVAILABLE MCP TOOLS ===
+    const toolsStr = mcpTools
+      .slice(0, MCP_TOOL_SUMMARY_LIMIT)
+      .map(summarizeMcpTool)
+      .join('\n\n');
+
+    return compactText(`=== AVAILABLE MCP TOOLS ===
 You have access to the following external tools via the Model Context Protocol (MCP).
 To use them, call the tool by its name.
 
 ${toolsStr}
 
+${mcpTools.length > MCP_TOOL_SUMMARY_LIMIT ? `Additional tools not shown: ${mcpTools.length - MCP_TOOL_SUMMARY_LIMIT}` : ''}
+
 IMPORTANT: Only use these tools if they are directly relevant to the user request.
-`;
+`, CONTEXT_SECTION_TOKEN_BUDGETS.mcpTools);
   }
 
-  static _buildRepositoryContext(linkedProjects) {
+  static _buildRepositoryContext(linkedProjects, evidenceFirstMode = false) {
     if (!linkedProjects || linkedProjects.length === 0) return '';
 
-    const projectsStr = linkedProjects.map(p => {
+    if (evidenceFirstMode) {
+      return `=== LINKED REPOSITORIES ===
+Evidence-first mode is active. Linked repository summaries are suppressed unless the retrieved evidence does not ground the task sufficiently.
+`;
+    }
+
+    const projectsStr = linkedProjects.slice(0, LINKED_PROJECT_SUMMARY_LIMIT).map(p => {
       return `- ${p.name} (${p.type}): Indexed ${p.indexedSymbols || 0} symbols. Path: ${p.path}`;
     }).join('\n');
 
-    return `=== LINKED REPOSITORIES ===
+    return compactText(`=== LINKED REPOSITORIES ===
 The following external repositories are linked and indexed for your reference.
 You can use information from these projects to inform your design and implementation.
 
 ${projectsStr}
-`;
+
+${linkedProjects.length > LINKED_PROJECT_SUMMARY_LIMIT ? `Additional linked repositories not shown: ${linkedProjects.length - LINKED_PROJECT_SUMMARY_LIMIT}` : ''}
+`, CONTEXT_SECTION_TOKEN_BUDGETS.linkedProjects);
   }
 }
 

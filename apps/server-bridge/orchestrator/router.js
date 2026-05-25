@@ -5,9 +5,11 @@ import { createActor } from 'xstate';
 import agentMachine from './state_machine.js';
 import { selectSkillProfile } from './skill-graph.js';
 import { vfs } from '../vfs/container.js';
+import { insertAgentMemoryItem } from '../db.js';
+import { buildHarnessedMemoryEntries } from '../memory/content-harness.js';
 import { logStateTransition } from '../utils/logger.js';
 import logger from '../utils/detailed-logger.js';
-import { codeRequestSchema, vfsCommitSchema, validateRequest } from '../utils/validation.js';
+import { codeRequestSchema, contentHarnessSchema, vfsCommitSchema, validateRequest } from '../utils/validation.js';
 import { captureException } from '../utils/sentry.js';
 import { recordSandboxDuration } from '../utils/metrics.js';
 import { repoManager } from './repository_manager.js';
@@ -69,21 +71,19 @@ class Router {
             return await this.getExpertConfig(skillProfile.domain, skillProfile);
         }
 
-        // L1: Fast Heuristic Pass (Zero Latency)
-        // Check for multiple domains using regex
-        const matchedDomains = [];
-        for (const [domain, config] of Object.entries(this.domains)) {
-            if (config.triggers.some(regex => regex.test(prompt))) {
-                matchedDomains.push(domain);
-            }
-        }
-        
-        if (matchedDomains.length > 0) {
-            const configs = await Promise.all(matchedDomains.map(d => this.getExpertConfig(d, skillProfile)));
-            return { domain: matchedDomains[0], swarm: configs, skillProfile };
+        const deterministic = this.routeDeterministically(prompt);
+        if (deterministic.matchedDomains.length > 0 || process.env.SELINA_ENABLE_ROUTER_MODEL_FALLBACK !== 'true') {
+            const configs = await Promise.all(deterministic.swarmDomains.map(d => this.getExpertConfig(d, skillProfile)));
+            return {
+                domain: deterministic.domain,
+                swarm: configs,
+                skillProfile,
+                routingStrategy: 'deterministic',
+                routingSignals: deterministic.signals,
+            };
         }
 
-        // L2: LLM Intent Classification (Zero-Shot)
+        // Optional model fallback for ambiguous prompts only.
         try {
             const classificationPrompt = `
                 Act as a lightweight intent classifier. Classify the user prompt into ONE OR MORE of these domains: 
@@ -113,13 +113,78 @@ class Router {
             
             if (domains.length > 0) {
                 const configs = await Promise.all(domains.map(d => this.getExpertConfig(d, skillProfile)));
-                return { domain: domains[0], swarm: configs, skillProfile };
+                return {
+                    domain: domains[0],
+                    swarm: configs,
+                    skillProfile,
+                    routingStrategy: 'deterministic+model-fallback',
+                    routingSignals: deterministic.signals,
+                };
             }
         } catch (err) {
             // L2 classification failed
         }
 
-        return await this.getExpertConfig('code', skillProfile);
+        const configs = await Promise.all(deterministic.swarmDomains.map(d => this.getExpertConfig(d, skillProfile)));
+        return {
+            domain: deterministic.domain,
+            swarm: configs,
+            skillProfile,
+            routingStrategy: 'deterministic',
+            routingSignals: deterministic.signals,
+        };
+    }
+
+    routeDeterministically(prompt) {
+        const scores = new Map();
+        const matchedDomains = [];
+        const signals = {};
+        const normalizedPrompt = String(prompt || '');
+
+        for (const [domain, config] of Object.entries(this.domains)) {
+            let score = 0;
+            const hits = [];
+            for (const regex of config.triggers) {
+                if (regex.test(normalizedPrompt)) {
+                    score += 1;
+                    hits.push(regex.source);
+                }
+            }
+
+            if (score > 0) {
+                matchedDomains.push(domain);
+            }
+
+            scores.set(domain, score);
+            signals[domain] = hits;
+        }
+
+        if (/\bsecurity\b/i.test(normalizedPrompt) && /\baudit\b/i.test(normalizedPrompt)) {
+            scores.set('security', (scores.get('security') || 0) + 2);
+        }
+        if (/\bplan\b/i.test(normalizedPrompt) && /\bimplement\b/i.test(normalizedPrompt)) {
+            scores.set('manager', (scores.get('manager') || 0) + 1);
+            scores.set('code', (scores.get('code') || 0) + 1);
+        }
+        if (/\bui\b/i.test(normalizedPrompt) && /\banimation\b/i.test(normalizedPrompt)) {
+            scores.set('ui', (scores.get('ui') || 0) + 1);
+            scores.set('creative', (scores.get('creative') || 0) + 1);
+        }
+
+        const ranked = [...scores.entries()]
+            .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
+        const topScore = ranked[0]?.[1] || 0;
+        const domain = topScore > 0 ? ranked[0][0] : 'code';
+        const swarmDomains = topScore > 0
+            ? ranked.filter(([, score]) => score > 0 && score >= topScore - 1).map(([name]) => name)
+            : ['code'];
+
+        return {
+            domain,
+            matchedDomains,
+            swarmDomains,
+            signals,
+        };
     }
 
     /**
@@ -375,7 +440,7 @@ async function handleCodeRequest(req, res) {
         });
     }
 
-    const { prompt, targetFile, socketId, effortLevel } = parsed.data;
+    const { prompt, targetFile, socketId, effortLevel, auditMode } = parsed.data;
     const userId = req.user?.id || parsed.data.userId;
     const io = req.app.get('io');
     const codeQueue = req.app.get('codeQueue');
@@ -414,6 +479,7 @@ async function handleCodeRequest(req, res) {
                 socketId,
                 requestId: runId,
                 effortLevel,
+                auditMode,
                 sessionId: req.sessionId || null,
                 authMode: req.authMode || 'user-session'
             });
@@ -460,6 +526,7 @@ async function handleCodeRequest(req, res) {
             req.id,
             effortLevel,
             {
+                auditMode,
                 onAbortReady: (abortHandler) => {
                     abortRun = abortHandler;
                 }
@@ -543,6 +610,66 @@ async function handleGetVfsStats(req, res) {
         res.json({ success: true, stats });
     } catch (error) {
         res.status(500).json({ success: false, error: publicErrorMessage(error) });
+    }
+}
+
+async function handleHarnessContent(req, res) {
+    const parsed = req.validatedBody ? { success: true, data: req.validatedBody } : contentHarnessSchema.safeParse(req.body);
+    if (!parsed.success) {
+        return res.status(400).json({
+            success: false,
+            error: 'Validation failed',
+            details: validationDetails(parsed.error),
+            requestId: req.id
+        });
+    }
+
+    try {
+        const {
+            sourceName,
+            sourcePath,
+            projectName = 'default',
+            content,
+            mimeType,
+            kind,
+            tags,
+        } = parsed.data;
+
+        const harnessed = buildHarnessedMemoryEntries({
+            sourceName,
+            sourcePath,
+            content,
+            mimeType,
+            kind,
+            tags,
+        });
+
+        await Promise.all(harnessed.entries.map((entry) => insertAgentMemoryItem({
+            userId: req.user?.id || 'anonymous',
+            projectName,
+            kind: entry.kind,
+            content: entry.content,
+            metadata: entry.metadata,
+        })));
+
+        res.json({
+            success: true,
+            harnessed: {
+                sourceName,
+                sourcePath,
+                projectName,
+                summary: harnessed.summary,
+                keywords: harnessed.keywords,
+                itemsStored: harnessed.itemsStored,
+                chunkCount: harnessed.chunkCount,
+                tokenCount: harnessed.tokenCount,
+                truncated: harnessed.truncated,
+                contentHash: harnessed.contentHash,
+            }
+        });
+    } catch (error) {
+        const status = /empty after normalization/i.test(error.message) ? 400 : 500;
+        res.status(status).json({ success: false, error: publicErrorMessage(error) });
     }
 }
 
@@ -670,6 +797,6 @@ async function handleRegisterServer(req, res) {
 
 export { 
     Router, router, handleCodeRequest, handleCodeJobStatus, handleCommitRequest, 
-    handleGetPendingFiles, handleGetVfsStats, handleLinkRepo, handleListRepos, 
+    handleGetPendingFiles, handleGetVfsStats, handleHarnessContent, handleLinkRepo, handleListRepos, 
     handleListTools, handleListServers, handleMcpDiagnostics, handleCallTool, handleRegisterServer 
 };

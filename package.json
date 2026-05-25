@@ -22,6 +22,7 @@
     "dev": "npx concurrently -n UI,BRAIN -c cyan,magenta \"npm run dev:ui\" \"npm run dev:server\"",
     "build:ui": "npm run build --workspace=apps/user-interface",
     "start:server": "npm run start --workspace=apps/server-bridge",
+    "eval:parity": "node scripts/run-parity-eval.mjs",
     "validate": "node --check apps/server-bridge/index.js && node --check apps/server-bridge/orchestrator/index.js && node --check apps/server-bridge/orchestrator/skill-loader.js",
     "sanitize": "node scripts/selina-sanitize.mjs",
     "security:audit": "node scripts/selina-security-audit.mjs",

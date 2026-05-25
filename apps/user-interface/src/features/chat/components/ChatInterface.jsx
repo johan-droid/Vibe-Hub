@@ -40,6 +40,12 @@ function isTextLikeFile(file) {
   return /\.(txt|md|json|js|jsx|ts|tsx|css|html|py|rs|go|yml|yaml|env|csv)$/i.test(file.name || '');
 }
 
+function inferHarnessKind(fileName) {
+  if (/\.(csv|tsv|json)$/i.test(fileName || '')) return 'dataset';
+  if (/\.(md|txt)$/i.test(fileName || '')) return 'document';
+  return 'upload';
+}
+
 function ThoughtSection({ thoughts }) {
   const [expanded, setExpanded] = useState(false);
   if (!thoughts?.length) return null;
@@ -306,6 +312,8 @@ export default function ChatInterface({ onSend, onContextChange }) {
     try {
       const selectedFiles = Array.from(files);
       const imported = [];
+      const harnessedFiles = [];
+      const harnessFailures = [];
 
       for (const [index, file] of selectedFiles.entries()) {
         const safeName = sanitizeFileName(file.name);
@@ -321,17 +329,64 @@ export default function ChatInterface({ onSend, onContextChange }) {
           type: file.type || (bucket === 'images' ? 'image/*' : 'application/octet-stream'),
         });
 
-        if (selectedFiles.length === 1 && isTextLikeFile(file)) {
-          addMessage({
-            role: 'system',
-            content: `Imported \`${file.name}\` into \`${targetPath}\`. The agent can inspect it from the live workspace.`,
-          });
+        if (isTextLikeFile(file)) {
+          try {
+            const response = await api.harnessContent({
+              sourceName: file.name,
+              sourcePath: targetPath,
+              projectName: 'default',
+              content: await file.text(),
+              mimeType: file.type || 'text/plain',
+              kind: inferHarnessKind(file.name),
+              tags: ['upload', bucket],
+            });
+
+            if (response?.success && response.harnessed) {
+              harnessedFiles.push({
+                name: file.name,
+                path: targetPath,
+                summary: response.harnessed.summary,
+              });
+            }
+          } catch (error) {
+            harnessFailures.push({
+              name: file.name,
+              message: error.message,
+            });
+          }
         }
       }
 
       imported.forEach((file) => addUploadedFile(file));
       await refreshWorkspaceTree();
-      setNotice('success', `Imported ${imported.length} file${imported.length === 1 ? '' : 's'} into /uploads/${bucket}.`);
+
+      const importedCountLabel = `${imported.length} file${imported.length === 1 ? '' : 's'}`;
+      const harnessedCountLabel = `${harnessedFiles.length} text file${harnessedFiles.length === 1 ? '' : 's'}`;
+      const baseNotice = `Imported ${importedCountLabel} into /uploads/${bucket}${harnessedFiles.length > 0 ? ` and harnessed ${harnessedCountLabel}` : ''}.`;
+
+      if (harnessFailures.length > 0) {
+        setNotice('error', `${baseNotice} Harnessing failed for ${harnessFailures.map((item) => item.name).join(', ')}.`);
+      } else {
+        setNotice('success', baseNotice);
+      }
+
+      if (selectedFiles.length === 1) {
+        const importedFile = imported[0];
+        const harnessedFile = harnessedFiles.find((item) => item.name === importedFile.name);
+
+        addMessage({
+          role: 'system',
+          content: harnessedFile
+            ? `Imported \`${importedFile.name}\` into \`${importedFile.path}\` and harnessed it into agent memory.\n\n${harnessedFile.summary}`
+            : `Imported \`${importedFile.name}\` into \`${importedFile.path}\`. The agent can inspect it from the live workspace.`,
+        });
+      } else if (harnessedFiles.length > 0) {
+        addMessage({
+          role: 'system',
+          content: `Imported ${importedCountLabel} into \`/uploads/${bucket}\` and harnessed ${harnessedCountLabel} into agent memory for later recall.`,
+        });
+      }
+
       setMenuOpen(false);
       onContextChange?.();
     } catch (error) {

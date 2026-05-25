@@ -115,11 +115,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'selina_get_memory',
-        description: 'Retrieve project-specific persistent memory and brain journal.',
+        description: 'Retrieve project-specific persistent memory, retrieval plan, and evidence packet.',
         inputSchema: {
           type: 'object',
           properties: {
             projectId: { type: 'string', description: 'The unique project identifier.' },
+            query: { type: 'string', description: 'Optional retrieval query used to assemble a focused evidence packet.' },
           },
           required: ['projectId'],
         },
@@ -165,13 +166,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return { content: [{ type: 'text', text: `Search capability for "${args.query}" initialized. [Optimized implementation pending file-system indexer integration]` }] };
 
       case 'selina_get_memory':
-        const memory = await loadMemory('default_user', args.projectId);
+        const memory = await loadMemory('default_user', args.projectId, args.query || null);
         return {
           content: [{
             type: 'text',
             text: JSON.stringify({
               instructions: memory.userMemory,
-              recentLearnings: memory.brainJournal.slice(-5) // Only return most recent to save tokens
+              recentLearnings: memory.brainJournal.slice(-5), // Only return most recent to save tokens
+              retrievalPlan: memory.retrievalPlan,
+              evidencePacket: memory.evidencePacket,
             }, null, 2)
           }],
         };

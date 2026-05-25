@@ -1,72 +1,26 @@
-```
-# Compiled and build artifacts
-*.pyc
-__pycache__/
-*.o
-*.obj
+# Dependencies
+node_modules/
+/node_modules
+**/node_modules/
+
+# Production/Build
 dist/
 build/
-target/
+out/
+.next/
+.cache/
+*.tsbuildinfo
 
-# Dependencies
-.venv/
-venv/
-node_modules/
-.mypy_cache/
-.pytest_cache/
-.gradle/
-
-# Logs and temp files
-*.log
-*.tmp
-*.swp
-*.swo
-
-# Environment
+# Environment & Secrets
 .env
 .env.local
+.env.development.local
+.env.test.local
+.env.production.local
 *.env.*
-
-# Editors
-.vscode/
-.idea/
-
-# System files
-.DS_Store
-Thumbs.db
-
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# Compressed files
-*.zip
-*.gz
-*.tar
-*.tgz
-*.bz2
-*.xz
-*.7z
-*.rar
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
-```
-# Security audit reports
-SECURITY_AUDIT_REPORT.md
-node_modules
+!.env.example
+*.pem
+*.key
 
 # Logs
 logs/
@@ -74,27 +28,19 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
+lerna-debug.log*
+*.jsonl
 
-# Runtime files
-**/.env
-**/.env.*
-!**/.env.example
+# SQLite and other databases
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+data/*.db
 
-# Build / output
-dist/
-build/
-out/
-.cache/
-*.tsbuildinfo
-
-# Coverage
-coverage/
-
-# OS files
+# System / IDEs
 .DS_Store
 Thumbs.db
-
-# IDEs and editors
 .vscode/
 .idea/
 *.suo
@@ -102,17 +48,34 @@ Thumbs.db
 *.userosscache
 *.sln.docstates
 
-# Temporary
+# Python compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+ENV/
+env/
+
+# Test/Coverage
+coverage/
+htmlcov/
+.coverage
+test-results/
+.pytest_cache/
+.mypy_cache/
+
+# Temporary files
 tmp/
 temp/
+*.tmp
+*.swp
+*.swo
 
 # Docker
 docker-compose.override.yml
 .env.docker
 
-# Test artifacts
-test-results/
-
-# Secrets and keys
-*.pem
-*.key
+# Custom Security Reports (if any)
+SECURITY_AUDIT_REPORT.md

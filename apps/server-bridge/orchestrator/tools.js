@@ -271,12 +271,12 @@ export const AGENT_TOOLS = [
   },
   {
     name: 'update_memory',
-    description: 'Record a learning or pattern discovery to the brain journal for future sessions. Use after debugging breakthroughs, user preference discovery, or architecture insights.',
+    description: 'Record facts, decisions, and citations to the brain journal for future sessions. DO NOT store raw transcripts or logs. Use after debugging breakthroughs, user preference discovery, or architecture insights.',
     parameters: {
       type: 'OBJECT',
       properties: {
         type: { type: 'STRING', description: 'Category: "debug", "preference", "pattern", or "architecture".' },
-        content: { type: 'STRING', description: 'The learning to remember.' },
+        content: { type: 'STRING', description: 'The durable facts, decisions, and citations to remember. Max 500 words.' },
       },
       required: ['type', 'content'],
     },

@@ -2,7 +2,14 @@ import fs from 'fs/promises';
 import path from 'path';
 import pool, { insertAgentMemoryItem } from '../db.js';
 import { hashValue, withJsonCache } from '../utils/cache.js';
-import { escapeLikePattern } from './query-sanitizer.js';
+import { buildRecallPatterns } from './query-sanitizer.js';
+import {
+  buildEvidencePacket,
+  classifyRetrievalPlan,
+  inferMemoryClass,
+  normalizeMemoryItem,
+  rankMemoryItems,
+} from './rag-layers.js';
 
 let treeSitterRuntime = null;
 let treeSitterRuntimePromise = null;
@@ -255,15 +262,75 @@ export default new SemanticGraphBuilder();
 
 // Legacy memory functions (preserved for orchestrator compatibility)
 
+async function fetchAgentMemoryCandidates({ userId, projectCandidates, projectName, recallPatterns = [] }) {
+  if (recallPatterns.length > 0) {
+    const whereClause = recallPatterns
+      .map((_, index) => `(content ILIKE $${4 + index} ESCAPE '\\' OR metadata::text ILIKE $${4 + index} ESCAPE '\\')`)
+      .join(' OR ');
+
+    const result = await pool.query(
+      `SELECT kind, content, metadata, created_at, project_name
+       FROM agent_memory_items
+       WHERE user_id = $1
+         AND project_name = ANY($2::text[])
+         AND (${whereClause})
+       ORDER BY CASE WHEN project_name = $3 THEN 0 ELSE 1 END, created_at DESC
+       LIMIT 18`,
+      [userId, projectCandidates, projectName, ...recallPatterns]
+    );
+    return result.rows;
+  }
+
+  const result = await pool.query(
+    `SELECT kind, content, metadata, created_at, project_name
+     FROM agent_memory_items
+     WHERE user_id = $1
+       AND project_name = ANY($2::text[])
+     ORDER BY CASE WHEN project_name = $3 THEN 0 ELSE 1 END, created_at DESC
+     LIMIT 10`,
+    [userId, projectCandidates, projectName]
+  );
+  return result.rows;
+}
+
+function toJournalEntry(item) {
+  return {
+    type: item.kind,
+    content: item.excerpt || item.content,
+    metadata: {
+      ...(item.metadata || {}),
+      memoryClass: item.memoryClass || inferMemoryClass(item.kind, item.metadata || {}),
+      retrievalScore: item.score || item.retrievalScore || 0,
+      sourcePath: item.sourcePath || item.metadata?.sourcePath || null,
+      sourceName: item.sourceName || item.metadata?.sourceName || null,
+    },
+    timestamp: item.createdAt || item.created_at || item.timestamp || null,
+    source: 'agent_memory_items',
+    projectName: item.projectName || item.project_name || 'default',
+  };
+}
+
 export async function loadMemory(userId, projectName, query = null) {
   try {
+    const projectCandidates = [...new Set([projectName, 'default'].filter(Boolean))];
     const result = await pool.query(
-      'SELECT user_memory, brain_journal FROM project_memory WHERE user_id = $1 AND project_name = $2',
-      [userId, projectName]
+      `SELECT user_memory, brain_journal, project_name
+       FROM project_memory
+       WHERE user_id = $1
+         AND project_name = ANY($2::text[])
+       ORDER BY CASE WHEN project_name = $3 THEN 0 ELSE 1 END
+       LIMIT 1`,
+      [userId, projectCandidates, projectName]
     );
 
     let userMemory = null;
     let recentJournal = [];
+    let retrievalPlan = null;
+    let evidencePacket = null;
+    let sourceMemory = [];
+    let learnedMemory = [];
+    let workingMemory = [];
+    let retrievalAudit = null;
 
     if (result.rows.length > 0) {
       const row = result.rows[0];
@@ -272,35 +339,86 @@ export async function loadMemory(userId, projectName, query = null) {
     }
 
     if (query) {
-      const sanitizedQuery = escapeLikePattern(query, { maxLength: 200 });
-      if (sanitizedQuery) {
-        const recall = await pool.query(
-          `SELECT kind, content, metadata, created_at
-           FROM agent_memory_items
-           WHERE user_id = $1
-             AND project_name = $2
-             AND content ILIKE $3 ESCAPE '\\'
-           ORDER BY created_at DESC
-           LIMIT 5`,
-          [userId, projectName, `%${sanitizedQuery}%`]
-        );
+      retrievalPlan = classifyRetrievalPlan(query);
+      const recallPatterns = buildRecallPatterns(query, { maxTerms: retrievalPlan.terms.length || 6 });
+      const candidates = await fetchAgentMemoryCandidates({
+        userId,
+        projectCandidates,
+        projectName,
+        recallPatterns,
+      });
+      const normalized = candidates.map(normalizeMemoryItem);
+      const ranked = rankMemoryItems(normalized, retrievalPlan);
+      evidencePacket = buildEvidencePacket({
+        query,
+        retrievalPlan,
+        items: ranked,
+      });
 
-        if (recall.rows.length > 0) {
-          recentJournal = recentJournal.concat(recall.rows.map(row => ({
-            type: row.kind,
-            content: row.content,
-            metadata: row.metadata,
-            timestamp: row.created_at,
-            source: 'agent_memory_items',
-          }))).slice(-10);
-        }
+      sourceMemory = ranked.filter(item => item.memoryClass === 'source');
+      learnedMemory = ranked.filter(item => item.memoryClass === 'learned');
+      workingMemory = ranked.filter(item => item.memoryClass === 'working');
+      retrievalAudit = {
+        queryType: retrievalPlan.queryType,
+        recallStrategy: retrievalPlan.recallStrategy,
+        riskLevel: retrievalPlan.riskLevel,
+        recallTerms: retrievalPlan.terms,
+        candidateCount: candidates.length,
+        selectedCount: evidencePacket.selectedCount,
+        sourceCount: evidencePacket.sourceCount,
+        learnedCount: evidencePacket.learnedCount,
+        workingCount: evidencePacket.workingCount,
+        tokenBudget: evidencePacket.tokenBudget,
+        tokenEstimate: evidencePacket.tokenEstimate,
+        riskFlags: evidencePacket.riskFlags,
+        citations: evidencePacket.citations,
+      };
+
+      if (evidencePacket.evidence.length > 0) {
+        recentJournal = recentJournal
+          .concat(evidencePacket.evidence.map(toJournalEntry))
+          .slice(-10);
       }
     }
 
-    return { userMemory, brainJournal: recentJournal };
+    return {
+      userMemory,
+      brainJournal: recentJournal,
+      retrievalPlan,
+      evidencePacket,
+      sourceMemory,
+      learnedMemory,
+      workingMemory,
+      retrievalAudit,
+    };
   } catch (err) {
-    return { userMemory: null, brainJournal: [] };
+    return {
+      userMemory: null,
+      brainJournal: [],
+      retrievalPlan: null,
+      evidencePacket: null,
+      sourceMemory: [],
+      learnedMemory: [],
+      workingMemory: [],
+      retrievalAudit: null,
+    };
   }
+}
+
+export async function saveUserMemory(userId, projectName, userMemory) {
+  if (!userId || !projectName) return null;
+  const memoryText = String(userMemory || '').trim();
+
+  await pool.query(
+    `INSERT INTO project_memory (id, user_id, project_name, user_memory, brain_journal)
+     VALUES (gen_random_uuid(), $1, $2, $3, '[]'::jsonb)
+     ON CONFLICT (user_id, project_name) DO UPDATE SET
+       user_memory = EXCLUDED.user_memory,
+       updated_at = NOW()`,
+    [userId, projectName, memoryText]
+  );
+
+  return memoryText;
 }
 
 export async function appendBrainJournal(userId, projectName, entry) {
@@ -330,6 +448,8 @@ export async function appendBrainJournal(userId, projectName, entry) {
       kind: journalEntry.type || journalEntry.kind || 'brain_journal',
       content: String(content).slice(0, 12000),
       metadata: {
+        memoryClass: 'learned',
+        ragStage: 'learned_memory',
         source: 'brain_journal',
         tags: journalEntry.tags || [],
         timestamp: journalEntry.timestamp,

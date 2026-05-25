@@ -130,8 +130,8 @@ export class SwarmSocket {
     }
   }
 
-  sendPrompt(prompt, effortLevel = 'standard') {
-    this.send({ type: 'prompt', prompt, effortLevel });
+  sendPrompt(prompt, effortLevel = 'standard', auditMode = 'standard') {
+    this.send({ type: 'prompt', prompt, effortLevel, auditMode });
   }
 
   /** Send clarification answer back to the Brain */

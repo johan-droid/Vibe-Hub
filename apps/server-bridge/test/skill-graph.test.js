@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { buildSkillBridgePrompt, listSkillGraph, selectSkillProfile } from '../orchestrator/skill-graph.js';
 import { buildSystemPrompt } from '../orchestrator/skill-loader.js';
 import { Router } from '../orchestrator/router.js';
+import { modelService } from '../orchestrator/models.js';
 
 describe('CS skill graph switcher', () => {
   it('selects AI/ML, backend, security, and observability for agent hardening prompts', () => {
@@ -51,5 +52,17 @@ describe('CS skill graph switcher', () => {
     expect(result.skillProfile).toBeDefined();
     expect(result.skillProfile.selectedSkills.length).toBeGreaterThan(0);
     expect(result.domain).toBe(result.skillProfile.domain);
+  });
+
+  it('router stays deterministic by default for ambiguous prompts', async () => {
+    const spy = vi.spyOn(modelService, 'completeText');
+    const router = new Router();
+    const result = await router.route('glorb quux placeholder payload');
+
+    expect(spy).not.toHaveBeenCalled();
+    expect(typeof result.domain).toBe('string');
+    expect(result.domain.length).toBeGreaterThan(0);
+
+    spy.mockRestore();
   });
 });

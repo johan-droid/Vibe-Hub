@@ -24,6 +24,17 @@ class MCPClient {
     return new Promise((resolve, reject) => {
       console.log(`[MCP] Connecting to ${this.name}...`);
       const safeInvocation = validateMcpProcessInvocation(this.command, this.args);
+      let settled = false;
+      const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        for (const pending of this.pendingRequests.values()) {
+          pending.reject(error);
+        }
+        this.pendingRequests.clear();
+        reject(error);
+      };
+
       this.child = spawn(safeInvocation.command, safeInvocation.args, {
         stdio: ['pipe', 'pipe', 'inherit'],
         shell: false,
@@ -48,9 +59,12 @@ class MCPClient {
         }
       });
 
-      this.child.on('error', reject);
+      this.child.on('error', fail);
       this.child.on('exit', (code) => {
         console.warn(`[MCP] ${this.name} exited with code ${code}`);
+        if (!settled) {
+          fail(new Error(`MCP server ${this.name} exited before initialization completed (code ${code}).`));
+        }
       });
 
       // Initialize session
@@ -59,9 +73,11 @@ class MCPClient {
         capabilities: {},
         clientInfo: { name: 'Vibe-Hub-Bridge', version: '6.0.0' }
       }).then(res => {
+        if (settled) return;
+        settled = true;
         this.capabilities = res.capabilities;
         resolve(res);
-      }).catch(reject);
+      }).catch(fail);
     });
   }
 

@@ -7,8 +7,9 @@ import {
   CreativeDirectorExpert, DesignSystemArchitect, MotionDesignerExpert, VisualAssetGenerator
 } from './experts.js';
 import { buildSystemPrompt } from './skill-loader.js';
-import { buildSystemPromptV6 } from './context-builder.js';
+import { buildContextAuditSummary, buildSystemPromptV6 } from './context-builder.js';
 import { loadMemory, appendBrainJournal } from '../memory/loader.js';
+import { buildEvidencePacket, classifyRetrievalPlan } from '../memory/rag-layers.js';
 import { SharedContext } from './context.js';
 import { extractSymbols } from './parser.js';
 import { mcpManager } from '../mcp/MCPManager.js';
@@ -24,6 +25,7 @@ import {
   recordBillingEvent,
   requireExpensiveStepConfirmation,
 } from './cost-controls.js';
+import { isFullAuditMode, normalizeAuditMode, shouldRecordAudit } from './audit-mode.js';
 
 
 /**
@@ -170,7 +172,7 @@ export class AgentOrchestrator {
   /**
    * Handle user prompt with ReAct loop and Peer Review (Debate).
    */
-  async handlePrompt(prompt, effortLevel, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, runContext = null) {
+  async handlePrompt(prompt, effortLevel, onToolCall, onThought, onClarification, onPlan, onMemoryUpdate, emitState, onStream, runContext = null, executionOptions = {}) {
     try {
       checkSecurity(prompt);
     } catch (e) {
@@ -192,6 +194,9 @@ export class AgentOrchestrator {
       await this.preScan(onToolCall);
     }
 
+    const auditMode = normalizeAuditMode(executionOptions.auditMode || runContext?.auditMode);
+    const fullAuditMode = isFullAuditMode(auditMode);
+
     const runIdentity = runContext || createRootRunIdentity({ expert: 'manager' });
     await persistRun(runIdentity, {
       userId: this.userId || 'anonymous',
@@ -199,7 +204,7 @@ export class AgentOrchestrator {
       projectName: this.projectName,
       prompt,
       status: 'running',
-      metadata: { effortLevel },
+      metadata: { effortLevel, auditMode },
     });
 
     // Performance Heartbeat (Gap #12)
@@ -233,18 +238,23 @@ export class AgentOrchestrator {
     };
 
     try {
-      rollout = await RolloutRecorder.create({
-        runId: runIdentity.runId,
-        sessionId: runIdentity.rootRunId,
-        parentRolloutId: runIdentity.parentRunId,
-        userId: this.userId || 'anonymous',
-        tenantId: this.tenantId,
-        projectName: this.projectName,
-        prompt,
-        effortLevel,
-      });
-      await persistRunStatus(runIdentity, 'running', { rolloutPaths: rollout.getPaths() });
-      if (emitState) emitState('planning', `Recording durable run state at ${rollout.getPaths().directory}`);
+      if (shouldRecordAudit(auditMode)) {
+        rollout = await RolloutRecorder.create({
+          runId: runIdentity.runId,
+          sessionId: runIdentity.rootRunId,
+          parentRolloutId: runIdentity.parentRunId,
+          userId: this.userId || 'anonymous',
+          tenantId: this.tenantId,
+          projectName: this.projectName,
+          prompt,
+          effortLevel,
+          auditMode,
+        });
+        await persistRunStatus(runIdentity, 'running', { rolloutPaths: rollout.getPaths(), auditMode });
+        if (emitState) emitState('planning', `Recording durable run state at ${rollout.getPaths().directory}`);
+      } else {
+        await persistRunStatus(runIdentity, 'running', { auditMode });
+      }
     } catch (error) {
       if (emitState) emitState('warning', `Durable rollout recorder unavailable: ${error.message}`);
     }
@@ -270,7 +280,7 @@ export class AgentOrchestrator {
 
     try {
       if (emitState) emitState('thinking', 'Identifying target expertise...');
-      const { domain, skillProfile, swarm } = await this.router.route(prompt);
+      const { domain, skillProfile, swarm, routingStrategy = 'deterministic', routingSignals = {} } = await this.router.route(prompt);
       const routedProfile = resolveExpertProfile({
         domain,
         effortLevel,
@@ -316,13 +326,21 @@ export class AgentOrchestrator {
         projectName: this.projectName,
         prompt,
         status: 'running',
-        metadata: { effortLevel, routeDomain: domain, swarm: swarm?.map(item => item.domain) || [] },
+        metadata: {
+          effortLevel,
+          auditMode,
+          routeDomain: domain,
+          routingStrategy,
+          swarm: swarm?.map(item => item.domain) || [],
+        },
       });
       this.context.sessionState.skillProfile = skillProfile;
       await recordRollout('route_selected', {
         domain,
         provider: routedProfile.provider,
         model: routedProfile.model,
+        routingStrategy,
+        routingSignals,
         swarm: swarm?.map(item => item.domain) || [],
         skillProfile,
       });
@@ -334,9 +352,15 @@ export class AgentOrchestrator {
         'Persist rollout events, implementation notes, and final status.',
       ]));
       
-      const useV6Context = process.env.USE_V6_CONTEXT === 'true';
-      
       const runExpertLoop = async (targetDomain) => {
+        const expert = this.experts[targetDomain] || this.experts.code;
+        const expertProfile = resolveExpertProfile({
+          domain: targetDomain,
+          effortLevel,
+          modelService,
+        });
+        const expertRunIdentity = targetDomain === domain
+          ? withRunExpert(runIdentity, expertProfile)
         const expert = this.experts[targetDomain] || this.experts.code;
         const expertProfile = resolveExpertProfile({
           domain: targetDomain,
@@ -356,6 +380,7 @@ export class AgentOrchestrator {
           rootRunId: runIdentity.rootRunId,
           domain: targetDomain,
           effortLevel,
+          recorder: rollout,
         };
         if (emitState) emitState('thinking', `Projecting expertise to the ${targetDomain}Expert...`);
         await persistRun(expertRunIdentity, {
@@ -371,15 +396,44 @@ export class AgentOrchestrator {
 
       let userMemory = null;
       let brainJournal = [];
+      let retrievalPlan = null;
+      let evidencePacket = null;
       if (this.userId) {
         try {
           const memory = await loadMemory(this.userId, this.projectName, prompt);
           userMemory = memory.userMemory;
           brainJournal = memory.brainJournal;
+          retrievalPlan = memory.retrievalPlan;
+          evidencePacket = memory.evidencePacket;
+          if (fullAuditMode) {
+            await recordRollout('retrieval_loaded', memory.retrievalAudit || {
+              queryType: retrievalPlan?.queryType || 'unknown',
+              selectedCount: evidencePacket?.selectedCount || 0,
+            });
+          }
         } catch {}
       }
 
+      if (!retrievalPlan) {
+        retrievalPlan = classifyRetrievalPlan(prompt);
+      }
+      if (!evidencePacket) {
+        evidencePacket = buildEvidencePacket({
+          query: prompt,
+          retrievalPlan,
+          items: [],
+        });
+      }
+
+      const hasPackedEvidence = Number(evidencePacket?.selectedCount || 0) > 0;
+      const useV6Context = process.env.USE_V6_CONTEXT !== 'false' || hasPackedEvidence;
+
       let systemPrompt;
+      const mcpTools = mcpManager.getToolsForLLM();
+      const linkedProjects = Array.from(repoManager.indexes.entries()).map(([key, graph]) => {
+        const [uid, name] = key.split(':');
+        return { name, type: 'repo', indexedSymbols: Object.keys(graph).length, path: `/data/repos/${uid}/${name}` };
+      });
       
       if (useV6Context) {
         systemPrompt = await buildSystemPromptV6({
@@ -390,12 +444,11 @@ export class AgentOrchestrator {
           packageJson: this.packageJson,
           userMemory,
           brainJournal,
+          retrievalPlan,
+          evidencePacket,
           skillProfile,
-          mcpTools: mcpManager.getToolsForLLM(),
-          linkedProjects: Array.from(repoManager.indexes.entries()).map(([key, graph]) => {
-            const [uid, name] = key.split(':');
-            return { name, type: 'repo', indexedSymbols: Object.keys(graph).length, path: `/data/repos/${uid}/${name}` };
-          })
+          mcpTools,
+          linkedProjects,
         });
       } else {
         systemPrompt = buildSystemPrompt({
@@ -406,6 +459,25 @@ export class AgentOrchestrator {
           brainJournal,
           effortLevel,
           skillProfile,
+        });
+      }
+
+      if (fullAuditMode) {
+        await recordRollout('context_built', {
+          useV6Context,
+          hasPackedEvidence,
+          promptTokenEstimate: modelService.estimateTokens(systemPrompt),
+          retrievalPacket: evidencePacket?.promptBlock || evidencePacket?.evidence,
+          context: buildContextAuditSummary({
+            projectTree: this.projectTree,
+            packageJson: this.packageJson,
+            userMemory,
+            retrievalPlan,
+            evidencePacket,
+            brainJournal,
+            mcpTools,
+            linkedProjects,
+          }),
         });
       }
 
@@ -483,13 +555,13 @@ export class AgentOrchestrator {
             rootRunId: runIdentity.rootRunId,
             domain: 'reviewer',
             effortLevel,
+            recorder: rollout,
           };
           let reviewResult;
           try {
             reviewResult = await this.experts.reviewer.execute(reviewPrompt, "Pedantic Auditor", async () => {}, (t) => onThought(`[Reviewer] ${t}`), () => {}, () => {}, onMemoryUpdateInternal, emitState, onStream);
           } finally {
             this.experts.reviewer.executionContext = previousReviewerContext;
-          }
           await recordRollout('peer_review_completed', {
             targetDomain,
             iteration: currentIter,

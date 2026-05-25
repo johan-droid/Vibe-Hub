@@ -14,10 +14,16 @@ export function hardenSystemPrompt(systemPrompt = '') {
 export function wrapUntrustedInput(text, tagName = 'user_query') {
   const normalizedTag = normalizeTagName(tagName);
   const normalizedText = String(text ?? '');
+  
+  let coreText = normalizedText;
   if (isWrappedWithTag(normalizedText, normalizedTag)) {
-    return normalizedText;
+    coreText = normalizedText.slice(normalizedTag.length + 2, -(normalizedTag.length + 3)).trim();
   }
-  return `<${normalizedTag}>\n${normalizedText}\n</${normalizedTag}>`;
+  
+  const sanitizedText = coreText
+    .replace(new RegExp(`</?${normalizedTag}>`, 'gi'), '[REMOVED_TAG]');
+
+  return `<${normalizedTag}>\n${sanitizedText}\n</${normalizedTag}>`;
 }
 
 export function wrapUserQuery(text) {

@@ -32,6 +32,8 @@ export const safePathSchema = z.string()
   );
 
 // Code generation request
+export const auditModeSchema = z.enum(['off', 'standard', 'full']).optional().default('standard');
+
 export const codeRequestSchema = z.object({
   prompt: z.string()
     .min(1, 'Prompt is required')
@@ -42,6 +44,7 @@ export const codeRequestSchema = z.object({
   targetFile: safePathSchema,
   effortLevel: z.enum(['quick', 'standard', 'deep']).optional().default('standard'),
   queueLane: z.enum(['interactive', 'background']).optional().default('interactive'),
+  auditMode: auditModeSchema,
   socketId: z.string()
     .min(1, 'Socket ID is required for real-time updates')
 });
@@ -90,6 +93,33 @@ export const llmConfigSchema = z.object({
   temperature: z.number().min(0).max(2).optional()
 });
 
+const safeLabelSchema = z.string()
+  .min(1)
+  .max(500)
+  .refine(value => !/[\u0000-\u001F\u007F]/.test(value), 'Value contains invalid control characters');
+
+export const contentHarnessSchema = z.object({
+  sourceName: z.string()
+    .min(1, 'sourceName is required')
+    .max(255, 'sourceName too long'),
+  sourcePath: safeLabelSchema.optional(),
+  projectName: z.string()
+    .min(1, 'projectName is required')
+    .max(120, 'projectName too long')
+    .refine(value => !value.includes('..'), 'projectName cannot contain parent directory references')
+    .optional(),
+  content: z.string()
+    .min(1, 'content is required')
+    .max(200000, 'content too long (max 200000 chars)'),
+  mimeType: z.string()
+    .max(120, 'mimeType too long')
+    .optional(),
+  kind: z.enum(['upload', 'note', 'document', 'dataset', 'repo_doc']).optional().default('upload'),
+  tags: z.array(
+    z.string().min(1).max(40).regex(/^[a-zA-Z0-9_.-]+$/, 'tag contains invalid characters')
+  ).max(10).optional().default([]),
+});
+
 // Middleware factory for request validation
 export function validateRequest(schema) {
   return async (req, res, next) => {
@@ -134,6 +164,7 @@ export function validateQuery(schema) {
 
 export default {
   codeRequestSchema,
+  auditModeSchema,
   safePathSchema,
   vfsCommitSchema,
   vfsFilePathSchema,
@@ -141,6 +172,7 @@ export default {
   orgConstraintsSchema,
   githubWebhookSchema,
   llmConfigSchema,
+  contentHarnessSchema,
   validateRequest,
   validateQuery
 };

@@ -153,6 +153,16 @@ function assertCommandPolicy(toolName, args) {
       403,
     );
   }
+
+  const fullCommand = [commandName, ...safeArgs].join(' ');
+  if (/(?:rm\s+-rf|curl\s+.*?\||wget\s+.*?\||base64\s+-d|nc\s+-e|>.*?\/dev\/null)/i.test(fullCommand)) {
+    throw new ToolExecutionPolicyError(
+      `Command contains a high-risk sequence and has been blocked by anomaly detection.`,
+      'COMMAND_RISKY_SEQUENCE',
+      403
+    );
+  }
+
   args.command = commandName;
   args.args = safeArgs;
 }

@@ -5,6 +5,7 @@ import path from 'path';
 import { execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import { sanitizeEnvironment } from '../utils/env-sanitizer.js';
+import { fitTextToTokenBudget } from '../memory/tokenizer.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -310,12 +311,14 @@ function runDocker({ sandboxWorkspacePath, image, containerArgs, timeoutMs, copi
       settled = true;
       clearTimeout(timer);
       await cleanupSandboxWorkspace(sandboxWorkspacePath);
+      
+      const success = false;
       resolve({
-        success: false,
+        success,
         exitCode: null,
         timedOut,
-        stdout,
-        stderr,
+        stdout: fitTextToTokenBudget(stdout, 500, { mode: 'tail' }).text,
+        stderr: fitTextToTokenBudget(stderr, 4000, { mode: 'tail' }).text,
         error: error.message,
         sandbox: buildSandboxMetadata(copiedPaths),
       });
@@ -326,13 +329,15 @@ function runDocker({ sandboxWorkspacePath, image, containerArgs, timeoutMs, copi
       settled = true;
       clearTimeout(timer);
       await cleanupSandboxWorkspace(sandboxWorkspacePath);
+      
+      const success = exitCode === 0 && !timedOut;
       resolve({
-        success: exitCode === 0 && !timedOut,
+        success,
         exitCode,
         signal,
         timedOut,
-        stdout,
-        stderr,
+        stdout: fitTextToTokenBudget(stdout, success ? 500 : 2000, { mode: 'tail' }).text,
+        stderr: fitTextToTokenBudget(stderr, success ? 500 : 4000, { mode: 'tail' }).text,
         sandbox: buildSandboxMetadata(copiedPaths),
       });
     });

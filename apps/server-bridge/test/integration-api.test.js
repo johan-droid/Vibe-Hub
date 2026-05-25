@@ -12,6 +12,7 @@ vi.mock('../orchestrator/router.js', () => ({
   }),
   handleCodeJobStatus: (_req, res) => res.json({ success: true, job: { id: 'job-123', state: 'queued' } }),
   handleCommitRequest: (_req, res) => res.json({ success: true, message: 'committed' }),
+  handleHarnessContent: (_req, res) => res.json({ success: true, harnessed: { itemsStored: 1 } }),
   handleGetPendingFiles: (_req, res) => res.json({ success: true, files: [] }),
   handleGetVfsStats: (_req, res) => res.json({ success: true, stats: { total: 0 } }),
   handleLinkRepo: (_req, res) => res.json({ success: true, project: { id: 'repo-1' } }),
@@ -113,6 +114,7 @@ describe('Integration API facade', () => {
         prompt: 'Add a helper',
         targetFile: 'apps/server-bridge/index.js',
         effortLevel: 'standard',
+        auditMode: 'full',
       });
 
     expect(response.status).toBe(200);
@@ -122,6 +124,7 @@ describe('Integration API facade', () => {
       userId: '11111111-1111-4111-8111-111111111111',
       headless: true,
     });
+    expect(response.body.body.auditMode).toBe('full');
   });
 
   it('rejects service-authenticated user-scoped calls without an acting user id', async () => {

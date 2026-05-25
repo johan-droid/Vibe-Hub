@@ -52,6 +52,7 @@ export function buildOpenApiSpec() {
       { name: 'Auth', description: 'OAuth/session bootstrap endpoints used before calling the integration facade.' },
       { name: 'Code', description: 'Headless orchestration and run execution.' },
       { name: 'VFS', description: 'Approval-gated staged file review.' },
+      { name: 'Content', description: 'Imported text harnessing and agent-memory ingestion.' },
       { name: 'Repos', description: 'Repository linking and listing.' },
       { name: 'MCP', description: 'Model Context Protocol tool discovery and invocation.' },
       { name: 'Runtime', description: 'Diagnostics and public product metadata.' },
@@ -288,6 +289,61 @@ export function buildOpenApiSpec() {
               content: jsonContent(successEnvelope({
                 message: { type: 'string' },
                 filePath: { type: 'string' },
+              })),
+            },
+          },
+        },
+      },
+      [`${INTEGRATION_BASE_PATH}/content/harness`]: {
+        post: {
+          tags: ['Content'],
+          summary: 'Harness imported text into agent memory',
+          security: [{ bearerAuth: [] }, { serviceApiKey: [] }],
+          requestBody: {
+            required: true,
+            content: jsonContent({
+              type: 'object',
+              required: ['sourceName', 'content'],
+              properties: {
+                sourceName: { type: 'string' },
+                sourcePath: { type: 'string', nullable: true },
+                projectName: { type: 'string', nullable: true },
+                content: { type: 'string' },
+                mimeType: { type: 'string', nullable: true },
+                kind: {
+                  type: 'string',
+                  enum: ['upload', 'note', 'document', 'dataset', 'repo_doc'],
+                },
+                tags: {
+                  type: 'array',
+                  items: { type: 'string' },
+                },
+                userId: { type: 'string', nullable: true },
+              },
+            }),
+          },
+          responses: {
+            200: {
+              description: 'Content harnessed',
+              content: jsonContent(successEnvelope({
+                harnessed: {
+                  type: 'object',
+                  properties: {
+                    sourceName: { type: 'string' },
+                    sourcePath: { type: 'string', nullable: true },
+                    projectName: { type: 'string' },
+                    summary: { type: 'string' },
+                    keywords: {
+                      type: 'array',
+                      items: { type: 'string' },
+                    },
+                    itemsStored: { type: 'integer' },
+                    chunkCount: { type: 'integer' },
+                    tokenCount: { type: 'integer' },
+                    truncated: { type: 'boolean' },
+                    contentHash: { type: 'string' },
+                  },
+                },
               })),
             },
           },

@@ -474,6 +474,13 @@ export class ModelService {
       ...event,
     });
     delete safe.apiKey;
+    
+    if (safe.recorder) {
+      const recorder = safe.recorder;
+      delete safe.recorder;
+      recorder.record(safe.kind, safe).catch(() => {});
+    }
+
     this.audit.push(safe);
     if (this.audit.length > AUDIT_LIMIT) this.audit.splice(0, this.audit.length - AUDIT_LIMIT);
   }
@@ -615,6 +622,19 @@ export class ModelService {
       }
       const response = await result.response;
       this.recordAudit({ kind: 'token_estimate', provider: 'gemini', model: profile.model, streamedTokens: streamed });
+      
+      this.recordAudit({
+        kind: 'model_trace',
+        provider: 'gemini',
+        model: profile.model,
+        rawRequest: { message },
+        rawResponse: { 
+          text: response.text(),
+          candidates: response.candidates,
+        },
+        ...meta
+      });
+
       this.recordUsageFromText({
         profile,
         inputTokens,
@@ -740,6 +760,15 @@ export class ModelService {
       body: JSON.stringify(body),
     }), profile, { promptTokens, ...meta });
 
+    this.recordAudit({
+      kind: 'model_trace',
+      provider: profile.provider,
+      model: profile.model,
+      rawRequest: body,
+      rawResponse: data,
+      ...meta,
+    });
+
     const message = data.choices?.[0]?.message || {};
     this.recordUsageFromProvider({
       profile,
@@ -780,6 +809,16 @@ export class ModelService {
       },
       body: JSON.stringify(body),
     }), profile, { promptTokens, apiMode: 'responses', ...meta });
+
+    this.recordAudit({
+      kind: 'model_trace',
+      provider: 'openai',
+      model: profile.model,
+      rawRequest: body,
+      rawResponse: data,
+      ...meta,
+    });
+
     const outputText = extractResponseText(data);
     this.recordUsageFromProvider({
       profile,
@@ -831,6 +870,15 @@ export class ModelService {
         temperature: 0.2,
       }),
     }), profile, { promptTokens, promptCache: Boolean(usePromptCache), jsonMode, ...meta });
+
+    this.recordAudit({
+      kind: 'model_trace',
+      provider: 'anthropic',
+      model: profile.model,
+      rawRequest: { system: anthropicSystem, messages, tools },
+      rawResponse: data,
+      ...meta,
+    });
 
     const blocks = data.content || [];
     const content = blocks.filter(b => b.type === 'text').map(b => b.text).join('\n');

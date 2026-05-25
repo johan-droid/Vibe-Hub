@@ -192,17 +192,18 @@ const sandboxExecution = async (code) => {
 - [ ] Automated refactoring suggestions
 - [ ] Code quality scoring system
 
-### 3.3 Phase 3: AI Agent Intelligence (Future)
+### 3.3 Phase 3: Token Squeeze By Layer (Future)
 **Status**: 📋 Planned
 **Deliverables:**
-- [ ] Machine learning for code pattern recognition
-- [ ] Natural language to code translation
-- [ ] Automated test generation
-- [ ] Intelligent error resolution
-- [ ] Predictive code suggestions
-- [ ] Context-aware code generation
-- [ ] Multi-language code translation
-- [ ] Automated documentation generation
+- [ ] **Source capture:** dedupe by content hash and skip unchanged artifacts.
+- [ ] **Canonicalization:** normalize once, chunk once, reuse forever.
+- [ ] **Retrieval planning:** classify query type without a model.
+- [ ] **Retrieval:** filter by path, tag, kind, recency, and memory class before ranking.
+- [ ] **Grounding:** cap top-N evidence and hard-cap per-item tokens.
+- [ ] **Reasoning:** use cheap model for compression and strong model only for hard synthesis.
+- [ ] **Verification:** summarize only failing output, never full logs by default.
+- [ ] **Memory retention:** store facts, decisions, and citations, not raw transcripts.
+- [ ] **Acceptance:** every layer has an explicit token budget and a hard fail/trim rule.
 
 ### 3.4 Phase 4: AI Agent Collaboration (Future)
 **Status**: 📋 Planned

@@ -371,6 +371,10 @@ class ApiClient {
     return this.get('/api/v6/repos/list');
   }
 
+  async harnessContent(payload) {
+    return this.post('/api/v6/content/harness', payload);
+  }
+
   // --- MCP ORCHESTRATION (V6) ---
   async listMcpTools() {
     return this.get('/api/v6/mcp/tools');

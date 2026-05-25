@@ -9,6 +9,7 @@ import {
   handleCodeJobStatus,
   handleCodeRequest,
   handleCommitRequest,
+  handleHarnessContent,
   handleGetPendingFiles,
   handleGetVfsStats,
   handleLinkRepo,
@@ -23,7 +24,7 @@ import { modelService } from '../orchestrator/models.js';
 import { listSkillGraph } from '../orchestrator/skill-graph.js';
 import { listAuditLogs } from '../utils/audit.js';
 import { SELINA_BRAND } from '../config/brand.js';
-import { safePathSchema, validateRequest } from '../utils/validation.js';
+import { auditModeSchema, contentHarnessSchema, safePathSchema, validateRequest } from '../utils/validation.js';
 import { chatRouter } from '../orchestrator/chat_routes.js';
 import { preferencesRouter } from '../orchestrator/preferences_routes.js';
 
@@ -34,6 +35,7 @@ const integrationCodeRequestSchema = z.object({
   targetFile: safePathSchema,
   effortLevel: z.enum(['quick', 'standard', 'deep']).optional().default('standard'),
   queueLane: z.enum(['interactive', 'background']).optional().default('interactive'),
+  auditMode: auditModeSchema,
   socketId: z.string().min(1).optional(),
   userId: z.string().min(1).optional(),
 });
@@ -144,6 +146,14 @@ integrationRouter.post(
   requireIntegrationAuth,
   requireScopedIntegrationUser,
   handleCommitRequest,
+);
+
+integrationRouter.post(
+  '/content/harness',
+  requireIntegrationAuth,
+  requireScopedIntegrationUser,
+  validateRequest(contentHarnessSchema),
+  handleHarnessContent,
 );
 
 integrationRouter.post(

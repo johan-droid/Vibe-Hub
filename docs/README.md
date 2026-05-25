@@ -4,19 +4,29 @@ This folder is the primary technical reference for the repository. It documents 
 
 ## Read This First
 
-1. [Development Setup](./DEVELOPMENT_SETUP.md) for local setup and validation commands.
-2. [Technical Architecture](./TECHNICAL_ARCHITECTURE.md) for the current code boundaries and runtime model.
-3. [API Specification](./API_SPECIFICATION.md) for the exposed HTTP and session routes.
-4. [Software Requirements](../SRS.md) for product and system requirements.
-5. [System Plan](../SYSTEM_PLAN.md) for implementation direction and roadmap context.
+1. [Engineering Principles](../ENGINEERING_PRINCIPLES.md) for the operating philosophy and scarcity-first design rules.
+2. [Dataflow Schema](./DATAFLOW_SCHEMA.md) for the GitHub-renderable end-to-end pipeline.
+3. [Token Budgets](./TOKEN_BUDGETS.md) for the current context and prompt limits.
+4. [Audit Mode](./AUDIT_MODE.md) for replayability and telemetry behavior.
+5. [Scaling Plan](./SCALING_PLAN.md) for throughput and token-efficiency priorities.
+6. [Development Setup](./DEVELOPMENT_SETUP.md) for local setup and validation commands.
+7. [Technical Architecture](./TECHNICAL_ARCHITECTURE.md) for the current code boundaries and runtime model.
+8. [API Specification](./API_SPECIFICATION.md) for the exposed HTTP and session routes.
+9. [Software Requirements](./SRS.md) for product and system requirements.
+10. [System Plan](./SYSTEM_PLAN.md) for implementation direction and roadmap context.
 
 ## Core Documents
 
+- [Engineering Principles](../ENGINEERING_PRINCIPLES.md)
+- [Dataflow Schema](./DATAFLOW_SCHEMA.md)
+- [Token Budgets](./TOKEN_BUDGETS.md)
+- [Audit Mode](./AUDIT_MODE.md)
+- [Scaling Plan](./SCALING_PLAN.md)
 - [Development Setup](./DEVELOPMENT_SETUP.md)
 - [Technical Architecture](./TECHNICAL_ARCHITECTURE.md)
 - [API Specification](./API_SPECIFICATION.md)
-- [Software Requirements Specification](../SRS.md)
-- [System Plan](../SYSTEM_PLAN.md)
+- [Software Requirements Specification](./SRS.md)
+- [System Plan](./SYSTEM_PLAN.md)
 - [Migration to Supabase](./MIGRATION_TO_SUPABASE.md)
 - [Agent Reference](./AGENTS.md)
 

@@ -44,8 +44,8 @@ export function resolveWorkspacePath(targetPath, rootDir = resolveDefaultWorkspa
   }
 
   const segments = relativePath.split(path.sep);
-  if (segments.some(segment => RESTRICTED_SEGMENTS.has(segment))) {
-    throw new PatchFileError('PATCH_RESTRICTED_PATH', `Refusing to patch restricted path: ${targetPath}`);
+  if (segments.some(segment => RESTRICTED_SEGMENTS.has(segment) || (segment.startsWith('.') && segment !== '.' && segment !== '..'))) {
+    throw new PatchFileError('PATCH_RESTRICTED_PATH', `Refusing to patch restricted or hidden path: ${targetPath}`);
   }
 
   return {

@@ -8,6 +8,7 @@ export const INTEGRATION_OPERATIONS = [
   { method: 'GET', path: `${INTEGRATION_BASE_PATH}/vfs/pending`, auth: 'bearer | x-api-key', description: 'List staged files pending review for the scoped user.' },
   { method: 'GET', path: `${INTEGRATION_BASE_PATH}/vfs/stats`, auth: 'bearer | x-api-key', description: 'Return VFS staging statistics for the scoped user.' },
   { method: 'POST', path: `${INTEGRATION_BASE_PATH}/vfs/commit`, auth: 'bearer | x-api-key', description: 'Approve or reject a staged file and optionally commit it to disk.' },
+  { method: 'POST', path: `${INTEGRATION_BASE_PATH}/content/harness`, auth: 'bearer | x-api-key', description: 'Harness imported text into searchable agent memory for the scoped user.' },
   { method: 'POST', path: `${INTEGRATION_BASE_PATH}/repos/link`, auth: 'bearer | x-api-key', description: 'Attach a repository URL to the scoped integration user.' },
   { method: 'GET', path: `${INTEGRATION_BASE_PATH}/repos`, auth: 'bearer | x-api-key', description: 'List linked repositories for the scoped user.' },
   { method: 'GET', path: `${INTEGRATION_BASE_PATH}/mcp/tools`, auth: 'bearer | x-api-key', description: 'List discovered MCP tools available to the backend.' },

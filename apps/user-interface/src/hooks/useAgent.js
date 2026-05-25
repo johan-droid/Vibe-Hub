@@ -361,8 +361,9 @@ export function useAgent() {
   const sendPrompt = useCallback(async (prompt) => {
     if (!socketRef.current) return;
     const effortLevel = useStore.getState().effortLevel;
+    const auditMode = useStore.getState().auditMode;
     addMessage({ role: 'user', content: prompt });
-    socketRef.current.sendPrompt(prompt, effortLevel);
+    socketRef.current.sendPrompt(prompt, effortLevel, auditMode);
 
     const activeSessionId = useStore.getState().activeSessionId;
     if (activeSessionId) {
