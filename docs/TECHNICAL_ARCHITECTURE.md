@@ -1,8 +1,8 @@
 # Technical Architecture Specification
 
-**Vibe-Hub: Agentic Coding Platform**  
+**Selina (development codename: Vibe Hub): Agentic Coding Platform**  
 **Version:** 6.0.0 (V6 Architecture)  
-**Date:** 2026-05-07  
+**Date:** 2026-05-26  
 **Status:** Production Ready  
 **AI Agent Focus:** Enhanced for AI agent development workflows
 
@@ -11,11 +11,11 @@
 ## AI Agent Quick Reference
 
 **Essential File Locations:**
-- State Machine: `apps/server-bridge/src/orchestrator/state_machine.js`
-- VFS Container: `apps/server-bridge/src/vfs/container.js`
-- API Router: `apps/server-bridge/src/orchestrator/router.js`
-- LLM Client: `apps/server-bridge/src/orchestrator/llm_client.js`
-- Docker Sandbox: `apps/server-bridge/src/sandbox/docker_executor.js`
+- State Machine: `apps/server-bridge/orchestrator/state_machine.js`
+- VFS Container: `apps/server-bridge/vfs/container.js`
+- API Router: `apps/server-bridge/orchestrator/router.js`
+- LLM Client: `apps/server-bridge/orchestrator/llm_client.js`
+- Docker Sandbox: `apps/server-bridge/sandbox/docker_executor.js`
 
 **Critical Architecture Rules for AI Agents:**
 - ❌ NEVER import between `org_core/` and `user_env/`
@@ -25,9 +25,9 @@
 - ✅ Maintain VFS approval gates
 
 **AI Agent Development Tools:**
-- `multi_edit` for coordinated file changes
+- `read_file` for source inspection
 - `grep_search` for pattern finding
-- `find_by_name` for file discovery
+- `list_dir` or `file_search` for file discovery
 - `node --check` for syntax validation
 
 ## Current Implementation Snapshot
@@ -61,6 +61,8 @@ This section reflects the code that exists in the current workspace, not a gener
 - React 19.2.x and Vite 8.x in `apps/user-interface`.
 - Express 4.19.x, Socket.io 4.8.x, and XState 5.31.x in `apps/server-bridge`.
 - PostgreSQL-backed persistence and Redis-backed coordination where enabled by environment variables.
+
+> Note: The "Current Implementation Snapshot" section above is the source of truth for actively maintained paths and routes.
 
 ---
 
@@ -115,8 +117,8 @@ This section reflects the code that exists in the current workspace, not a gener
 
 | Component | Technology | Responsibility |
 |-----------|------------|-----------------|
-| **Frontend** | React 18 + Vite + Material 3 | Glass-morphism UI, real-time updates |
-| **Backend** | Node.js 18+ + Express + XState | Orchestration, API, WebSocket |
+| **Frontend** | React 19 + Vite 8 + Tailwind/Styled Components | Workspace UI, diff review, real-time updates |
+| **Backend** | Node.js 22 + Express + XState | Orchestration, API, WebSocket |
 | **Database** | PostgreSQL 14+ + pgvector | Persistent storage, semantic search |
 | **Sandbox** | Docker + GitHub Actions | Isolated code execution |
 | **State** | Zustand + XState | Client/server state management |
@@ -691,16 +693,16 @@ SANDBOX_TIMEOUT=10000
 ## Appendix A: Technology Stack
 
 ### Frontend
-- **React 18**: UI framework with hooks and concurrent features
-- **Vite**: Build tool with HMR and optimized bundling
-- **Material 3**: Design system with dark theme
+- **React 19**: UI framework with modern concurrent rendering
+- **Vite 8**: Build tool with HMR and optimized bundling
+- **Tailwind CSS + styled-components**: Core styling stack
 - **Zustand**: Lightweight state management
 - **Socket.io**: Real-time WebSocket client
 - **Framer Motion**: Animations and transitions
 - **Lucide React**: Icon library
 
 ### Backend
-- **Node.js 18+**: Runtime with ES modules support
+- **Node.js 22.x**: Runtime with ES modules support
 - **Express**: Web framework with middleware
 - **XState**: State machine for orchestration
 - **Socket.io**: Real-time WebSocket server

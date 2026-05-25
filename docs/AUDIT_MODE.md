@@ -17,6 +17,12 @@ Audit mode controls how much durable execution evidence is recorded for a run.
 - WebSocket prompt execution accepts `auditMode` in prompt messages.
 - Full mode records retrieval and context-compaction telemetry through the rollout recorder.
 - Recorder output is redacted for common secret-bearing fields.
+- Default mode is controlled by `SELINA_AUDIT_MODE_DEFAULT` when set; otherwise requests run with mode-specific caller defaults.
+
+## Validation
+
+- Run `npm run validate` for syntax guards on orchestrator entrypoints.
+- Use `npm run security:audit` to detect policy drift before enabling broad audit recording in shared environments.
 
 ## Artifacts
 

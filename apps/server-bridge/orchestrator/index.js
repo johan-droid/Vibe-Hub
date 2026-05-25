@@ -361,14 +361,6 @@ export class AgentOrchestrator {
         });
         const expertRunIdentity = targetDomain === domain
           ? withRunExpert(runIdentity, expertProfile)
-        const expert = this.experts[targetDomain] || this.experts.code;
-        const expertProfile = resolveExpertProfile({
-          domain: targetDomain,
-          effortLevel,
-          modelService,
-        });
-        const expertRunIdentity = targetDomain === domain
-          ? withRunExpert(runIdentity, expertProfile)
           : createChildRunIdentity(runIdentity, expertProfile);
         const previousProviderOverride = expert.providerOverride;
         const previousExecutionContext = expert.executionContext;
@@ -562,6 +554,7 @@ export class AgentOrchestrator {
             reviewResult = await this.experts.reviewer.execute(reviewPrompt, "Pedantic Auditor", async () => {}, (t) => onThought(`[Reviewer] ${t}`), () => {}, () => {}, onMemoryUpdateInternal, emitState, onStream);
           } finally {
             this.experts.reviewer.executionContext = previousReviewerContext;
+          }
           await recordRollout('peer_review_completed', {
             targetDomain,
             iteration: currentIter,

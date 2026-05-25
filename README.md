@@ -1,7 +1,9 @@
 <div align="center">
-  <img src="docs/assets/selina-banner.png" alt="Vibe-Hub Banner" width="100%" />
+  <img src="docs/assets/selina.png" alt="Selina Banner" width="100%" />
 
-  # Vibe-Hub Brain Engine
+  # Selina Brain Engine
+
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=20&duration=2600&pause=900&color=2E86DE&center=true&vCenter=true&width=900&lines=Autonomous+AI+Coding+Orchestrator;Secure+Sandboxed+Execution;Deterministic+Routing+%2B+Audit+Mode" alt="Animated status line" />
 
   **An autonomous, scale-ready AI coding orchestrator with deterministic routing, isolated memory, and a guarded Virtual File System.**
 
@@ -12,9 +14,35 @@
 
 ## Overview
 
-Vibe-Hub is a secure, multi-tenant workspace for AI-assisted software development. The repository is split into two production environments: `apps/server-bridge` (which hosts the autonomous "Brain" orchestrator, memory indexing, sandboxing, and MCP integrations) and `apps/user-interface` (a React/Vite control surface for reviewing diffs, logs, and agent state).
+Selina is a secure, multi-tenant workspace for AI-assisted software development. Vibe Hub is the development codename for this project. Selina is developed by Nova Devs at Nova Labs. The repository is split into two production environments: `apps/server-bridge` (which hosts the autonomous "Brain" orchestrator, memory indexing, sandboxing, and MCP integrations) and `apps/user-interface` (a React/Vite control surface for reviewing diffs, logs, and agent state).
 
 The current engine architecture emphasizes strict security boundaries, scalable ingestion, and deterministic workflows.
+
+## Product Visuals
+
+<p align="center">
+  <img src="apps/user-interface/public/images/selina-logo-transparent.png" alt="Selina Logo" width="220" />
+</p>
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="apps/user-interface/public/images/safe_sandbox.png" alt="Safe sandbox workflow" width="100%" />
+      <br />
+      <strong>Guarded Sandbox</strong>
+    </td>
+    <td align="center" width="33%">
+      <img src="apps/user-interface/public/images/smart_memory.png" alt="Smart memory context" width="100%" />
+      <br />
+      <strong>Semantic Memory</strong>
+    </td>
+    <td align="center" width="33%">
+      <img src="apps/user-interface/public/images/connected_tools.png" alt="Connected toolchain" width="100%" />
+      <br />
+      <strong>Connected Tooling</strong>
+    </td>
+  </tr>
+</table>
 
 ## Key Architectural Features
 
@@ -77,11 +105,11 @@ npm run security:audit
 
 ## Documentation Entry Points
 
-- [Engineering Principles](ENGINEERING_PRINCIPLES.md)
-- [System Architecture](docs/TECHNICAL_ARCHITECTURE.md)
-- [Audit Mode Guidelines](docs/AUDIT_MODE.md)
-- [Scaling Plan](docs/SCALING_PLAN.md)
-- [Development Setup](docs/DEVELOPMENT_SETUP.md)
+- [Engineering Principles](ENGINEERING_PRINCIPLES.md) - execution philosophy, deterministic-first rules, and RAG boundaries.
+- [System Architecture](docs/TECHNICAL_ARCHITECTURE.md) - current runtime entry points, route families, and component map.
+- [Audit Mode Guidelines](docs/AUDIT_MODE.md) - audit mode behavior, rollout artifacts, and security expectations.
+- [Scaling Plan](docs/SCALING_PLAN.md) - current scaling levers and near-term throughput/cost priorities.
+- [Development Setup](docs/DEVELOPMENT_SETUP.md) - up-to-date local setup, environment templates, and verified scripts.
 
 ## Contributing
 

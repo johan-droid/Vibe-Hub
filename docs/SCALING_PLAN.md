@@ -13,6 +13,7 @@ Scalability in this repo means more than throughput. It also means keeping conte
 
 - Concurrency governor: `apps/server-bridge/auth/concurrency-governor.js`
 - Job queue: `apps/server-bridge/orchestrator/job-queue.js`
+- Worker orchestration: `apps/server-bridge/orchestrator/worker-orchestrator.js`
 - Runtime cost controls: `apps/server-bridge/orchestrator/cost-controls.js`
 - Metrics: `apps/server-bridge/utils/metrics.js`
 - Prompt compaction: `apps/server-bridge/orchestrator/context-builder.js`
@@ -31,3 +32,8 @@ Scalability in this repo means more than throughput. It also means keeping conte
 - Shift heavier harnessing/indexing work to asynchronous jobs.
 - Add per-layer latency and token metrics to parity reports.
 - Add queue-aware degraded behavior for bursty traffic.
+
+## Operational Verification
+
+- Use `npm run validate` as a low-cost syntax gate for orchestration changes.
+- Use `npm run release:gate` before production promotions to enforce security and quality checks.

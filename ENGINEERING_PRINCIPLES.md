@@ -1,5 +1,7 @@
 # Engineering Principles
 
+Selina is the product name. Vibe Hub is the development codename used in repository naming.
+
 This repository is built for a real constraint set: limited hardware, limited API budget, free-rate-limit providers, and uneven access to strong models.
 
 The goal is not to simulate infinite intelligence. The goal is to build a coding system that stays useful, safe, and testable under scarcity.
