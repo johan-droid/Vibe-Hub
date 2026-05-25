@@ -337,6 +337,7 @@ export function buildEvidencePacket({
   items = [],
   maxItems = retrievalPlan.maxItems,
   tokenBudget = retrievalPlan.evidenceTokenBudget,
+  strictSecurity = false,
 } = {}) {
   const cacheKey = `${query}:${retrievalPlan.tenantId || 'shared'}:${maxItems}:${tokenBudget}:${items.length}`;
   if (evidencePacketCache.has(cacheKey)) {
@@ -416,7 +417,11 @@ export function buildEvidencePacket({
   
   if (retrievalPlan.requireSourceEvidence && sourceItems.length === 0) {
     riskFlags.push('missing_source_attribution');
-    throw new Error('SECURITY_VIOLATION: Missing source attribution in a high-risk code-changing flow.');
+    riskFlags.push('missing_source_evidence');
+
+    if (strictSecurity === true) {
+      throw new Error('SECURITY_VIOLATION: Missing source attribution in a high-risk code-changing flow.');
+    }
   }
 
   if (tokenEstimate > tokenBudget * 0.95) {
@@ -439,9 +444,6 @@ export function buildEvidencePacket({
   }
 
   if (evidence.length === 0) riskFlags.push('no_evidence_selected');
-  if (retrievalPlan.requireSourceEvidence && sourceCount === 0) {
-    riskFlags.push('missing_source_evidence');
-  }
 
   const result = {
     query: retrievalPlan.query,

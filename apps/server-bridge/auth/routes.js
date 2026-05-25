@@ -71,9 +71,7 @@ router.post('/handoff', async (req, res) => {
       authenticated: true,
       user: record.user,
       sessionId: record.session.sessionId,
-      provider: record.provider,
-      accessToken: record.session.accessToken,
-      refreshToken: record.session.refreshToken
+      provider: record.provider
     });
   } catch (err) {
     logger.error('AuthRoutes', 'OAuth handoff error', err);
