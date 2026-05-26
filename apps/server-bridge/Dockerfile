@@ -16,6 +16,7 @@ ENV NODE_ENV=production
 ENV PORT=3001
 
 RUN apt-get update \
+  && apt-get upgrade -y \
   && apt-get install -y --no-install-recommends ca-certificates git docker.io tini \
   && rm -rf /var/lib/apt/lists/*
 
