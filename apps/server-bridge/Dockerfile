@@ -27,6 +27,7 @@ RUN apt-get update \
   && apt-get update \
   && apt-get upgrade -y \
   && apt-get install -y --no-install-recommends git tini docker-ce-cli \
+  && npm install -g npm@11.15.0 \
   && apt-get purge -y curl gnupg \
   && apt-get autoremove -y \
   && rm -rf /var/lib/apt/lists/*
