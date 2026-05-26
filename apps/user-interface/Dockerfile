@@ -17,6 +17,7 @@ COPY apps/user-interface ./apps/user-interface
 RUN npm run build --workspace=apps/user-interface
 
 FROM nginx:1.27-alpine AS runtime
+RUN apk upgrade --no-cache
 COPY apps/user-interface/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/user-interface/dist /usr/share/nginx/html
 

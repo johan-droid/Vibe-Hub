@@ -86,6 +86,7 @@ jobs:
           exit-code: "1"
 
       - name: Scan UI image
+        if: always()
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ steps.tags.outputs.ui_local }}
