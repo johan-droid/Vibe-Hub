@@ -347,7 +347,13 @@
 <a name='L282'></a><a href='#L282'>282</a>
 <a name='L283'></a><a href='#L283'>283</a>
 <a name='L284'></a><a href='#L284'>284</a>
-<a name='L285'></a><a href='#L285'>285</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L285'></a><a href='#L285'>285</a>
+<a name='L286'></a><a href='#L286'>286</a>
+<a name='L287'></a><a href='#L287'>287</a>
+<a name='L288'></a><a href='#L288'>288</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -413,9 +419,9 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -632,11 +638,15 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">/**
- * @fileoverview apps/server-bridge/auth/routes.js
- * @module AuthRoutes
- * @description SAAS-Grade authentication management routes for Selina.
- * Handles secure token lifecycle, session revocation, single/global logout,
- * and provides audit trails for authentication history. Protected by CSRF middleware.
+ * SAAS-GRADE: Auth Management Routes
+ * 
+ * Provides endpoints for:
+ * - Token refresh
+ * - Logout (single session)
+ * - Logout all sessions
+ * - List active sessions
+ * - Revoke specific session
+ * - Get auth history
  */
 &nbsp;
 import { Router } from 'express';
@@ -655,7 +665,6 @@ import {
 } from './session.js';
 import { consumeOAuthHandoff } from './oauth-store.js';
 import { getUserAuthHistory } from '../db.js';
-import logger from '../utils/detailed-logger.js';
 &nbsp;
 const router = Router();
 &nbsp;
@@ -681,7 +690,7 @@ router.post('/refresh', handleRefreshToken);
  */
 router.post('/handoff', async (req, res) =&gt; {
   try {
-    const record = await consumeOAuthHandoff(req.body?.code);
+    const record = consumeOAuthHandoff(req.body?.code);
     if (!record) {
       clearAuthCookies(res);
       return res.status(401).json({
@@ -694,20 +703,20 @@ router.post('/handoff', async (req, res) =&gt; {
     setAuthCookies(res, {
       accessToken: record.session.accessToken,
       refreshToken: record.session.refreshToken,
-      sessionToken: record.session.sessionToken,
-      deviceId: record.session.deviceId,
+      sessionToken: record.session.sessionToken
     });
 &nbsp;
     res.set('Cache-Control', 'no-store');
     return res.json({
       success: true,
       authenticated: true,
+      accessToken: record.session.accessToken,
       user: record.user,
       sessionId: record.session.sessionId,
       provider: record.provider
     });
   } catch (err) {
-<span class="cstat-no" title="statement not covered" >    logger.error('AuthRoutes', 'OAuth handoff error', err);</span>
+<span class="cstat-no" title="statement not covered" >    console.error('OAuth handoff error:', err);</span>
 <span class="cstat-no" title="statement not covered" >    clearAuthCookies(res);</span>
 <span class="cstat-no" title="statement not covered" >    return res.status(500).json({ success: false, error: 'Failed to complete sign-in' });</span>
   }
@@ -754,7 +763,7 @@ router.post('/logout', optionalAuth, <span class="fstat-no" title="function not 
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    res.json({ success: true, message: 'Logged out successfully' });</span>
   } catch (err) {
-<span class="cstat-no" title="statement not covered" >    logger.error('AuthRoutes', 'Logout error', err);</span>
+<span class="cstat-no" title="statement not covered" >    console.error('Logout error:', err);</span>
 <span class="cstat-no" title="statement not covered" >    res.status(500).json({ error: 'Logout failed' });</span>
   }
 });
@@ -775,7 +784,7 @@ router.post('/logout-all', requireAuth, <span class="fstat-no" title="function n
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    res.json({ success: true, message: 'Logged out from all devices' });</span>
   } catch (err) {
-<span class="cstat-no" title="statement not covered" >    logger.error('AuthRoutes', 'Logout all error', err);</span>
+<span class="cstat-no" title="statement not covered" >    console.error('Logout all error:', err);</span>
 <span class="cstat-no" title="statement not covered" >    res.status(500).json({ error: 'Logout failed' });</span>
   }
 });
@@ -807,7 +816,7 @@ router.get('/sessions', requireAuth, <span class="fstat-no" title="function not 
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    res.json({ success: true, sessions: formattedSessions });</span>
   } catch (err) {
-<span class="cstat-no" title="statement not covered" >    logger.error('AuthRoutes', 'Get sessions error', err);</span>
+<span class="cstat-no" title="statement not covered" >    console.error('Get sessions error:', err);</span>
 <span class="cstat-no" title="statement not covered" >    res.status(500).json({ error: 'Failed to get sessions' });</span>
   }
 });
@@ -834,7 +843,7 @@ router.post('/sessions/:id/revoke', requireAuth, <span class="fstat-no" title="f
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    res.json({ success: true, message: 'Session revoked successfully' });</span>
   } catch (err) {
-<span class="cstat-no" title="statement not covered" >    logger.error('AuthRoutes', 'Revoke session error', err);</span>
+<span class="cstat-no" title="statement not covered" >    console.error('Revoke session error:', err);</span>
 <span class="cstat-no" title="statement not covered" >    res.status(500).json({ error: 'Failed to revoke session' });</span>
   }
 });
@@ -852,7 +861,7 @@ router.get('/history', requireAuth, <span class="fstat-no" title="function not c
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    res.json({ success: true, history });</span>
   } catch (err) {
-<span class="cstat-no" title="statement not covered" >    logger.error('AuthRoutes', 'Get history error', err);</span>
+<span class="cstat-no" title="statement not covered" >    console.error('Get history error:', err);</span>
 <span class="cstat-no" title="statement not covered" >    res.status(500).json({ error: 'Failed to get auth history' });</span>
   }
 });
@@ -873,7 +882,7 @@ router.get('/me', optionalAuth, <span class="fstat-no" title="function not cover
       sessionId: req.sessionId
     });
   } catch (err) {
-<span class="cstat-no" title="statement not covered" >    logger.error('AuthRoutes', 'Get me error', err);</span>
+<span class="cstat-no" title="statement not covered" >    console.error('Get me error:', err);</span>
 <span class="cstat-no" title="statement not covered" >    res.status(500).json({ error: 'Failed to get user info' });</span>
   }
 });
@@ -909,7 +918,7 @@ router.post('/validate-session', <span class="fstat-no" title="function not cove
       expiresAt: session.expiresAt
     });
   } catch (err) {
-<span class="cstat-no" title="statement not covered" >    logger.error('AuthRoutes', 'Validate session error', err);</span>
+<span class="cstat-no" title="statement not covered" >    console.error('Validate session error:', err);</span>
 <span class="cstat-no" title="statement not covered" >    res.status(500).json({ error: 'Failed to validate session' });</span>
   }
 });
@@ -922,7 +931,7 @@ export default router;
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-05-26T03:58:02.971Z
+                at 2026-05-05T10:00:48.246Z
             </div>
         <script src="../../prettify.js"></script>
         <script>
