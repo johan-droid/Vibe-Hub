@@ -23,7 +23,10 @@ const TIER_2_KEYS = [
   'panel_states',        // Sidebar, chat, terminal open/closed
   'terminal_filters',    // Filter level settings
   'draft_prompt',        // Unsubmitted prompt text
+  'terms_acceptance',    // Terms and conditions consent
 ];
+
+const TERMS_VERSION = '2026-05-07';
 
 // Tier 3 Keys - Ephemeral, cleared immediately on logout
 const TIER_3_KEYS = [
@@ -233,6 +236,19 @@ export function loadTerminalFilters() {
   });
 }
 
+export function hasAcceptedTerms(version = TERMS_VERSION) {
+  const acceptance = getItem('terms_acceptance');
+  return Boolean(acceptance?.accepted === true && acceptance?.version === version);
+}
+
+export function acceptTerms(version = TERMS_VERSION) {
+  return setItem('terms_acceptance', {
+    accepted: true,
+    version,
+    acceptedAt: Date.now(),
+  });
+}
+
 export default {
   getItem,
   setItem,
@@ -250,4 +266,6 @@ export default {
   loadDraftPrompt,
   saveTerminalFilters,
   loadTerminalFilters,
+  hasAcceptedTerms,
+  acceptTerms,
 };

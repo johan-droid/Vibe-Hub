@@ -55,7 +55,7 @@ describe('LandingPage', () => {
     };
   });
 
-  it('routes unauthenticated primary CTA to login', () => {
+  it('routes unauthenticated primary CTA to agreement', () => {
     render(
       <MemoryRouter>
         <LandingPage />
@@ -64,7 +64,7 @@ describe('LandingPage', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: /start workspace/i })[0]);
 
-    expect(navigateSpy).toHaveBeenCalledWith('/login');
+    expect(navigateSpy).toHaveBeenCalledWith('/agreement');
     expect(screen.getAllByText(/backend ready/i).length).toBeGreaterThan(0);
   });
 
