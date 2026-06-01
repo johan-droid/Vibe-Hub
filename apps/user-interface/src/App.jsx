@@ -10,7 +10,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from './store/useStore';
 import { useJobResumption } from './hooks/useJobResumption';
-import { clearExpiredTier2 } from './utils/localStorage';
+import { clearExpiredTier2, hasAcceptedTerms } from './utils/localStorage';
 import { FullPageLoader } from './components/LogoLoader';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { api } from './services/api';
@@ -21,6 +21,7 @@ import { SELINA_BRAND } from './brand/selina';
 // ── Lazy Pages (Performance) ──────────────────────────────────────────────────
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
+const TermsAgreementPage = lazy(() => import('./pages/TermsAgreementPage'));
 const AuthCallback = lazy(() => import('./pages/AuthCallback'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 
@@ -35,6 +36,7 @@ export default function App() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [authChecked, setAuthChecked] = useState(false);
   const location = useLocation();
+  const termsAccepted = hasAcceptedTerms();
 
   // Initialize job resumption hook
   useJobResumption();
@@ -54,6 +56,12 @@ export default function App() {
 
   useEffect(() => {
     if (!hydrated) return undefined;
+
+    if (location.pathname === '/auth/callback') {
+      setAuthChecked(true);
+      setIsInitializing(false);
+      return undefined;
+    }
 
     let cancelled = false;
 
@@ -86,7 +94,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [hydrated, setUser]);
+  }, [hydrated, location.pathname, setUser]);
 
   return (
     <AnimatePresence mode="wait">
@@ -104,7 +112,8 @@ export default function App() {
             <Suspense fallback={<LoadingScreen />}>
               <Routes location={location} key={location.pathname}>
                 <Route path="/" element={<LandingPage />} />
-                <Route path="/login" element={<LoginPage />} />
+                <Route path="/agreement" element={<TermsAgreementPage />} />
+                <Route path="/login" element={termsAccepted ? <LoginPage /> : <Navigate to="/agreement" replace state={{ from: location }} />} />
                 <Route path="/auth/callback" element={<AuthCallback />} />
                 <Route 
                   path="/dashboard/*" 

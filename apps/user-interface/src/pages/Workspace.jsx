@@ -21,7 +21,6 @@ import { ResizeHandle } from '../features/shared/components/ResizeHandle';
 import SettingsModal from '../features/shared/components/SettingsModal';
 import ApprovalGateModal from '../features/dashboard/components/ApprovalGateModal';
 import ActivityFeed from '../features/dashboard/components/ActivityFeed';
-import ToolVisualizer from '../features/dashboard/components/ToolVisualizer';
 import ChatHistorySidebar from '../features/chat/components/ChatHistorySidebar';
 import ChatInterface from '../features/chat/components/ChatInterface';
 import TerminalSessionsPanel from '../features/terminal/components/TerminalSessionsPanel';
@@ -60,9 +59,9 @@ function ContextSection({ title, action, children }) {
   );
 }
 
-function ContextPanel({ repos, uploads, mcpServers, diagnostics, loading, onRefresh, onOpenTerminal }) {
+function ContextPanel({ repos, uploads, mcpServers, diagnostics, loading, compact = false, onRefresh }) {
   return (
-    <div className="space-y-4 overflow-y-auto p-4">
+    <div className={`space-y-4 overflow-y-auto ${compact ? 'p-3' : 'p-4'}`}>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-3xl border border-outline-variant/50 bg-surface-container-low px-4 py-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-on-surface">
@@ -86,24 +85,14 @@ function ContextPanel({ repos, uploads, mcpServers, diagnostics, loading, onRefr
       <ContextSection
         title="Live Context"
         action={
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onRefresh}
-              className="rounded-full border border-outline-variant/50 p-2 text-on-surface-variant transition hover:text-on-surface"
-              aria-label="Refresh context"
-            >
-              {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-            </button>
-            <button
-              type="button"
-              onClick={onOpenTerminal}
-              className="rounded-full border border-outline-variant/50 p-2 text-on-surface-variant transition hover:text-on-surface"
-              aria-label="Open terminal"
-            >
-              <TerminalSquare size={14} />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="rounded-full border border-outline-variant/50 p-2 text-on-surface-variant transition hover:text-on-surface"
+            aria-label="Refresh context"
+          >
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+          </button>
         }
       >
         <div className="space-y-4">
@@ -176,7 +165,6 @@ export default function Workspace() {
     chatCollapsed,
     setChatCollapsed,
     orchestratorEvents,
-    toolGraph,
     linkedProjects,
     uploadedFiles,
     terminalPanelVisible,
@@ -192,6 +180,7 @@ export default function Workspace() {
   const [rightWidth, setRightWidth] = useState(DEFAULT_RIGHT);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [inspectorTab, setInspectorTab] = useState('activity');
+  const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
   const [mcpServers, setMcpServers] = useState([]);
   const [mcpDiagnostics, setMcpDiagnostics] = useState(null);
   const [connectionsLoading, setConnectionsLoading] = useState(false);
@@ -243,6 +232,7 @@ export default function Workspace() {
     if (isMobile) {
       setSidebarCollapsed(true);
       setChatCollapsed(true);
+      setMobileInspectorOpen(false);
     }
   }, [isMobile, setChatCollapsed, setSidebarCollapsed]);
 
@@ -273,41 +263,57 @@ export default function Workspace() {
             <div>
               <h1 className="text-lg font-semibold tracking-tight text-on-surface">Workspace</h1>
               <p className="text-sm text-on-surface-variant">
-                {latestEvent?.summary || 'Chat, clone, diff, and review changes from one place.'}
+                {latestEvent?.summary || (isMobile ? 'Chat and review updates.' : 'Chat, clone, diff, and review changes from one place.')}
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Pill icon={Activity} label="Events" value={liveEventCount} />
-            <Pill icon={GitPullRequest} label="Pending Diffs" value={pendingDiffCount} tone={pendingDiffCount > 0 ? 'warning' : 'default'} />
-            <Pill icon={FolderGit2} label="Repos" value={linkedProjects.length} />
-            <Pill icon={PlugZap} label="MCP Servers" value={mcpDiagnostics?.serverCount ?? mcpServers.length} />
+            {!isMobile && (
+              <>
+                <Pill icon={Activity} label="Events" value={liveEventCount} />
+                <Pill icon={GitPullRequest} label="Pending Diffs" value={pendingDiffCount} tone={pendingDiffCount > 0 ? 'warning' : 'default'} />
+                <Pill icon={FolderGit2} label="Repos" value={linkedProjects.length} />
+                <Pill icon={PlugZap} label="MCP Servers" value={mcpDiagnostics?.serverCount ?? mcpServers.length} />
 
-            <button
-              type="button"
-              onClick={toggleTerminalPanel}
-              className="flex h-10 w-10 items-center justify-center rounded-2xl border border-outline-variant/50 bg-surface-container-low text-on-surface-variant transition hover:text-on-surface"
-              aria-label="Toggle terminal panel"
-            >
-              <TerminalSquare size={18} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setChatCollapsed((value) => !value)}
-              className="flex h-10 w-10 items-center justify-center rounded-2xl border border-outline-variant/50 bg-surface-container-low text-on-surface-variant transition hover:text-on-surface"
-              aria-label="Toggle live inspector"
-            >
-              <PanelRight size={18} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsSettingsOpen(true)}
-              className="flex h-10 w-10 items-center justify-center rounded-2xl border border-outline-variant/50 bg-surface-container-low text-on-surface-variant transition hover:text-on-surface"
-              aria-label="Open settings"
-            >
-              <Settings2 size={18} />
-            </button>
+                <button
+                  type="button"
+                  onClick={toggleTerminalPanel}
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-outline-variant/50 bg-surface-container-low text-on-surface-variant transition hover:text-on-surface"
+                  aria-label="Toggle terminal panel"
+                >
+                  <TerminalSquare size={18} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChatCollapsed((value) => !value)}
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-outline-variant/50 bg-surface-container-low text-on-surface-variant transition hover:text-on-surface"
+                  aria-label="Toggle live inspector"
+                >
+                  <PanelRight size={18} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsOpen(true)}
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-outline-variant/50 bg-surface-container-low text-on-surface-variant transition hover:text-on-surface"
+                  aria-label="Open settings"
+                >
+                  <Settings2 size={18} />
+                </button>
+              </>
+            )}
+
+            {isMobile && (
+              <button
+                type="button"
+                onClick={() => setMobileInspectorOpen((value) => !value)}
+                className="flex h-10 items-center gap-2 rounded-2xl border border-outline-variant/50 bg-surface-container-low px-3 text-sm font-medium text-on-surface-variant transition hover:text-on-surface"
+                aria-label="Toggle activity panel"
+              >
+                <PanelRight size={16} />
+                {mobileInspectorOpen ? 'Hide activity' : 'Show activity'}
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -332,6 +338,53 @@ export default function Workspace() {
           <AnimatePresence initial={false}>
             {terminalPanelVisible && <TerminalSessionsPanel />}
           </AnimatePresence>
+
+          {isMobile && mobileInspectorOpen && (
+            <div className="border-t border-outline-variant/50 bg-surface-container-lowest">
+              <div className="flex items-center gap-2 border-b border-outline-variant/40 px-3 py-3">
+                {[
+                  { id: 'activity', label: 'Activity' },
+                  { id: 'context', label: 'Context' },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setInspectorTab(tab.id)}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                      inspectorTab === tab.id
+                        ? 'border-primary/30 bg-primary/10 text-primary'
+                        : 'border-outline-variant/50 bg-surface-container-low text-on-surface-variant hover:text-on-surface'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="max-h-[42vh] overflow-y-auto">
+                {inspectorTab === 'activity' && (
+                  <ActivityFeed
+                    agentLoopStatus={{ history: orchestratorEvents, currentIteration: 0 }}
+                    events={orchestratorEvents}
+                    experienceMode={effectiveExperienceMode}
+                    onExpandTerminal={toggleTerminalPanel}
+                  />
+                )}
+
+                {inspectorTab === 'context' && (
+                  <ContextPanel
+                    repos={linkedProjects}
+                    uploads={uploadedFiles}
+                    mcpServers={mcpServers}
+                    diagnostics={mcpDiagnostics}
+                    loading={connectionsLoading}
+                    compact
+                    onRefresh={refreshConnections}
+                  />
+                )}
+              </div>
+            </div>
+          )}
         </main>
 
         <AnimatePresence initial={false}>
@@ -365,7 +418,6 @@ export default function Workspace() {
                   <div className="flex items-center gap-2 border-b border-outline-variant/40 px-4 py-3">
                     {[
                       { id: 'activity', label: 'Activity' },
-                      { id: 'graph', label: 'Tool Map' },
                       { id: 'context', label: 'Context' },
                     ].map((tab) => (
                       <button
@@ -393,12 +445,6 @@ export default function Workspace() {
                       />
                     )}
 
-                    {inspectorTab === 'graph' && (
-                      <div className="h-full">
-                        <ToolVisualizer toolGraph={toolGraph} experienceMode={effectiveExperienceMode} />
-                      </div>
-                    )}
-
                     {inspectorTab === 'context' && (
                       <ContextPanel
                         repos={linkedProjects}
@@ -407,7 +453,6 @@ export default function Workspace() {
                         diagnostics={mcpDiagnostics}
                         loading={connectionsLoading}
                         onRefresh={refreshConnections}
-                        onOpenTerminal={toggleTerminalPanel}
                       />
                     )}
                   </div>

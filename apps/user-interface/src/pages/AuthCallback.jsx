@@ -34,11 +34,11 @@ export default function AuthCallback() {
   useEffect(() => {
     let cancelled = false;
 
-    // Set a timeout to force redirect if authentication takes too long
+    // Timeout guard to prevent hanging callback screens
     timeoutRef.current = setTimeout(() => {
       if (!cancelled) {
-        console.warn('Authentication timeout, forcing redirect to dashboard');
-        navigate('/dashboard', { replace: true });
+        setStatus('error');
+        setMessage('Authentication is taking longer than expected. Please try signing in again.');
       }
     }, 15000); // 15 second timeout
 

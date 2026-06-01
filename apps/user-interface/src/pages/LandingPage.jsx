@@ -133,10 +133,10 @@ const footerColumns = [
   {
     title: 'Legal',
     links: [
-      { label: 'Terms of service', href: '/login#terms', detail: 'Usage, generated code, and operator responsibilities.' },
-      { label: 'Privacy notice', href: '/login#privacy', detail: 'Cookie auth, session metadata, and stored preferences.' },
-      { label: 'Security policy', href: '/login#security-notice', detail: 'Approval gates, local execution, and audit posture.' },
-      { label: 'Cookie policy', href: '/login#privacy', detail: 'HttpOnly cookies and browser-visible CSRF tokens.' },
+      { label: 'Terms of service', href: '/agreement', detail: 'Usage, generated code, and operator responsibilities.' },
+      { label: 'Privacy notice', href: '/agreement', detail: 'Cookie auth, session metadata, and stored preferences.' },
+      { label: 'Security policy', href: '/agreement', detail: 'Approval gates, local execution, and audit posture.' },
+      { label: 'Cookie policy', href: '/agreement', detail: 'HttpOnly cookies and browser-visible CSRF tokens.' },
     ],
   },
 ];
@@ -769,9 +769,9 @@ function LandingFooter({ authenticated, statusPill }) {
             © {new Date().getFullYear()} {SELINA_BRAND.companyName}. All rights reserved.
           </div>
           <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-black uppercase tracking-[0.14em] text-on-surface-variant/60">
-            <a href="/login#terms" className="transition-colors hover:text-primary">Terms</a>
-            <a href="/login#privacy" className="transition-colors hover:text-primary">Privacy</a>
-            <a href="/login#security-notice" className="transition-colors hover:text-primary">Security</a>
+            <a href="/agreement" className="transition-colors hover:text-primary">Terms</a>
+            <a href="/agreement" className="transition-colors hover:text-primary">Privacy</a>
+            <a href="/agreement" className="transition-colors hover:text-primary">Security</a>
             <span>Local Docker only</span>
           </div>
         </div>
@@ -792,7 +792,7 @@ export default function LandingPage() {
   const skillInfo = useMemo(() => skillsSummary(skills), [skills]);
 
   const handlePrimaryCta = () => {
-    navigate(authenticated ? '/dashboard' : '/login');
+    navigate(authenticated ? '/dashboard' : '/agreement');
   };
 
   const handleArchitectureCta = () => {
