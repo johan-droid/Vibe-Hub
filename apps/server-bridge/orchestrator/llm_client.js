@@ -1,6 +1,7 @@
 import CircuitBreaker from 'opossum';
 import { PromptOrchestrator } from './context.js';
 import { recordLlmCost, recordLlmDuration, recordLlmTokenUsage } from '../utils/metrics.js';
+import { callSelinaLLM, chooseModeFromTask } from './routing/selina-router.js';
 import { getJson, hashValue, setJson, withJsonCache } from '../utils/cache.js';
 import { agentAuthManager, authToken, callWithAuthRetry } from '../auth/agent-auth.js';
 import { countTokens } from '../memory/tokenizer.js';
@@ -12,6 +13,8 @@ class LLMClient {
     this.authManager = agentAuthManager;
     this.endpoint = process.env.LLM_API_ENDPOINT || 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
     this.model = process.env.LLM_MODEL || 'gemini-2.0-flash';
+    this.gateway = process.env.SELINA_LLM_GATEWAY || 'direct';
+    this.routingStrategy = process.env.SELINA_ROUTING_STRATEGY || 'quota_safe';
     this.openaiModel = process.env.OPENAI_MODEL || 'gpt-4o-mini';
     this.anthropicModel = process.env.ANTHROPIC_MODEL || 'claude-3-5-haiku-latest';
     this.breakers = new Map([
@@ -35,8 +38,14 @@ class LLMClient {
    * Executes the API call using the strictly formatted prompts.
    */
   async generateCode(orgContext, userContext, taskPrompt, astGraph, sandboxError = null) {
-    if (!this.authManager.hasAnyProvider(['gemini', 'openai', 'anthropic'])) {
-      throw new Error("CRITICAL: LLM API key is missing. Cannot generate code.");
+    if (this.gateway === 'freellmapi') {
+      if (!this.hasFreeLLMAPIConfig()) {
+        throw new Error("CRITICAL: FreeLLMAPI config is missing. Set FREELLMAPI_BASE_URL and FREELLMAPI_API_KEY.");
+      }
+    } else {
+      if (!this.authManager.hasAnyProvider(['gemini', 'openai', 'anthropic'])) {
+        throw new Error("CRITICAL: LLM API key is missing. Cannot generate code.");
+      }
     }
 
     // 1. Compile the strict prompt structures
@@ -55,15 +64,40 @@ class LLMClient {
       staticContext,
       userInstruction,
       temperature: 0.2,
+      gateway: this.gateway,
+      routingStrategy: this.routingStrategy,
+      mode: process.env.SELINA_FORCE_LLM_MODE || chooseModeFromTask(taskPrompt)
     })}`;
 
     const { value } = await withJsonCache(
       cacheKey,
       Number.parseInt(process.env.LLM_CACHE_TTL_SECONDS || '1800', 10),
-      () => this.generateWithFallback({ systemInstruction, staticContext, userInstruction, fallbackUserInstruction })
+      async () => {
+        if (this.gateway === 'freellmapi') {
+          const rawPayload = await this.generateViaFreeLLMAPI({ systemInstruction, staticContext, userInstruction, fallbackUserInstruction, taskPrompt });
+          return extractCodePayload(rawPayload);
+        } else {
+          return this.generateWithFallback({ systemInstruction, staticContext, userInstruction, fallbackUserInstruction });
+        }
+      }
     );
 
     return value;
+  }
+
+  hasFreeLLMAPIConfig() {
+    const baseUrl = process.env.FREELLMAPI_BASE_URL || process.env.OPENAI_BASE_URL;
+    const apiKey = process.env.FREELLMAPI_API_KEY || process.env.OPENAI_API_KEY;
+    return Boolean(baseUrl && apiKey);
+  }
+
+  async generateViaFreeLLMAPI({ systemInstruction, staticContext = '', userInstruction, fallbackUserInstruction = null, taskPrompt = '' }) {
+    const mode = process.env.SELINA_FORCE_LLM_MODE || chooseModeFromTask(taskPrompt);
+    const messages = [
+      { role: 'system', content: [systemInstruction, staticContext].filter(Boolean).join('\n\n') },
+      { role: 'user', content: userInstruction || fallbackUserInstruction },
+    ];
+    return callSelinaLLM({ mode, messages, taskPrompt });
   }
 
   async generateWithFallback(payload) {
