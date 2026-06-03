@@ -97,15 +97,17 @@ jobs:
 
       - name: Upload server scan
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-server-bridge.sarif
+          category: server-bridge-scan
 
       - name: Upload UI scan
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-user-interface.sarif
+          category: user-interface-scan
 
       - name: Login to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
