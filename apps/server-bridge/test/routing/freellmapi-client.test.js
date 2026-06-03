@@ -2,6 +2,48 @@ import { describe, expect, it, afterEach, vi } from 'vitest';
 import { callFreeLLMAPI } from '../../orchestrator/routing/freellmapi-client.js';
 
 describe('freellmapi-client', () => {
+  it('builds URL correctly for https://freellmapi-uqzq.onrender.com/v1', async () => {
+    process.env.FREELLMAPI_BASE_URL = 'https://freellmapi-uqzq.onrender.com/v1';
+    process.env.FREELLMAPI_API_KEY = 'test-key';
+
+    let capturedUrl = null;
+    globalThis.fetch = vi.fn(async (url) => {
+      capturedUrl = url;
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) };
+    });
+
+    await callFreeLLMAPI({ mode: 'test', messages: [], profile: { timeoutMs: 1000 } });
+    expect(capturedUrl).toBe('https://freellmapi-uqzq.onrender.com/v1/chat/completions');
+  });
+
+  it('builds URL correctly for https://freellmapi-uqzq.onrender.com', async () => {
+    process.env.FREELLMAPI_BASE_URL = 'https://freellmapi-uqzq.onrender.com';
+    process.env.FREELLMAPI_API_KEY = 'test-key';
+
+    let capturedUrl = null;
+    globalThis.fetch = vi.fn(async (url) => {
+      capturedUrl = url;
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) };
+    });
+
+    await callFreeLLMAPI({ mode: 'test', messages: [], profile: { timeoutMs: 1000 } });
+    expect(capturedUrl).toBe('https://freellmapi-uqzq.onrender.com/v1/chat/completions');
+  });
+
+  it('builds URL correctly for https://freellmapi-uqzq.onrender.com/v1/chat/completions', async () => {
+    process.env.FREELLMAPI_BASE_URL = 'https://freellmapi-uqzq.onrender.com/v1/chat/completions';
+    process.env.FREELLMAPI_API_KEY = 'test-key';
+
+    let capturedUrl = null;
+    globalThis.fetch = vi.fn(async (url) => {
+      capturedUrl = url;
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) };
+    });
+
+    await callFreeLLMAPI({ mode: 'test', messages: [], profile: { timeoutMs: 1000 } });
+    expect(capturedUrl).toBe('https://freellmapi-uqzq.onrender.com/v1/chat/completions');
+  });
+
   const originalFetch = globalThis.fetch;
   const originalEnv = process.env;
 
