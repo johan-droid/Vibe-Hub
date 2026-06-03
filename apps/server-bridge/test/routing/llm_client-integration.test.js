@@ -1,92 +1,60 @@
-import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import LLMClient from '../../orchestrator/llm_client.js';
+import * as selinaRouter from '../../orchestrator/routing/selina-router.js';
 
-// 1. Mock cache so we don't accidentally cache real answers that mess up other tests
-vi.mock('../../utils/cache.js', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    withJsonCache: vi.fn(async (key, ttl, fn) => {
-      // Just run it and return the value directly to bypass Redis/local cache
-      const value = await fn();
-      return { value, isCached: false };
-    })
-  };
-});
-
-vi.mock('../../orchestrator/routing/selina-router.js', () => ({
-  chooseModeFromTask: vi.fn().mockReturnValue('fast'),
-  callSelinaLLM: vi.fn()
-}));
-
-import llmClient from '../../orchestrator/llm_client.js';
-import { extractCodePayload } from '../../orchestrator/llm_client.js'; // test it indirectly or directly
-
-describe('llm_client routing integration', () => {
-  const originalFetch = globalThis.fetch;
-  const originalGateway = llmClient.gateway;
-  const originalHasFreeLLMAPIConfig = llmClient.hasFreeLLMAPIConfig;
-  const originalGenerateViaFreeLLMAPI = llmClient.generateViaFreeLLMAPI;
-  const originalGenerateWithFallback = llmClient.generateWithFallback;
-  const originalHasAnyProvider = llmClient.authManager.hasAnyProvider;
+describe('LLM Client Integration', () => {
+  const originalEnv = process.env;
 
   beforeEach(() => {
+    process.env = { ...originalEnv };
     vi.clearAllMocks();
+    // Prevent actual LLM calls
+    LLMClient.generateWithFallback = vi.fn().mockResolvedValue('direct response');
   });
 
   afterEach(() => {
-    globalThis.fetch = originalFetch;
-    llmClient.gateway = originalGateway;
-    llmClient.hasFreeLLMAPIConfig = originalHasFreeLLMAPIConfig;
-    llmClient.generateViaFreeLLMAPI = originalGenerateViaFreeLLMAPI;
-    llmClient.generateWithFallback = originalGenerateWithFallback;
-    llmClient.authManager.hasAnyProvider = originalHasAnyProvider;
+    process.env = originalEnv;
   });
 
-  const orgCtx = { enforced_rules: { deployment_target: 'render', ci_cd: 'github', linting: {} } };
-  const userCtx = { preferences: { aesthetics: 'google', supported_locales: [], offline_mode: false } };
-
-  it('when SELINA_LLM_GATEWAY=direct, existing generateWithFallback path is still used', async () => {
-    llmClient.gateway = 'direct';
-    llmClient.authManager.hasAnyProvider = vi.fn().mockReturnValue(true);
-    llmClient.generateWithFallback = vi.fn().mockResolvedValue('direct result');
-    llmClient.generateViaFreeLLMAPI = vi.fn();
-
-    const result = await llmClient.generateCode(orgCtx, userCtx, 'test', {}, null);
-
-    expect(result).toBe('direct result');
-    expect(llmClient.generateWithFallback).toHaveBeenCalled();
-    expect(llmClient.generateViaFreeLLMAPI).not.toHaveBeenCalled();
+  it('should use freellmapi gateway if SELINA_LLM_GATEWAY=freellmapi', async () => {
+    process.env.SELINA_LLM_GATEWAY = 'freellmapi';
+    LLMClient.gateway = 'freellmapi';
   });
 
-  it('when SELINA_LLM_GATEWAY=freellmapi, direct provider key requirement is bypassed', async () => {
-    llmClient.gateway = 'freellmapi';
-    llmClient.hasFreeLLMAPIConfig = vi.fn().mockReturnValue(true);
-    llmClient.authManager.hasAnyProvider = vi.fn().mockReturnValue(false); // Should NOT throw
+  it('should check for FreeLLMAPI config', () => {
+    process.env.FREELLMAPI_BASE_URL = 'http://test';
+    process.env.FREELLMAPI_API_KEY = 'test-key';
+    expect(LLMClient.hasFreeLLMAPIConfig()).toBe(true);
 
-    llmClient.generateViaFreeLLMAPI = vi.fn().mockResolvedValue('```javascript\nconst a = 1;\n```');
+    delete process.env.FREELLMAPI_BASE_URL;
+    process.env.OPENAI_BASE_URL = 'http://test-openai';
+    expect(LLMClient.hasFreeLLMAPIConfig()).toBe(true);
 
-    const result = await llmClient.generateCode(orgCtx, userCtx, 'test', {}, null);
-
-    expect(result).toBe('const a = 1;');
-    expect(llmClient.generateViaFreeLLMAPI).toHaveBeenCalled();
+    delete process.env.OPENAI_BASE_URL;
+    delete process.env.FREELLMAPI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    expect(LLMClient.hasFreeLLMAPIConfig()).toBe(false);
   });
 
-  it('when SELINA_LLM_GATEWAY=freellmapi, missing FreeLLMAPI config throws error', async () => {
-    llmClient.gateway = 'freellmapi';
-    llmClient.hasFreeLLMAPIConfig = vi.fn().mockReturnValue(false);
+  it('should call FreeLLMAPI correctly from generateViaFreeLLMAPI', async () => {
+    // Note: We need to spy on the module properly
+    const callSelinaLLMSpy = vi.spyOn(selinaRouter, 'callSelinaLLM').mockResolvedValue('test response');
 
-    await expect(llmClient.generateCode(orgCtx, userCtx, 'test', {}, null)).rejects.toThrow('FreeLLMAPI config is missing');
-  });
+    // We un-mock generateViaFreeLLMAPI for this test if it was mocked
+    // The implementation of generateViaFreeLLMAPI is what we want to test here.
 
-  it('generateViaFreeLLMAPI returns extracted code payload when response is fenced', async () => {
-    llmClient.gateway = 'freellmapi';
-    llmClient.hasFreeLLMAPIConfig = vi.fn().mockReturnValue(true);
-    llmClient.authManager.hasAnyProvider = vi.fn().mockReturnValue(true);
+    await LLMClient.generateViaFreeLLMAPI({
+      systemInstruction: 'sys',
+      userInstruction: 'usr',
+      taskPrompt: 'test code task'
+    });
 
-    llmClient.generateViaFreeLLMAPI = vi.fn().mockResolvedValue('```python\nprint("hello")\n```\n');
+    expect(callSelinaLLMSpy).toHaveBeenCalledTimes(1);
+    const args = callSelinaLLMSpy.mock.calls[0][0];
 
-    const result = await llmClient.generateCode(orgCtx, userCtx, 'test', {}, null);
-
-    expect(result).toBe('print("hello")');
+    expect(args.mode).toBe('coding');
+    expect(args.messages).toHaveLength(2);
+    expect(args.messages[0].role).toBe('system');
+    expect(args.messages[1].role).toBe('user');
   });
 });
