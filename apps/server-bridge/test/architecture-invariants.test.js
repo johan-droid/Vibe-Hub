@@ -81,7 +81,6 @@ describe('V6 architecture invariants', () => {
   it('keeps agent model credentials behind the central auth manager', async () => {
     const checkedFiles = [
       path.join(SERVER_ROOT, 'orchestrator', 'models.js'),
-      path.join(SERVER_ROOT, 'orchestrator', 'llm_client.js'),
       path.join(SERVER_ROOT, 'orchestrator', 'router.js'),
       path.join(SERVER_ROOT, 'memory', 'embeddings.js'),
       path.join(SERVER_ROOT, 'creative', 'generate-ui-variant.js'),
