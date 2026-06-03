@@ -1,21 +1,29 @@
+
 export async function callFreeLLMAPI({ mode, messages, profile, metadata }) {
   const baseUrl = process.env.FREELLMAPI_BASE_URL || process.env.OPENAI_BASE_URL;
   const apiKey = process.env.FREELLMAPI_API_KEY || process.env.OPENAI_API_KEY;
 
   if (!baseUrl || !apiKey) {
-    throw new Error("FreeLLMAPI is not configured. Set FREELLMAPI_BASE_URL/OPENAI_BASE_URL and FREELLMAPI_API_KEY/OPENAI_API_KEY.");
+    throw new Error("FreeLLMAPI is not configured. Set FREELLMAPI_BASE_URL and FREELLMAPI_API_KEY, or OPENAI_BASE_URL and OPENAI_API_KEY.");
   }
 
   let chatUrl = baseUrl;
-  if (!chatUrl.endsWith('/chat/completions')) {
-    if (chatUrl.endsWith('/v1')) {
-      chatUrl += '/chat/completions';
-    } else if (chatUrl.endsWith('/v1/')) {
-      chatUrl += 'chat/completions';
-    } else {
-       chatUrl += chatUrl.endsWith('/') ? 'v1/chat/completions' : '/v1/chat/completions';
-    }
+  if (chatUrl.endsWith('/v1/chat/completions')) {
+    // already correct
+  } else if (chatUrl.endsWith('/chat/completions')) {
+    // missing /v1 but has chat completions, leave it or fix it depending on spec, but spec says if baseUrl is .../v1/chat/completions remain that.
+  } else if (chatUrl.endsWith('/v1')) {
+    chatUrl += '/chat/completions';
+  } else if (chatUrl.endsWith('/v1/')) {
+    chatUrl += 'chat/completions';
+  } else {
+    chatUrl += chatUrl.endsWith('/') ? 'v1/chat/completions' : '/v1/chat/completions';
   }
+
+  // Use the exact logger statement
+  // But wait, logger might not be imported. The prompt says "Add clear config validation... Allowed log: [Selina] FreeLLMAPI gateway configured: https://freellmapi-uqzq.onrender.com/v1"
+  // Let's use console.log or standard logging, but wait, the prompt doesn't specify using a specific logger, just "Allowed log:"
+  console.log(`[Selina] FreeLLMAPI gateway configured: ${baseUrl}`);
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), profile.timeoutMs);
@@ -26,14 +34,14 @@ export async function callFreeLLMAPI({ mode, messages, profile, metadata }) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: profile.model || 'auto',
+        messages,
         temperature: profile.temperature,
         max_tokens: profile.maxTokens,
         stream: false,
-        messages,
       }),
       signal: controller.signal,
     });
