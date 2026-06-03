@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest';
-import { chooseModeFromTask } from '../../orchestrator/routing/selina-router.js';
+import { describe, expect, it, vi } from 'vitest';
+import { chooseModeFromTask, callSelinaLLM } from '../../orchestrator/routing/selina-router.js';
+
+// Mock FreeLLMAPI client so we don't make real requests
+vi.mock('../../orchestrator/routing/freellmapi-client.js', () => ({
+  callFreeLLMAPI: vi.fn().mockResolvedValue({ status: 200, durationMs: 100, text: 'test response', model: 'test-model' })
+}));
 
 describe('selina-router', () => {
   describe('chooseModeFromTask', () => {
@@ -26,6 +31,32 @@ describe('selina-router', () => {
       expect(chooseModeFromTask('hello how are you')).toBe('fast');
       expect(chooseModeFromTask('')).toBe('fast');
       expect(chooseModeFromTask(null)).toBe('fast');
+    });
+  });
+
+  describe('callSelinaLLM', () => {
+    it('expectedContextTokens > 12000 upgrades to large_context', async () => {
+      const { callFreeLLMAPI } = await import('../../orchestrator/routing/freellmapi-client.js');
+      await callSelinaLLM({ mode: 'coding', messages: [], metadata: { expectedContextTokens: 15000 } });
+      expect(callFreeLLMAPI).toHaveBeenCalledWith(expect.objectContaining({ capability: 'large_context' }));
+    });
+
+    it('requiresJson uses json_strict', async () => {
+      const { callFreeLLMAPI } = await import('../../orchestrator/routing/freellmapi-client.js');
+      await callSelinaLLM({ mode: 'fast', messages: [], metadata: { requiresJson: true } });
+      expect(callFreeLLMAPI).toHaveBeenCalledWith(expect.objectContaining({ capability: 'json_strict' }));
+    });
+
+    it('requiresCode uses coding', async () => {
+      const { callFreeLLMAPI } = await import('../../orchestrator/routing/freellmapi-client.js');
+      await callSelinaLLM({ mode: 'fast', messages: [], metadata: { requiresCode: true } });
+      expect(callFreeLLMAPI).toHaveBeenCalledWith(expect.objectContaining({ capability: 'coding' }));
+    });
+
+    it('forceMode overrides auto selection', async () => {
+      const { callFreeLLMAPI } = await import('../../orchestrator/routing/freellmapi-client.js');
+      await callSelinaLLM({ mode: 'reasoning', messages: [], metadata: { requiresCode: true, forceMode: true } });
+      expect(callFreeLLMAPI).toHaveBeenCalledWith(expect.objectContaining({ capability: 'reasoning' }));
     });
   });
 });

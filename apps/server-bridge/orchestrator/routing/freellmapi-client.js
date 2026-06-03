@@ -1,5 +1,4 @@
-
-export async function callFreeLLMAPI({ mode, messages, profile, metadata }) {
+export async function callFreeLLMAPI({ capability, mode, messages, profile, metadata = {} }) {
   const baseUrl = process.env.FREELLMAPI_BASE_URL || process.env.OPENAI_BASE_URL;
   const apiKey = process.env.FREELLMAPI_API_KEY || process.env.OPENAI_API_KEY;
 
@@ -11,7 +10,7 @@ export async function callFreeLLMAPI({ mode, messages, profile, metadata }) {
   if (chatUrl.endsWith('/v1/chat/completions')) {
     // already correct
   } else if (chatUrl.endsWith('/chat/completions')) {
-    // missing /v1 but has chat completions, leave it or fix it depending on spec, but spec says if baseUrl is .../v1/chat/completions remain that.
+    // missing /v1 but has chat completions
   } else if (chatUrl.endsWith('/v1')) {
     chatUrl += '/chat/completions';
   } else if (chatUrl.endsWith('/v1/')) {
@@ -20,9 +19,11 @@ export async function callFreeLLMAPI({ mode, messages, profile, metadata }) {
     chatUrl += chatUrl.endsWith('/') ? 'v1/chat/completions' : '/v1/chat/completions';
   }
 
-  // Use the exact logger statement
-  // But wait, logger might not be imported. The prompt says "Add clear config validation... Allowed log: [Selina] FreeLLMAPI gateway configured: https://freellmapi-uqzq.onrender.com/v1"
-  // Let's use console.log or standard logging, but wait, the prompt doesn't specify using a specific logger, just "Allowed log:"
+  // Capability determines the fallback model from environment
+  const capabilityUpper = (capability || mode || '').toUpperCase();
+  const envModel = process.env.SELINA_FORCE_MODEL || process.env[`SELINA_${capabilityUpper}_MODEL`] || 'auto';
+  const targetModel = envModel;
+
   console.log(`[Selina] FreeLLMAPI gateway configured: ${baseUrl}`);
 
   const controller = new AbortController();
@@ -37,7 +38,7 @@ export async function callFreeLLMAPI({ mode, messages, profile, metadata }) {
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: profile.model || 'auto',
+        model: targetModel,
         messages,
         temperature: profile.temperature,
         max_tokens: profile.maxTokens,
@@ -70,8 +71,8 @@ export async function callFreeLLMAPI({ mode, messages, profile, metadata }) {
       fallbackAttempts,
       status: response.status,
       durationMs,
-      mode,
-      model: profile.model || 'auto'
+      mode: capability || mode,
+      model: targetModel
     };
 
   } catch (error) {

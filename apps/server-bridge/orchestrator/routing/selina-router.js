@@ -1,7 +1,8 @@
-import { getModelProfile, normalizeMode } from './model-profiles.js';
+import { normalizeCapability, getCapabilityProfile, rankModelsForCapability } from './capability-registry.js';
 import { callFreeLLMAPI } from './freellmapi-client.js';
 import { quotaGuard } from './quota-guard.js';
 import { recordLlmDuration, recordLlmTokenUsage } from '../../utils/metrics.js';
+import { logger } from '../../utils/detailed-logger.js';
 
 export function chooseModeFromTask(taskPrompt) {
   const prompt = (taskPrompt || '').toLowerCase();
@@ -22,22 +23,48 @@ export function chooseModeFromTask(taskPrompt) {
   return 'fast';
 }
 
-export async function callSelinaLLM({ mode, messages, taskPrompt, systemInstruction, userInstruction, fallbackUserInstruction }) {
-  const normalizedMode = normalizeMode(mode || chooseModeFromTask(taskPrompt));
-  const profile = getModelProfile(normalizedMode);
+export async function callSelinaLLM({ mode, messages, taskPrompt, metadata = {} }) {
+  let capabilityName = normalizeCapability(mode || chooseModeFromTask(taskPrompt));
 
-  quotaGuard.assertCanCallMode(normalizedMode);
+  if (!metadata.forceMode) {
+    if (metadata.expectedContextTokens > 12000) {
+      capabilityName = 'large_context';
+    } else if (metadata.requiresJson) {
+      capabilityName = 'json_strict';
+    } else if (metadata.requiresCode) {
+      capabilityName = 'coding';
+    }
+  }
+
+  const profile = getCapabilityProfile(capabilityName);
+  quotaGuard.assertCanCallMode(capabilityName);
+
+  if (process.env.SELINA_FREELLMAPI_PREFLIGHT === 'true' && ['coding', 'large_context', 'reasoning', 'smoke_test'].includes(capabilityName)) {
+    try {
+      // Import dynamically to avoid breaking if the file doesn't exist
+      const { getFreeLLMAPIStatusSnapshot } = await import('./freellmapi-admin-client.js');
+      const snapshot = await getFreeLLMAPIStatusSnapshot();
+      if (snapshot && snapshot.models) {
+        const ranked = rankModelsForCapability(snapshot.models, capabilityName);
+        const top5 = ranked.slice(0, 5).map(m => m.modelId || m.displayName);
+        logger.info('RoutingPreflight', `Recommended models for ${capabilityName}: ${top5.join(', ')}`);
+      }
+    } catch (err) {
+      // Ignore errors if file missing or network issues to not block calls
+    }
+  }
 
   try {
     const result = await callFreeLLMAPI({
-      mode: normalizedMode,
+      capability: capabilityName,
+      mode: capabilityName,
       messages,
       profile,
+      metadata
     });
 
-    quotaGuard.recordRoutingResult({ mode: normalizedMode, status: result.status });
+    quotaGuard.recordRoutingResult({ mode: capabilityName, status: result.status });
 
-    // Record metrics
     recordLlmDuration(result.durationMs / 1000, { provider: 'freellmapi', model: result.model, success: true });
 
     if (result.raw?.usage) {
@@ -51,14 +78,18 @@ export async function callSelinaLLM({ mode, messages, taskPrompt, systemInstruct
        });
     }
 
+    logger.info('Routing', `Completed ${capabilityName} via ${result.routedVia || 'auto'} (${result.durationMs}ms) fallbackAttempts=${result.fallbackAttempts || 0}`);
+
     return result.text;
   } catch (error) {
     quotaGuard.recordRoutingResult({
-      mode: normalizedMode,
+      mode: capabilityName,
       status: error.status || 500,
       error: error.message
     });
     recordLlmDuration(0, { provider: 'freellmapi', model: profile.model || 'auto', success: false });
+
+    logger.error('Routing', `Failed ${capabilityName}: ${error.message}`);
     throw error;
   }
 }
