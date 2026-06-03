@@ -9,6 +9,7 @@ class QuotaGuard {
     const defaultLimits = {
       fast: 20,
       coding: 10,
+      large_context: 4,
       reasoning: 6,
       json_strict: 20,
       smoke_test: 5,

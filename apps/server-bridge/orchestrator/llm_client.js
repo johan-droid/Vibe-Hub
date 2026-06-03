@@ -56,7 +56,8 @@ class LLMClient {
       includeAstContext: false,
     }));
     const fallbackUserInstruction = wrapUserQuery(PromptOrchestrator.buildTaskPrompt(taskPrompt, prunedAstGraph, sandboxError));
-    const cacheKey = `cache:llm:${hashValue({
+    const capabilityOrMode = process.env.SELINA_FORCE_LLM_MODE || chooseModeFromTask(taskPrompt);
+    const cacheKey = `cache:llm:${this.gateway}:${capabilityOrMode}:${hashValue({
       model: this.model,
       openaiModel: this.openaiModel,
       anthropicModel: this.anthropicModel,

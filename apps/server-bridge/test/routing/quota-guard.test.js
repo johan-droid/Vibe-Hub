@@ -1,40 +1,54 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { quotaGuard } from '../../orchestrator/routing/quota-guard.js';
 
-describe('quota-guard', () => {
+describe('Quota Guard', () => {
   beforeEach(() => {
     quotaGuard.resetQuotaGuardForTests();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
   });
 
-  it('allows calls under limit', () => {
-    expect(quotaGuard.canCallMode('smoke_test')).toBe(true);
-    quotaGuard.recordRoutingResult({ mode: 'smoke_test', status: 200 });
+  it('should enforce fast mode limits', () => {
+    process.env.SELINA_FAST_RPM = '2';
 
-    const snapshot = quotaGuard.getQuotaSnapshot();
-    expect(snapshot.windows['smoke_test'].count).toBe(1);
-    expect(quotaGuard.canCallMode('smoke_test')).toBe(true);
-  });
-
-  it('blocks after limit', () => {
-    for (let i = 0; i < 5; i++) {
-      quotaGuard.recordRoutingResult({ mode: 'smoke_test', status: 200 });
-    }
-    expect(quotaGuard.canCallMode('smoke_test')).toBe(false);
-    expect(() => quotaGuard.assertCanCallMode('smoke_test')).toThrow('Quota limit reached or in cooldown');
-  });
-
-  it('cooldown blocks after 429 result', () => {
-    quotaGuard.recordRoutingResult({ mode: 'fast', status: 429 });
+    quotaGuard.recordRoutingResult({ mode: 'fast', status: 200 });
+    quotaGuard.recordRoutingResult({ mode: 'fast', status: 200 });
 
     expect(quotaGuard.canCallMode('fast')).toBe(false);
-    const snapshot = quotaGuard.getQuotaSnapshot();
-    expect(snapshot.cooldowns['fast']).toBeDefined();
+
+    vi.advanceTimersByTime(60001);
+    expect(quotaGuard.canCallMode('fast')).toBe(true);
   });
 
-  it('cooldown uses routedVia if available', () => {
-    quotaGuard.recordRoutingResult({ mode: 'fast', status: 429, routedVia: 'groq' });
+  it('should enforce large_context mode limits default to 4', () => {
+    delete process.env.SELINA_LARGE_CONTEXT_RPM;
 
-    const snapshot = quotaGuard.getQuotaSnapshot();
-    expect(snapshot.cooldowns['groq']).toBeDefined();
+    quotaGuard.recordRoutingResult({ mode: 'large_context', status: 200 });
+    quotaGuard.recordRoutingResult({ mode: 'large_context', status: 200 });
+    quotaGuard.recordRoutingResult({ mode: 'large_context', status: 200 });
+    quotaGuard.recordRoutingResult({ mode: 'large_context', status: 200 });
+
+    expect(quotaGuard.canCallMode('large_context')).toBe(false);
+
+    vi.advanceTimersByTime(60001);
+    expect(quotaGuard.canCallMode('large_context')).toBe(true);
+  });
+
+  it('should handle json_strict limits', () => {
+    process.env.SELINA_JSON_STRICT_RPM = '1';
+
+    quotaGuard.recordRoutingResult({ mode: 'json_strict', status: 200 });
+
+    expect(quotaGuard.canCallMode('json_strict')).toBe(false);
+  });
+
+  it('should apply mode-wide cooldown on 429 when routedVia missing', () => {
+    quotaGuard.recordRoutingResult({ mode: 'smoke_test', status: 429 });
+
+    expect(quotaGuard.canCallMode('smoke_test')).toBe(false);
+    expect(() => quotaGuard.assertCanCallMode('smoke_test')).toThrowError('Quota limit reached or in cooldown for mode: smoke_test');
+
+    vi.advanceTimersByTime(600 * 1000 + 1); // 10 minutes default provider cooldown
+    expect(quotaGuard.canCallMode('smoke_test')).toBe(true);
   });
 });

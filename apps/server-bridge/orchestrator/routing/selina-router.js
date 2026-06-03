@@ -1,22 +1,54 @@
-import { normalizeCapability, getCapabilityProfile, rankModelsForCapability } from './capability-registry.js';
+import { normalizeCapability, getProviderCapability } from './provider-capabilities.js';
+import { recordProviderResult, rankProvidersForCapability } from './provider-budget-manager.js';
 import { callFreeLLMAPI } from './freellmapi-client.js';
 import { quotaGuard } from './quota-guard.js';
 import { recordLlmDuration, recordLlmTokenUsage } from '../../utils/metrics.js';
 import { logger } from '../../utils/detailed-logger.js';
 
-export function chooseModeFromTask(taskPrompt) {
+export function chooseModeFromTask(taskPrompt, metadata = {}) {
+  if (metadata.forceMode) {
+    return metadata.forceMode;
+  }
+
+  if (metadata.requiresJson) {
+    return 'json_strict';
+  }
+
+  if (metadata.requiresCode) {
+    return 'coding';
+  }
+
+  if (metadata.expectedContextTokens > 12000) {
+    return 'large_context';
+  }
+
   const prompt = (taskPrompt || '').toLowerCase();
 
   if (prompt.includes('smoke test') || prompt.includes('test models') || prompt.includes('model availability')) {
     return 'smoke_test';
   }
-  if (prompt.includes('code') || prompt.includes('bug') || prompt.includes('fix') || prompt.includes('refactor') || prompt.includes('test') || prompt.includes('component') || prompt.includes('api')) {
-    return 'coding';
+
+  if (prompt.includes('whole repo') || prompt.includes('entire repo') || prompt.includes('large context') ||
+      prompt.includes('multi-file') || prompt.includes('analyze repository') || prompt.includes('scan repo') ||
+      prompt.includes('full codebase') || prompt.includes('architecture map') || prompt.includes('summarize repo')) {
+    return 'large_context';
   }
-  if (prompt.includes('architecture') || prompt.includes('security') || prompt.includes('deep analysis') || prompt.includes('threat') || prompt.includes('design')) {
+
+  if (prompt.includes('security') || prompt.includes('threat') || prompt.includes('vulnerability') ||
+      prompt.includes('risk') || prompt.includes('deep analysis') || prompt.includes('root cause') ||
+      prompt.includes('architecture')) {
     return 'reasoning';
   }
-  if (prompt.includes('json') || prompt.includes('tool args') || prompt.includes('structured')) {
+
+  if (prompt.includes('code') || prompt.includes('bug') || prompt.includes('fix') ||
+      prompt.includes('refactor') || prompt.includes('test') || prompt.includes('component') ||
+      prompt.includes('api') || prompt.includes('implementation') || prompt.includes('function') ||
+      prompt.includes('class') || prompt.includes('backend') || prompt.includes('frontend')) {
+    return 'coding';
+  }
+
+  if (prompt.includes('json') || prompt.includes('tool args') || prompt.includes('structured') ||
+      prompt.includes('state transition') || prompt.includes('schema')) {
     return 'json_strict';
   }
 
@@ -24,46 +56,41 @@ export function chooseModeFromTask(taskPrompt) {
 }
 
 export async function callSelinaLLM({ mode, messages, taskPrompt, metadata = {} }) {
-  let capabilityName = normalizeCapability(mode || chooseModeFromTask(taskPrompt));
+  const capability = normalizeCapability(mode || chooseModeFromTask(taskPrompt, metadata));
+  const profile = getProviderCapability(capability);
 
-  if (!metadata.forceMode) {
-    if (metadata.expectedContextTokens > 12000) {
-      capabilityName = 'large_context';
-    } else if (metadata.requiresJson) {
-      capabilityName = 'json_strict';
-    } else if (metadata.requiresCode) {
-      capabilityName = 'coding';
-    }
-  }
+  quotaGuard.assertCanCallMode(capability);
 
-  const profile = getCapabilityProfile(capabilityName);
-  quotaGuard.assertCanCallMode(capabilityName);
-
-  if (process.env.SELINA_FREELLMAPI_PREFLIGHT === 'true' && ['coding', 'large_context', 'reasoning', 'smoke_test'].includes(capabilityName)) {
+    if (process.env.SELINA_FREELLMAPI_PREFLIGHT === 'true' && ["'coding'", "'large_context'", "'reasoning'", "'smoke_test'"].includes(capability)) {
     try {
-      // Import dynamically to avoid breaking if the file doesn't exist
       const { getFreeLLMAPIStatusSnapshot } = await import('./freellmapi-admin-client.js');
-      const snapshot = await getFreeLLMAPIStatusSnapshot();
-      if (snapshot && snapshot.models) {
-        const ranked = rankModelsForCapability(snapshot.models, capabilityName);
-        const top5 = ranked.slice(0, 5).map(m => m.modelId || m.displayName);
-        logger.info('RoutingPreflight', `Recommended models for ${capabilityName}: ${top5.join(', ')}`);
-      }
+      await getFreeLLMAPIStatusSnapshot();
     } catch (err) {
-      // Ignore errors if file missing or network issues to not block calls
     }
   }
+
+  const rankedProviders = rankProvidersForCapability(capability);
+  logger.info('Routing', `Selected capability ${capability}. Recommended providers: ${rankedProviders.slice(0, 3).map(p => p.provider).join(', ')}`);
 
   try {
     const result = await callFreeLLMAPI({
-      capability: capabilityName,
-      mode: capabilityName,
+      capability,
+      mode: capability,
       messages,
       profile,
       metadata
     });
 
-    quotaGuard.recordRoutingResult({ mode: capabilityName, status: result.status });
+    recordProviderResult({
+      capability,
+      routedVia: result.routedVia,
+      status: result.status,
+      success: true,
+      durationMs: result.durationMs,
+      fallbackAttempts: result.fallbackAttempts
+    });
+
+    quotaGuard.recordRoutingResult({ mode: capability, status: result.status });
 
     recordLlmDuration(result.durationMs / 1000, { provider: 'freellmapi', model: result.model, success: true });
 
@@ -78,18 +105,30 @@ export async function callSelinaLLM({ mode, messages, taskPrompt, metadata = {} 
        });
     }
 
-    logger.info('Routing', `Completed ${capabilityName} via ${result.routedVia || 'auto'} (${result.durationMs}ms) fallbackAttempts=${result.fallbackAttempts || 0}`);
+    logger.info('Routing', `Completed ${capability} via ${result.routedVia || 'auto'} (${result.durationMs}ms) fallbackAttempts=${result.fallbackAttempts || 0}`);
 
     return result.text;
   } catch (error) {
-    quotaGuard.recordRoutingResult({
-      mode: capabilityName,
+    recordProviderResult({
+      capability,
+      routedVia: error.routedVia,
       status: error.status || 500,
-      error: error.message
+      success: false,
+      durationMs: 0,
+      fallbackAttempts: error.fallbackAttempts,
+      error
     });
+
+    quotaGuard.recordRoutingResult({
+      mode: capability,
+      status: error.status || 500,
+      error: error.message,
+      routedVia: error.routedVia
+    });
+
     recordLlmDuration(0, { provider: 'freellmapi', model: profile.model || 'auto', success: false });
 
-    logger.error('Routing', `Failed ${capabilityName}: ${error.message}`);
+    logger.error('Routing', `Failed ${capability}: ${error.message}`);
     throw error;
   }
 }

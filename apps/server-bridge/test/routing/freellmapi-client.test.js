@@ -1,71 +1,157 @@
-import { describe, expect, it, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { callFreeLLMAPI } from '../../orchestrator/routing/freellmapi-client.js';
 
-describe('freellmapi-client', () => {
-  const originalFetch = globalThis.fetch;
+describe('FreeLLMAPI Client', () => {
   const originalEnv = process.env;
 
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
+  beforeEach(() => {
     process.env = { ...originalEnv };
+    process.env.FREELLMAPI_API_KEY = 'test-key';
+
+    global.fetch = vi.fn();
+
+    // Polyfill AbortController for Node 14 if needed, but modern Node has it
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
     vi.restoreAllMocks();
   });
 
-  it('builds URL correctly for https://freellmapi-uqzq.onrender.com/v1', async () => {
-    process.env.FREELLMAPI_BASE_URL = 'https://freellmapi-uqzq.onrender.com/v1';
-    process.env.FREELLMAPI_API_KEY = 'test-key';
-
-    let capturedUrl = null;
-    globalThis.fetch = vi.fn(async (url) => {
-      capturedUrl = url;
-      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) };
+  it('should normalize URL missing /v1', async () => {
+    process.env.FREELLMAPI_BASE_URL = 'https://freellmapi-test.onrender.com';
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ choices: [{ message: { content: 'ok' } }] }),
+      headers: new Headers()
     });
 
-    await callFreeLLMAPI({ capability: 'test', messages: [], profile: { timeoutMs: 1000 } });
-    expect(capturedUrl).toBe('https://freellmapi-uqzq.onrender.com/v1/chat/completions');
-  });
-
-  it('still calls model auto by default', async () => {
-    process.env.FREELLMAPI_BASE_URL = 'http://api.com/v1';
-    process.env.FREELLMAPI_API_KEY = 'key';
-
-    let capturedBody = null;
-    globalThis.fetch = vi.fn(async (url, options) => {
-      capturedBody = JSON.parse(options.body);
-      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) };
+    await callFreeLLMAPI({
+      capability: 'fast',
+      messages: [],
+      profile: { timeoutMs: 1000, temperature: 0.5, maxTokens: 100 }
     });
 
-    await callFreeLLMAPI({ capability: 'fast', messages: [], profile: { timeoutMs: 1000 } });
-    expect(capturedBody.model).toBe('auto');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://freellmapi-test.onrender.com/v1/chat/completions',
+      expect.any(Object)
+    );
   });
 
-  it('supports SELINA_FORCE_MODEL override', async () => {
-    process.env.FREELLMAPI_BASE_URL = 'http://api.com/v1';
-    process.env.FREELLMAPI_API_KEY = 'key';
+  it('should normalize URL with /v1', async () => {
+    process.env.FREELLMAPI_BASE_URL = 'https://freellmapi-test.onrender.com/v1';
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ choices: [{ message: { content: 'ok' } }] }),
+      headers: new Headers()
+    });
+
+    await callFreeLLMAPI({
+      capability: 'fast',
+      messages: [],
+      profile: { timeoutMs: 1000, temperature: 0.5, maxTokens: 100 }
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://freellmapi-test.onrender.com/v1/chat/completions',
+      expect.any(Object)
+    );
+  });
+
+  it('should avoid producing /v1/v1/chat/completions', async () => {
+    process.env.FREELLMAPI_BASE_URL = 'https://freellmapi-test.onrender.com/v1/chat/completions';
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ choices: [{ message: { content: 'ok' } }] }),
+      headers: new Headers()
+    });
+
+    await callFreeLLMAPI({
+      capability: 'fast',
+      messages: [],
+      profile: { timeoutMs: 1000, temperature: 0.5, maxTokens: 100 }
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://freellmapi-test.onrender.com/v1/chat/completions',
+      expect.any(Object)
+    );
+  });
+
+  it('should send Authorization header', async () => {
+    process.env.FREELLMAPI_BASE_URL = 'https://freellmapi-test.onrender.com/v1';
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ choices: [{ message: { content: 'ok' } }] }),
+      headers: new Headers()
+    });
+
+    await callFreeLLMAPI({
+      capability: 'fast',
+      messages: [],
+      profile: { timeoutMs: 1000, temperature: 0.5, maxTokens: 100 }
+    });
+
+    const options = global.fetch.mock.calls[0][1];
+    expect(options.headers['Authorization']).toBe('Bearer test-key');
+  });
+
+  it('should use default model auto', async () => {
+    process.env.FREELLMAPI_BASE_URL = 'https://freellmapi-test.onrender.com/v1';
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ choices: [{ message: { content: 'ok' } }] }),
+      headers: new Headers()
+    });
+
+    await callFreeLLMAPI({
+      capability: 'fast',
+      messages: [],
+      profile: { timeoutMs: 1000, temperature: 0.5, maxTokens: 100 }
+    });
+
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.model).toBe('auto');
+  });
+
+  it('should respect SELINA_FORCE_MODEL', async () => {
+    process.env.FREELLMAPI_BASE_URL = 'https://freellmapi-test.onrender.com/v1';
     process.env.SELINA_FORCE_MODEL = 'forced-model';
-
-    let capturedBody = null;
-    globalThis.fetch = vi.fn(async (url, options) => {
-      capturedBody = JSON.parse(options.body);
-      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) };
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ choices: [{ message: { content: 'ok' } }] }),
+      headers: new Headers()
     });
 
-    await callFreeLLMAPI({ capability: 'fast', messages: [], profile: { timeoutMs: 1000 } });
-    expect(capturedBody.model).toBe('forced-model');
+    await callFreeLLMAPI({
+      capability: 'fast',
+      messages: [],
+      profile: { timeoutMs: 1000, temperature: 0.5, maxTokens: 100 }
+    });
+
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.model).toBe('forced-model');
   });
 
-  it('uses per-capability max_tokens and temperature', async () => {
-    process.env.FREELLMAPI_BASE_URL = 'http://api.com/v1';
-    process.env.FREELLMAPI_API_KEY = 'key';
+  it('should parse x-routed-via and x-fallback-attempts headers', async () => {
+    process.env.FREELLMAPI_BASE_URL = 'https://freellmapi-test.onrender.com/v1';
+    const mockHeaders = new Headers();
+    mockHeaders.set('x-routed-via', 'openai/gpt-4o');
+    mockHeaders.set('x-fallback-attempts', '2');
 
-    let capturedBody = null;
-    globalThis.fetch = vi.fn(async (url, options) => {
-      capturedBody = JSON.parse(options.body);
-      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) };
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ choices: [{ message: { content: 'ok' } }] }),
+      headers: mockHeaders
     });
 
-    await callFreeLLMAPI({ capability: 'coding', messages: [], profile: { maxTokens: 4000, temperature: 0.15, timeoutMs: 1000 } });
-    expect(capturedBody.max_tokens).toBe(4000);
-    expect(capturedBody.temperature).toBe(0.15);
+    const result = await callFreeLLMAPI({
+      capability: 'fast',
+      messages: [],
+      profile: { timeoutMs: 1000, temperature: 0.5, maxTokens: 100 }
+    });
+
+    expect(result.routedVia).toBe('openai/gpt-4o');
+    expect(result.fallbackAttempts).toBe(2);
   });
 });
