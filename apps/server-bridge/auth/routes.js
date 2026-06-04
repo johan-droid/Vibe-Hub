@@ -23,18 +23,15 @@ import {
 import { consumeOAuthHandoff } from './oauth-store.js';
 import { getUserAuthHistory } from '../db.js';
 import logger from '../utils/detailed-logger.js';
+import { sendError } from '../utils/api-error.js';
+import {
+  authPayloadFromRequest,
+  authPayloadFromSession,
+  buildAuthenticatedResponse,
+  buildUnauthenticatedResponse,
+} from './payload.js';
 
 const router = Router();
-
-function authUserPayload(req) {
-  return {
-    id: req.user.id,
-    email: req.user.email,
-    name: req.user.name,
-    avatarUrl: req.user.avatar_url,
-    provider: req.user.provider
-  };
-}
 
 /**
  * POST /api/auth/refresh
@@ -51,10 +48,10 @@ router.post('/handoff', async (req, res) => {
     const record = await consumeOAuthHandoff(req.body?.code);
     if (!record) {
       clearAuthCookies(res);
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid or expired sign-in handoff.',
-        code: 'INVALID_HANDOFF'
+      return sendError(res, req, {
+        status: 401,
+        code: 'INVALID_HANDOFF',
+        message: 'Invalid or expired sign-in handoff.',
       });
     }
 
@@ -66,17 +63,20 @@ router.post('/handoff', async (req, res) => {
     });
 
     res.set('Cache-Control', 'no-store');
-    return res.json({
-      success: true,
-      authenticated: true,
+    return res.json(buildAuthenticatedResponse({
       user: record.user,
       sessionId: record.session.sessionId,
-      provider: record.provider
-    });
+      provider: record.provider,
+    }));
   } catch (err) {
     logger.error('AuthRoutes', 'OAuth handoff error', err);
     clearAuthCookies(res);
-    return res.status(500).json({ success: false, error: 'Failed to complete sign-in' });
+    return sendError(res, req, {
+      status: 500,
+      code: 'HANDOFF_FAILED',
+      message: 'Failed to complete sign-in',
+      stack: err.stack,
+    });
   }
 });
 
@@ -88,20 +88,13 @@ router.get('/status', optionalAuth, async (req, res) => {
   res.set('Cache-Control', 'no-store');
 
   if (!req.user) {
-    return res.json({
-      success: true,
-      authenticated: false,
-      user: null,
-      sessionId: null
-    });
+    return res.json(buildUnauthenticatedResponse());
   }
 
-  res.json({
-    success: true,
-    authenticated: true,
-    user: authUserPayload(req),
-    sessionId: req.sessionId
-  });
+  res.json(buildAuthenticatedResponse({
+    user: authPayloadFromRequest(req),
+    sessionId: req.sessionId,
+  }));
 });
 
 /**
@@ -122,7 +115,12 @@ router.post('/logout', optionalAuth, async (req, res) => {
     res.json({ success: true, message: 'Logged out successfully' });
   } catch (err) {
     logger.error('AuthRoutes', 'Logout error', err);
-    res.status(500).json({ error: 'Logout failed' });
+    return sendError(res, req, {
+      status: 500,
+      code: 'LOGOUT_FAILED',
+      message: 'Logout failed',
+      stack: err.stack,
+    });
   }
 });
 
@@ -143,7 +141,12 @@ router.post('/logout-all', requireAuth, async (req, res) => {
     res.json({ success: true, message: 'Logged out from all devices' });
   } catch (err) {
     logger.error('AuthRoutes', 'Logout all error', err);
-    res.status(500).json({ error: 'Logout failed' });
+    return sendError(res, req, {
+      status: 500,
+      code: 'LOGOUT_ALL_FAILED',
+      message: 'Logout failed',
+      stack: err.stack,
+    });
   }
 });
 
@@ -175,7 +178,12 @@ router.get('/sessions', requireAuth, async (req, res) => {
     res.json({ success: true, sessions: formattedSessions });
   } catch (err) {
     logger.error('AuthRoutes', 'Get sessions error', err);
-    res.status(500).json({ error: 'Failed to get sessions' });
+    return sendError(res, req, {
+      status: 500,
+      code: 'SESSIONS_LOOKUP_FAILED',
+      message: 'Failed to get sessions',
+      stack: err.stack,
+    });
   }
 });
 
@@ -191,9 +199,10 @@ router.post('/sessions/:id/revoke', requireAuth, async (req, res) => {
 
     // Prevent revoking current session through this endpoint
     if (sessionIdToRevoke === currentSessionId) {
-      return res.status(400).json({
-        error: 'Cannot revoke current session',
-        message: 'Use /logout to end your current session'
+      return sendError(res, req, {
+        status: 400,
+        code: 'CURRENT_SESSION_REVOKE_FORBIDDEN',
+        message: 'Cannot revoke current session. Use /logout to end your current session.',
       });
     }
 
@@ -202,7 +211,12 @@ router.post('/sessions/:id/revoke', requireAuth, async (req, res) => {
     res.json({ success: true, message: 'Session revoked successfully' });
   } catch (err) {
     logger.error('AuthRoutes', 'Revoke session error', err);
-    res.status(500).json({ error: 'Failed to revoke session' });
+    return sendError(res, req, {
+      status: 500,
+      code: 'SESSION_REVOKE_FAILED',
+      message: 'Failed to revoke session',
+      stack: err.stack,
+    });
   }
 });
 
@@ -220,7 +234,12 @@ router.get('/history', requireAuth, async (req, res) => {
     res.json({ success: true, history });
   } catch (err) {
     logger.error('AuthRoutes', 'Get history error', err);
-    res.status(500).json({ error: 'Failed to get auth history' });
+    return sendError(res, req, {
+      status: 500,
+      code: 'AUTH_HISTORY_LOOKUP_FAILED',
+      message: 'Failed to get auth history',
+      stack: err.stack,
+    });
   }
 });
 
@@ -231,17 +250,26 @@ router.get('/history', requireAuth, async (req, res) => {
 router.get('/me', optionalAuth, async (req, res) => {
   try {
     if (!req.user) {
-      return res.status(401).json({ error: 'Not authenticated', code: 'AUTH_REQUIRED' });
+      return sendError(res, req, {
+        status: 401,
+        code: 'AUTH_REQUIRED',
+        message: 'Not authenticated',
+      });
     }
 
     res.json({
       success: true,
-      user: authUserPayload(req),
+      user: authPayloadFromRequest(req),
       sessionId: req.sessionId
     });
   } catch (err) {
     logger.error('AuthRoutes', 'Get me error', err);
-    res.status(500).json({ error: 'Failed to get user info' });
+    return sendError(res, req, {
+      status: 500,
+      code: 'AUTH_ME_FAILED',
+      message: 'Failed to get user info',
+      stack: err.stack,
+    });
   }
 });
 
@@ -254,30 +282,37 @@ router.post('/validate-session', async (req, res) => {
     const { sessionToken } = req.body;
 
     if (!sessionToken) {
-      return res.status(400).json({ error: 'session_token_required' });
+      return sendError(res, req, {
+        status: 400,
+        code: 'SESSION_TOKEN_REQUIRED',
+        message: 'session_token_required',
+      });
     }
 
     const session = await validateSession(sessionToken);
 
     if (!session) {
-      return res.status(401).json({ error: 'invalid_session', code: 'INVALID_SESSION' });
+      return sendError(res, req, {
+        status: 401,
+        code: 'INVALID_SESSION',
+        message: 'invalid_session',
+      });
     }
 
     res.json({
       success: true,
-      user: {
-        id: session.userId,
-        email: session.email,
-        name: session.name,
-        avatarUrl: session.avatarUrl,
-        provider: session.provider
-      },
+      user: authPayloadFromSession(session),
       sessionId: session.sessionId,
       expiresAt: session.expiresAt
     });
   } catch (err) {
     logger.error('AuthRoutes', 'Validate session error', err);
-    res.status(500).json({ error: 'Failed to validate session' });
+    return sendError(res, req, {
+      status: 500,
+      code: 'SESSION_VALIDATE_FAILED',
+      message: 'Failed to validate session',
+      stack: err.stack,
+    });
   }
 });
 
