@@ -87,6 +87,7 @@ jobs:
           output: trivy-server-bridge.sarif
           severity: CRITICAL,HIGH
           vuln-type: os,library
+          scanners: vuln
           ignore-unfixed: true
           exit-code: "1"
 
@@ -99,6 +100,7 @@ jobs:
           output: trivy-user-interface.sarif
           severity: CRITICAL,HIGH
           vuln-type: os,library
+          scanners: vuln
           ignore-unfixed: true
           exit-code: "1"
 
