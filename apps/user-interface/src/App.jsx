@@ -30,6 +30,11 @@ function LoadingScreen() {
   return <FullPageLoader text={SELINA_BRAND.productName} />;
 }
 
+function ProtectedDashboard({ user, authChecked, location }) {
+  if (!authChecked) return <LoadingScreen />;
+  return user ? <Dashboard /> : <Navigate to="/login" replace state={{ from: location }} />;
+}
+
 // ── Application Root ─────────────────────────────────────────────────────────
 export default function App() {
   const { theme, hydrated, user, restorePanelStates, setUser } = useStore();
@@ -64,6 +69,8 @@ export default function App() {
     }
 
     let cancelled = false;
+    setAuthChecked(false);
+    setIsInitializing(true);
 
     async function verifySession() {
       try {
@@ -84,7 +91,7 @@ export default function App() {
       } finally {
         if (!cancelled) {
           setAuthChecked(true);
-          window.setTimeout(() => setIsInitializing(false), 500);
+          window.setTimeout(() => setIsInitializing(false), 150);
         }
       }
     }
@@ -98,7 +105,7 @@ export default function App() {
 
   return (
     <AnimatePresence mode="wait">
-      {(isInitializing || !hydrated || !authChecked) ? (
+      {(isInitializing || !hydrated || !authChecked) && location.pathname !== '/auth/callback' ? (
         <LoadingScreen key="loader" />
       ) : (
         <motion.div
@@ -117,7 +124,7 @@ export default function App() {
                 <Route path="/auth/callback" element={<AuthCallback />} />
                 <Route 
                   path="/dashboard/*" 
-                  element={user ? <Dashboard /> : <Navigate to="/login" replace state={{ from: location }} />} 
+                  element={<ProtectedDashboard user={user} authChecked={authChecked} location={location} />} 
                 />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
