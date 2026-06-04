@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
+FROM docker:27-cli AS docker-cli
+
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app
 
@@ -15,10 +17,16 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3001
 
+# Keep the runtime image minimal for Trivy and production hardening. The app only
+# shells out to the Docker client; it does not need a Docker daemon, containerd,
+# runc, iptables, or the full docker.io Debian package inside this image.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates git docker.io tini \
+  && apt-get upgrade -y \
+  && apt-get install -y --no-install-recommends ca-certificates git tini \
+  && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/server-bridge/node_modules ./apps/server-bridge/node_modules
 COPY package.json package-lock.json ./
