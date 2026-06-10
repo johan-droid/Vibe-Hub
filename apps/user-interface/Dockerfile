@@ -11,7 +11,7 @@ COPY scripts ./scripts
 COPY apps/user-interface/package.json ./apps/user-interface/package.json
 COPY apps/server-bridge/package.json ./apps/server-bridge/package.json
 
-RUN npm ci --workspace=apps/user-interface --include-workspace-root=false
+RUN npm ci --workspace=apps/user-interface --include-workspace-root=false --legacy-peer-deps
 
 COPY apps/user-interface ./apps/user-interface
 RUN npm run build --workspace=apps/user-interface
