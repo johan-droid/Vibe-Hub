@@ -80,7 +80,7 @@ jobs:
         run: docker build -f apps/user-interface/Dockerfile -t "${{ steps.tags.outputs.ui_local }}" .
 
       - name: Scan server image
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@0.29.0
         with:
           image-ref: ${{ steps.tags.outputs.server_local }}
           format: sarif
@@ -93,7 +93,7 @@ jobs:
 
       - name: Scan UI image
         if: always()
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@0.29.0
         with:
           image-ref: ${{ steps.tags.outputs.ui_local }}
           format: sarif

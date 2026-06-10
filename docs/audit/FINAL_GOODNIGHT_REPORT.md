@@ -57,3 +57,6 @@ npm test --workspace=apps/server-bridge
 
 ## 12. Follow-Up Fixes
 - Addressed `ERESOLVE` errors inside `npm ci` Github Action steps during the `immutable-images` job execution by enforcing `--legacy-peer-deps` within Dockerfiles and workflows.
+
+## 13. Trivy CI Pipeline Fix
+- Downgraded `aquasecurity/trivy-action` from `0.36.0` to `0.29.0` in the `.github/workflows/deploy.yml` pipeline. `v0.36.0` suffers from fatal podman socket binding failures when running inside GitHub Actions. This avoids `FATAL Fatal error run error: image scan error` when analyzing the built images.
