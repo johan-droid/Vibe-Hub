@@ -4,7 +4,7 @@ import logger from './detailed-logger.js';
 const optionalUrl = z.string().url().or(z.literal('')).optional();
 const optionalProvider = z.enum(['gemini', 'openai', 'qwen', 'deepseek', 'nim', 'anthropic']).or(z.literal('')).optional();
 const SAME_SITE_VALUES = ['strict', 'lax', 'none'];
-const PLACEHOLDER_PATTERN = /^(change[_-]?me|your[_-]?|example|placeholder|test-secret|secret|password|changeme|todo)/i;
+const PLACEHOLDER_PATTERN = /^(change[_-]?me|your[_-]?|example|placeholder|test-secret|secret|password|changeme)/i;
 
 const envSchema = z.object({
   NODE_ENV: z.string().optional(),
