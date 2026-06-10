@@ -8,7 +8,7 @@ COPY scripts ./scripts
 COPY apps/server-bridge/package.json ./apps/server-bridge/package.json
 COPY apps/user-interface/package.json ./apps/user-interface/package.json
 
-RUN npm ci --omit=dev --workspace=apps/server-bridge --include-workspace-root=false
+RUN npm ci --omit=dev --workspace=apps/server-bridge --include-workspace-root=false --legacy-peer-deps
 
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app

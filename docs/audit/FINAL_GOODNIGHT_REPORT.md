@@ -54,3 +54,6 @@ npm ci --legacy-peer-deps
 npm run build:ui
 npm test --workspace=apps/server-bridge
 ```
+
+## 12. Follow-Up Fixes
+- Addressed `ERESOLVE` errors inside `npm ci` Github Action steps during the `immutable-images` job execution by enforcing `--legacy-peer-deps` within Dockerfiles and workflows.
