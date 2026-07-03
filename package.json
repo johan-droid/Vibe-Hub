@@ -12,32 +12,24 @@
     "frontend",
     "backend"
   ],
-  "dependencies": {
-    "patch-package": "^8.0.1"
-  },
   "scripts": {
-    "postinstall": "node scripts/run-patch-package.mjs",
     "dev:ui": "npm run dev --workspace=frontend",
     "dev:server": "npm run dev --workspace=backend",
     "dev": "npx concurrently -n UI,BRAIN -c cyan,magenta \"npm run dev:ui\" \"npm run dev:server\"",
+    "lint": "npm run lint --workspace=frontend",
+    "test": "npm run test --workspace=frontend && npm run test --workspace=backend",
+    "build": "npm run build --workspace=frontend",
     "build:ui": "npm run build --workspace=frontend",
     "start:server": "npm run start --workspace=backend",
-    "eval:parity": "node scripts/run-parity-eval.mjs",
     "validate": "node --check backend/index.js && node --check backend/orchestrator/index.js && node --check backend/orchestrator/skill-loader.js",
-    "sanitize": "node scripts/selina-sanitize.mjs",
-    "security:audit": "node scripts/selina-security-audit.mjs",
     "test:security": "npm test --workspace=backend -- --run test/security-audit.test.js test/security-regression.test.js",
-    "release:gate": "node scripts/selina-release-gate.mjs",
     "smoke:deploy": "node scripts/smoke-deploy.mjs",
     "docker:build:server": "docker build -f backend/Dockerfile -t vibe-hub/server-bridge:local .",
     "docker:build:ui": "docker build -f frontend/Dockerfile -t vibe-hub/user-interface:local .",
     "docker:build": "npm run docker:build:server && npm run docker:build:ui"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
-    "concurrently": "^9.1.0",
-    "vite": "^7.3.3",
-    "vite-plugin-pwa": "^0.21.1"
+    "concurrently": "^9.1.0"
   },
   "overrides": {
     "workbox-build": {

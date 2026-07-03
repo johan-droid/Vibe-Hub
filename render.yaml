@@ -5,7 +5,7 @@ services:
     runtime: node
     region: oregon
     plan: free
-    rootDir: apps/server-bridge
+    rootDir: backend
     buildCommand: npm ci --legacy-peer-deps --no-audit --no-fund
     startCommand: npm start
     healthCheckPath: /health
@@ -245,7 +245,7 @@ services:
     runtime: static
     region: oregon
     plan: free
-    rootDir: apps/user-interface
+    rootDir: frontend
     buildCommand: npm ci --legacy-peer-deps --no-audit --no-fund && npm run build
     staticPublishPath: dist
     envVars:

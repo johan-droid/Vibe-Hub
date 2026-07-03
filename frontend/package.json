@@ -1,0 +1,72 @@
+{
+  "name": "user-interface",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "npm@10.8.2",
+  "engines": {
+    "node": "22.x",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "@rollup/plugin-terser": "^1.0.0",
+    "@webcontainer/api": "^1.6.4",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "@xyflow/react": "^12.10.2",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.38.0",
+    "idb-keyval": "^6.2.2",
+    "isomorphic-git": "^1.37.5",
+    "lucide-react": "^0.400.0",
+    "react": "^19.2.5",
+    "react-diff-viewer-continued": "^4.2.0",
+    "react-dom": "^19.2.5",
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.14.1",
+    "react-syntax-highlighter": "^16.1.1",
+    "socket.io-client": "^4.8.3",
+    "styled-components": "^6.4.1",
+    "tailwind-merge": "^3.5.0",
+    "uuid": "^14.0.0",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.11.0",
+    "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.57.0",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.0.0",
+    "autoprefixer": "^10.5.0",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.5.0",
+    "jsdom": "^27.3.0",
+    "msw": "^2.12.4",
+    "postcss": "^8.5.13",
+    "tailwindcss": "^3.4.19",
+    "vite": "^8.0.13",
+    "vite-plugin-pwa": "^1.0.0"
+  },
+  "overrides": {
+    "workbox-build": {
+      "@rollup/plugin-terser": "^1.0.0"
+    },
+    "serialize-javascript": "^7.0.5"
+  }
+}
