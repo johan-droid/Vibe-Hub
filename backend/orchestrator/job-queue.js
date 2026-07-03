@@ -441,9 +441,9 @@ function buildBackoff({ delay, jitter }) {
 
 function buildQueueNames(baseName) {
   return {
-    interactive: `${baseName}:interactive`,
-    background: `${baseName}:background`,
-    deadLetter: `${baseName}:dead-letter`,
+    interactive: `${baseName}-interactive`,
+    background: `${baseName}-background`,
+    deadLetter: `${baseName}-dead-letter`,
   };
 }
 
