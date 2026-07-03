@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
+import { resolveVibeMasterKey } from '../auth/dev-secrets.js';
 
 /**
  * KeyManager — Phase 6 Security Implementation
@@ -11,15 +12,11 @@ import path from 'path';
 class KeyManager {
   constructor() {
     this.storagePath = path.join(process.cwd(), 'data', 'security', 'vault.json');
-    if (!process.env.VIBE_MASTER_KEY) {
-      if (process.env.NODE_ENV === 'test') {
-        this.masterKey = crypto.randomBytes(32).toString('hex');
-        this.keys = new Map();
-        return;
-      }
+    const masterKey = resolveVibeMasterKey();
+    if (!masterKey) {
       throw new Error('FATAL SECURITY ERROR: VIBE_MASTER_KEY is required. Set it in Render Dashboard env vars or apply render.yaml with VIBE_MASTER_KEY generateValue; do not commit this secret.');
     }
-    this.masterKey = process.env.VIBE_MASTER_KEY;
+    this.masterKey = masterKey;
     this.keys = new Map();
   }
 

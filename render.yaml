@@ -25,13 +25,24 @@ services:
       - key: CSRF_SAME_SITE
         value: none
 
-      # Provider MoE: NIM/Qwen Coder primary, explicit credential-gated fallbacks.
+      # FreeLLMAPI is the only active model provider in production.
+      # Capability-specific model keys default to auto-routing.
+      - key: SELINA_LLM_GATEWAY
+        value: freellmapi
       - key: SELINA_MODEL_PROVIDER
-        value: nim
+        value: freellmapi
       - key: SELINA_AGENT_PROVIDER
-        value: nim
-      - key: SELINA_MODEL_FALLBACKS
-        value: openai,anthropic,qwen,gemini
+        value: freellmapi
+      - key: SELINA_EXPERT_CODE_PROVIDER
+        value: freellmapi
+      - key: SELINA_EXPERT_DEBUG_PROVIDER
+        value: freellmapi
+      - key: SELINA_EXPERT_MANAGER_PROVIDER
+        value: freellmapi
+      - key: SELINA_CODING_MODEL_PROVIDER
+        value: freellmapi
+      - key: SELINA_WORKER_PROVIDER
+        value: freellmapi
       - key: SELINA_MODEL_TIMEOUT_MS
         value: 45000
       - key: SELINA_MODEL_RETRIES
@@ -42,39 +53,30 @@ services:
         value: 24000
       - key: SELINA_MAX_OUTPUT_TOKENS
         value: 2048
-      - key: SELINA_EXPERT_CODE_PROVIDER
-        value: nim
-      - key: SELINA_EXPERT_DEBUG_PROVIDER
-        value: nim
-      - key: SELINA_EXPERT_MANAGER_PROVIDER
-        value: nim
       - key: SELINA_ENABLE_JSONRPC_EVENTS
-        value: true
-      - key: NIM_BASE_URL
-        value: https://integrate.api.nvidia.com/v1
-      - key: NIM_MODEL
-        value: meta/llama-4-maverick-17b-128e-instruct
-      - key: NIM_TEMPERATURE
-        value: 1.0
-      - key: NIM_TOP_P
-        value: 1.0
-      - key: NIM_FREQUENCY_PENALTY
-        value: 0.0
-      - key: NIM_PRESENCE_PENALTY
-        value: 0.0
-      - key: OPENAI_API_MODE
-        value: responses
+        value: 
+          true
+      - key: FREELLMAPI_BASE_URL
+        value: https://freellmapi-uqzq.onrender.com/v1
+      - key: FREELLMAPI_MODEL
+        value: auto
+      - key: SELINA_FAST_MODEL
+        value: auto
+      - key: SELINA_CODING_MODEL
+        value: auto
+      - key: SELINA_LARGE_CONTEXT_MODEL
+        value: auto
+      - key: SELINA_REASONING_MODEL
+        value: auto
+      - key: SELINA_JSON_STRICT_MODEL
+        value: auto
+      - key: SELINA_SMOKE_TEST_MODEL
+        value: auto
+      - key: SELINA_FORCE_MODEL
+        value: ''
 
-      # Secrets: fill or rotate in Render Dashboard. Never commit values.
-      - key: NIM_API_KEY
-        sync: false
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: ANTHROPIC_API_KEY
-        sync: false
-      - key: QWEN_API_KEY
-        sync: false
-      - key: GEMINI_API_KEY
+      # Secret: fill or rotate in Render Dashboard. Never commit values.
+      - key: FREELLMAPI_API_KEY
         sync: false
       - key: JWT_SECRET
         generateValue: true

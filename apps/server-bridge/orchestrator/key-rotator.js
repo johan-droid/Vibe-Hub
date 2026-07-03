@@ -8,6 +8,7 @@ export class ProviderExhaustedError extends Error {
 export class KeyRotator {
     constructor() {
         this.keys = {
+            freellmapi: splitKeys(process.env.FREELLMAPI_KEYS || process.env.FREELLMAPI_API_KEY),
             groq: splitKeys(process.env.GROQ_KEYS || process.env.GROQ_API_KEY),
             qwen: splitKeys(process.env.QWEN_KEYS || process.env.QWEN_API_KEY),
             deepseek: splitKeys(process.env.DEEPSEEK_KEYS || process.env.DEEPSEEK_API_KEY),
@@ -15,6 +16,7 @@ export class KeyRotator {
             gemini: splitKeys(process.env.GEMINI_KEYS || process.env.GEMINI_API_KEY)
         };
         this.currentIndex = {
+            freellmapi: 0,
             groq: 0,
             qwen: 0,
             deepseek: 0,

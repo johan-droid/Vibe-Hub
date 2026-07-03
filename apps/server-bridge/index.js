@@ -433,8 +433,8 @@ app.get('/ready', async (_req, res) => {
 
 // ── User profile (protected) ──────────────────────────────────────────────────
 function handleMe(req, res) {
-  const { id, email, name, avatar_url, provider } = req.user;
-  res.json({ id, email, name, avatarUrl: avatar_url, provider });
+  const { id, email, name, avatarUrl, avatar_url, provider } = req.user;
+  res.json({ id, email, name, avatarUrl: avatarUrl || avatar_url || null, provider });
 }
 
 app.get('/api/me', requireAuth, handleMe);

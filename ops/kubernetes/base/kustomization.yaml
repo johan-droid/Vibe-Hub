@@ -1,8 +1,0 @@
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-namespace: vibe-hub
-resources:
-  - namespace.yaml
-  - network-policies.yaml
-  - server-bridge.yaml
-  - user-interface.yaml

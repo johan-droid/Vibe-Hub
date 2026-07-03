@@ -87,8 +87,8 @@ class LLMClient {
 
 
   hasFreeLLMAPIConfig() {
-    const baseUrl = process.env.FREELLMAPI_BASE_URL || process.env.OPENAI_BASE_URL;
-    const apiKey = process.env.FREELLMAPI_API_KEY || process.env.OPENAI_API_KEY;
+    const baseUrl = process.env.FREELLMAPI_BASE_URL;
+    const apiKey = process.env.FREELLMAPI_API_KEY;
     return Boolean(baseUrl && apiKey);
   }
 

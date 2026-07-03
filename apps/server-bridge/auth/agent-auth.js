@@ -1,6 +1,7 @@
 import { createSecretProvider } from './secret-provider.js';
 
 const PROVIDER_CREDENTIALS = Object.freeze({
+  freellmapi: ['FREELLMAPI_API_KEY'],
   gemini: ['GEMINI_API_KEY', 'LLM_API_KEY'],
   openai: ['OPENAI_API_KEY'],
   qwen: ['QWEN_API_KEY'],

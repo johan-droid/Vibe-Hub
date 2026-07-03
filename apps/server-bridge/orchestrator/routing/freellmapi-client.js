@@ -1,9 +1,9 @@
 export async function callFreeLLMAPI({ capability, mode, messages, profile, metadata = {} }) {
-  const baseUrl = process.env.FREELLMAPI_BASE_URL || process.env.OPENAI_BASE_URL;
-  const apiKey = process.env.FREELLMAPI_API_KEY || process.env.OPENAI_API_KEY;
+  const baseUrl = process.env.FREELLMAPI_BASE_URL;
+  const apiKey = process.env.FREELLMAPI_API_KEY;
 
   if (!baseUrl || !apiKey) {
-    throw new Error("FreeLLMAPI is not configured. Set FREELLMAPI_BASE_URL and FREELLMAPI_API_KEY, or OPENAI_BASE_URL and OPENAI_API_KEY.");
+    throw new Error("FreeLLMAPI is not configured. Set FREELLMAPI_BASE_URL and FREELLMAPI_API_KEY.");
   }
 
   let chatUrl = baseUrl;
@@ -21,7 +21,7 @@ export async function callFreeLLMAPI({ capability, mode, messages, profile, meta
 
   // Capability determines the fallback model from environment
   const capabilityUpper = (capability || mode || '').toUpperCase();
-  const envModel = process.env.SELINA_FORCE_MODEL || process.env[`SELINA_${capabilityUpper}_MODEL`] || 'auto';
+  const envModel = process.env.SELINA_FORCE_MODEL || process.env[`SELINA_${capabilityUpper}_MODEL`] || process.env.FREELLMAPI_MODEL || 'auto';
   const targetModel = envModel;
 
   console.log(`[Selina] FreeLLMAPI gateway configured: ${baseUrl}`);
@@ -41,7 +41,7 @@ export async function callFreeLLMAPI({ capability, mode, messages, profile, meta
         model: targetModel,
         messages,
         temperature: profile.temperature,
-        max_tokens: profile.maxTokens,
+        max_tokens: profile.maxTokens ?? profile.maxOutputTokens ?? 2048,
         stream: false,
       }),
       signal: controller.signal,

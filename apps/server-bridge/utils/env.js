@@ -2,7 +2,7 @@ import { z } from 'zod';
 import logger from './detailed-logger.js';
 
 const optionalUrl = z.string().url().or(z.literal('')).optional();
-const optionalProvider = z.enum(['gemini', 'openai', 'qwen', 'deepseek', 'nim', 'anthropic']).or(z.literal('')).optional();
+const optionalProvider = z.enum(['freellmapi', 'gemini', 'openai', 'qwen', 'deepseek', 'nim', 'anthropic']).or(z.literal('')).optional();
 
 const envSchema = z.object({
   NODE_ENV: z.string().optional(),
@@ -14,6 +14,8 @@ const envSchema = z.object({
   VIBE_MASTER_KEY: z.string().optional(),
   SELINA_ACTION_GRANT_SECRET: z.string().optional(),
   UI_ORIGIN: z.string().optional(),
+  FREELLMAPI_BASE_URL: optionalUrl,
+  FREELLMAPI_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_API_MODE: z.enum(['responses', 'chat']).optional(),
@@ -34,6 +36,7 @@ const envSchema = z.object({
 });
 
 const PROVIDER_ENV_KEYS = {
+  freellmapi: 'FREELLMAPI_API_KEY',
   gemini: 'GEMINI_API_KEY',
   openai: 'OPENAI_API_KEY',
   qwen: 'QWEN_API_KEY',
@@ -43,10 +46,12 @@ const PROVIDER_ENV_KEYS = {
 };
 
 const PROVIDER_ENV_ALIASES = {
+  freellmapi: ['FREELLMAPI_API_KEY'],
   nim: ['NIM_API_KEY', 'NVIDIA_API_KEY', 'NVIDIA_NIM_API_KEY'],
 };
 
 function configuredProviderFromEnv(env = {}) {
+  if (env.FREELLMAPI_API_KEY) return 'freellmapi';
   if (env.NIM_API_KEY || env.NVIDIA_API_KEY || env.NVIDIA_NIM_API_KEY) return 'nim';
   if (env.OPENAI_API_KEY) return 'openai';
   if (env.QWEN_API_KEY) return 'qwen';
@@ -75,6 +80,7 @@ export function validateEnvironment(env = process.env) {
     hasVibeMasterKey: !!env.VIBE_MASTER_KEY,
     hasActionGrantSecret: !!env.SELINA_ACTION_GRANT_SECRET,
     hasUiOrigin: !!env.UI_ORIGIN,
+    hasFreeLLMAPIKey: !!env.FREELLMAPI_API_KEY,
     hasGeminiKey: !!env.GEMINI_API_KEY,
     hasNimKey: !!(env.NIM_API_KEY || env.NVIDIA_API_KEY || env.NVIDIA_NIM_API_KEY),
   });
@@ -92,6 +98,9 @@ export function validateEnvironment(env = process.env) {
     const providerAliases = PROVIDER_ENV_ALIASES[activeProvider] || [providerKey].filter(Boolean);
     if (providerAliases.length > 0 && !providerAliases.some(key => env[key])) {
       missing.push(providerAliases.join('|'));
+    }
+    if (activeProvider === 'freellmapi' && !env.FREELLMAPI_BASE_URL) {
+      missing.push('FREELLMAPI_BASE_URL');
     }
 
     if (missing.length > 0) {

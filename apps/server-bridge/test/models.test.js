@@ -49,6 +49,31 @@ describe('ModelService gateway', () => {
     expect(JSON.stringify(diagnostics)).not.toContain('sk-secret-value');
   });
 
+  it('selects a FreeLLMAPI profile with auto routing and exposes gateway status', () => {
+    const service = new ModelService({
+      SELINA_MODEL_PROVIDER: 'freellmapi',
+      FREELLMAPI_API_KEY: 'free-secret-value',
+      FREELLMAPI_BASE_URL: 'https://freellmapi-uqzq.onrender.com/v1',
+      FREELLMAPI_MODEL: 'auto',
+    });
+
+    const profile = service.selectProfile({ effortLevel: 'quick', domain: 'code' });
+    expect(profile).toMatchObject({
+      provider: 'freellmapi',
+      apiMode: 'chat',
+      model: 'auto',
+    });
+    expect(service.providerKind(profile)).toBe('openai-compatible');
+
+    const diagnostics = service.diagnostics();
+    expect(diagnostics.providerStatus.freellmapi).toMatchObject({
+      configured: true,
+      model: 'auto',
+      baseUrl: 'https://freellmapi-uqzq.onrender.com/v1',
+    });
+    expect(JSON.stringify(diagnostics)).not.toContain('free-secret-value');
+  });
+
   it('selects a NIM Llama 4 Maverick profile without exposing secrets', () => {
     const service = new ModelService({
       SELINA_MODEL_PROVIDER: 'nim',

@@ -1,10 +1,11 @@
 import crypto from 'crypto';
 import { v4 as uuid } from 'uuid';
+import { resolveActionGrantSecret } from './dev-secrets.js';
 
 const DEFAULT_TTL_MS = 120_000;
 
 function secret() {
-  const value = process.env.SELINA_ACTION_GRANT_SECRET;
+  const value = resolveActionGrantSecret();
   if (value) return value;
   throw new Error('CRITICAL SECURITY ERROR: SELINA_ACTION_GRANT_SECRET is missing. This key is mandatory for signing Action Grants and must be isolated from JWT_SECRET to prevent forgery.');
 }

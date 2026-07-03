@@ -31,7 +31,7 @@ function authUserPayload(req) {
     id: req.user.id,
     email: req.user.email,
     name: req.user.name,
-    avatarUrl: req.user.avatar_url,
+    avatarUrl: req.user.avatarUrl || req.user.avatar_url || null,
     provider: req.user.provider
   };
 }

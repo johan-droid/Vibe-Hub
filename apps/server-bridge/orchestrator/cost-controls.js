@@ -197,6 +197,7 @@ function getLlmCallsPerMinute() {
 
 function smallModelForProvider(provider, fallbackModel) {
   return {
+    freellmapi: process.env.FREELLMAPI_SMALL_MODEL || process.env.FREELLMAPI_MODEL || 'auto',
     gemini: process.env.GEMINI_SMALL_MODEL || 'gemini-1.5-flash',
     openai: process.env.OPENAI_SMALL_MODEL || 'gpt-4o-mini',
     qwen: process.env.QWEN_SMALL_MODEL || 'qwen/qwen2.5-coder-7b-instruct',

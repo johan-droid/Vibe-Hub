@@ -1,4 +1,4 @@
-const SUPPORTED_PROVIDERS = ['nim', 'openai', 'anthropic', 'qwen', 'gemini'];
+const SUPPORTED_PROVIDERS = ['freellmapi', 'nim', 'openai', 'anthropic', 'qwen', 'gemini'];
 
 const CODE_DOMAINS = new Set(['code', 'ui', 'git', 'architect', 'motion', 'artist']);
 const DEBUG_DOMAINS = new Set(['debug', 'reviewer', 'security', 'creative']);
@@ -14,10 +14,11 @@ function configuredProviders(modelService) {
 }
 
 function defaultProviderForDomain(domain, env = process.env) {
-  if (domain === 'manager') return normalizeProvider(env.SELINA_EXPERT_MANAGER_PROVIDER) || 'nim';
-  if (DEBUG_DOMAINS.has(domain)) return normalizeProvider(env.SELINA_EXPERT_DEBUG_PROVIDER) || 'nim';
-  if (CODE_DOMAINS.has(domain)) return normalizeProvider(env.SELINA_EXPERT_CODE_PROVIDER) || 'nim';
-  return normalizeProvider(env.SELINA_EXPERT_CODE_PROVIDER) || 'nim';
+  const defaultProvider = normalizeProvider(env.SELINA_MODEL_PROVIDER || env.SELINA_AGENT_PROVIDER) || 'freellmapi';
+  if (domain === 'manager') return normalizeProvider(env.SELINA_EXPERT_MANAGER_PROVIDER) || defaultProvider;
+  if (DEBUG_DOMAINS.has(domain)) return normalizeProvider(env.SELINA_EXPERT_DEBUG_PROVIDER) || defaultProvider;
+  if (CODE_DOMAINS.has(domain)) return normalizeProvider(env.SELINA_EXPERT_CODE_PROVIDER) || defaultProvider;
+  return normalizeProvider(env.SELINA_EXPERT_CODE_PROVIDER) || defaultProvider;
 }
 
 function fallbackOrder(primary, env = process.env) {
@@ -25,7 +26,7 @@ function fallbackOrder(primary, env = process.env) {
     .split(',')
     .map(normalizeProvider)
     .filter(Boolean);
-  const defaults = ['nim', 'openai', 'anthropic', 'qwen', 'gemini'];
+  const defaults = ['freellmapi', 'nim', 'openai', 'anthropic', 'qwen', 'gemini'];
   return [primary, ...configured, ...defaults]
     .filter(Boolean)
     .filter((provider, index, all) => all.indexOf(provider) === index);

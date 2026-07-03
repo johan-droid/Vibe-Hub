@@ -88,4 +88,22 @@ describe('Environment validation', () => {
     expect(parsed.SELINA_MODEL_PROVIDER).toBe('deepseek');
     expect(parsed.DEEPSEEK_API_KEY).toBe('deepseek-key-for-tests');
   });
+
+  it('accepts FreeLLMAPI as the selected production provider', () => {
+    const env = {
+      ...productionBaseEnv,
+      SELINA_MODEL_PROVIDER: 'freellmapi',
+      SELINA_AGENT_PROVIDER: 'freellmapi',
+      SELINA_EXPERT_CODE_PROVIDER: 'freellmapi',
+      SELINA_EXPERT_DEBUG_PROVIDER: 'freellmapi',
+      SELINA_EXPERT_MANAGER_PROVIDER: 'freellmapi',
+      FREELLMAPI_BASE_URL: 'https://freellmapi-uqzq.onrender.com/v1',
+      FREELLMAPI_API_KEY: 'freellmapi-key-for-tests',
+      NIM_API_KEY: '',
+    };
+
+    const parsed = validateEnvironment(env);
+
+    expect(parsed.FREELLMAPI_API_KEY).toBe('freellmapi-key-for-tests');
+  });
 });

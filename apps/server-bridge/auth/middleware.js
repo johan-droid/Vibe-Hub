@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { setTraceUser } from '../utils/tracing.js';
 import { verifyExternalJwt, isExternalJwtConfigured } from './external-jwt.js';
 import { attachTenantContext, TenantContextError } from './tenant.js';
+import { resolveJwtSecret } from './dev-secrets.js';
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   validateAccessTokenSession,
@@ -11,7 +12,7 @@ import {
   rotateRefreshToken,
 } from './session.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'test' || process.env.VITEST ? 'test-secret' : undefined);
+const JWT_SECRET = resolveJwtSecret();
 const AUTH_COOKIES = {
   access: 'selina_access_token',
   session: 'selina_session',

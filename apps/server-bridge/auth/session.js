@@ -12,6 +12,7 @@ import logger from '../utils/detailed-logger.js';
 
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
+import { resolveJwtSecret } from './dev-secrets.js';
 import {
   createUserSession,
   getUserSessionById,
@@ -30,7 +31,7 @@ import {
   logAuthEvent
 } from '../db.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'test' || process.env.VITEST ? 'test-secret' : undefined);
+const JWT_SECRET = resolveJwtSecret();
 const SESSION_EXPIRY_DAYS = parseInt(process.env.SESSION_EXPIRY_DAYS || '30', 10);
 const REFRESH_TOKEN_EXPIRY_DAYS = parseInt(process.env.REFRESH_TOKEN_EXPIRY_DAYS || '90', 10);
 const MAX_CONCURRENT_SESSIONS = parseInt(process.env.MAX_CONCURRENT_SESSIONS || '10', 10);

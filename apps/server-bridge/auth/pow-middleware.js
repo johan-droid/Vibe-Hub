@@ -7,8 +7,6 @@
 
 import crypto from 'crypto';
 
-const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'test' || process.env.VITEST ? 'test-secret' : undefined);
-
 /**
  * Express middleware to throttle registration/login endpoints using a client puzzle verification.
  * Client must submit powNonce and powTimestamp in req.body.

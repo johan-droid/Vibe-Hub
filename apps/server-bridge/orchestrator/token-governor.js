@@ -43,6 +43,12 @@ export class TokenGovernor {
       throw new TypeError('TokenGovernor.getCompute requires an API execution callback');
     }
 
+    const freellmapiActive = process.env.SELINA_LLM_GATEWAY === 'freellmapi' || !!process.env.FREELLMAPI_API_KEY;
+    if (freellmapiActive) {
+      const freellmapi = budgetAwareModel('freellmapi', workerModelForProvider('freellmapi'), options);
+      return this.rotator.executeWithRotation('freellmapi', (key) => apiCallFn(key, freellmapi.model, 'freellmapi'));
+    }
+
     // Dynamic emergency model hot-swap override
     if (opsConfig.llmProviderOverride) {
       const activeProvider = opsConfig.llmProviderOverride;
@@ -271,20 +277,28 @@ function isProviderUnavailable(error, provider) {
 }
 
 function inferProvider(model) {
-  if (model.startsWith('gemini')) return 'gemini';
-  if (model.includes('nemotron')) return 'nim';
-  if (model.includes('qwen')) return 'qwen';
-  if (model.includes('deepseek')) return 'deepseek';
+  const normalized = String(model || '').toLowerCase();
+  if (normalized === 'auto') {
+    return process.env.SELINA_LLM_GATEWAY === 'freellmapi' || process.env.FREELLMAPI_API_KEY ? 'freellmapi' : 'groq';
+  }
+  if (normalized.startsWith('gemini')) return 'gemini';
+  if (normalized.includes('freellmapi')) return 'freellmapi';
+  if (normalized.includes('nemotron')) return 'nim';
+  if (normalized.includes('qwen')) return 'qwen';
+  if (normalized.includes('deepseek')) return 'deepseek';
   return 'groq';
 }
 
 function normalizeWorkerProvider(provider) {
   const normalized = String(provider || 'groq').trim().toLowerCase();
-  if (['qwen', 'deepseek', 'groq'].includes(normalized)) return normalized;
+  if (['freellmapi', 'qwen', 'deepseek', 'groq'].includes(normalized)) return normalized;
   return 'groq';
 }
 
 function workerModelForProvider(provider) {
+  if (provider === 'freellmapi') {
+    return process.env.FREELLMAPI_MODEL || 'auto';
+  }
   if (provider === 'qwen') {
     return process.env.QWEN_CODER_MODEL || process.env.QWEN_MODEL || 'qwen/qwen2.5-coder-32b-instruct';
   }
@@ -335,7 +349,9 @@ async function callOpenAICompatibleChat(key, model, systemPrompt, userPrompt, op
       ? (process.env.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1')
       : provider === 'deepseek'
         ? (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1')
-        : (process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1');
+        : provider === 'freellmapi'
+          ? (process.env.FREELLMAPI_BASE_URL || 'https://freellmapi-uqzq.onrender.com/v1')
+          : (process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1');
 
   const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',

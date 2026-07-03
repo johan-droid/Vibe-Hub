@@ -16,6 +16,8 @@ import {
 import { redactPromptLikeFields } from './prompt-secrets.js';
 
 const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
+const DEFAULT_FREELLMAPI_MODEL = 'auto';
+const DEFAULT_FREELLMAPI_BASE_URL = 'https://freellmapi-uqzq.onrender.com/v1';
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 const DEFAULT_QWEN_MODEL = 'qwen/qwen2.5-coder-32b-instruct';
 const DEFAULT_DEEPSEEK_MODEL = 'deepseek-coder';
@@ -28,9 +30,10 @@ const DEFAULT_RETRIES = 2;
 const DEFAULT_RETRY_AFTER_CAP_MS = 8_000;
 const DEFAULT_HISTORY_BUDGET = 24_000;
 const AUDIT_LIMIT = 250;
-const SUPPORTED_PROVIDERS = Object.freeze(['gemini', 'openai', 'qwen', 'deepseek', 'nim', 'anthropic']);
+const SUPPORTED_PROVIDERS = Object.freeze(['freellmapi', 'gemini', 'openai', 'qwen', 'deepseek', 'nim', 'anthropic']);
 
 function configuredProviderFromEnv(env = {}) {
+  if (env.FREELLMAPI_API_KEY) return 'freellmapi';
   if (env.NIM_API_KEY || env.NVIDIA_API_KEY || env.NVIDIA_NIM_API_KEY) return 'nim';
   if (env.OPENAI_API_KEY) return 'openai';
   if (env.QWEN_API_KEY) return 'qwen';
@@ -266,6 +269,7 @@ export class ModelService {
   selectProfile({ modelName = DEFAULT_GEMINI_MODEL, effortLevel = 'standard', domain = 'code', provider: providerOverride = null } = {}) {
     const provider = resolveProvider(this.env, providerOverride);
     const providerModel = {
+      freellmapi: this.env.FREELLMAPI_MODEL || this.env.SELINA_MODEL || DEFAULT_FREELLMAPI_MODEL,
       gemini: this.env.GEMINI_MODEL || this.env.SELINA_MODEL || modelName || DEFAULT_GEMINI_MODEL,
       openai: this.env.OPENAI_MODEL || this.env.SELINA_MODEL || DEFAULT_OPENAI_MODEL,
       qwen: this.env.QWEN_MODEL || this.env.SELINA_MODEL || DEFAULT_QWEN_MODEL,
@@ -323,7 +327,7 @@ export class ModelService {
       ? ` Retry-after hint: ${Math.ceil(classification.retryAfterMs / 1000)}s.`
       : '';
     const fallbackHint = classification.fallbackable
-      ? ' Configure SELINA_MODEL_PROVIDER to another provider, or set SELINA_MODEL_FALLBACKS=nim,openai,qwen,anthropic,gemini with matching API keys.'
+      ? ' Configure SELINA_MODEL_PROVIDER to another configured provider, or set SELINA_MODEL_FALLBACKS/SELINA_PROVIDER_FALLBACKS with matching API keys.'
       : '';
 
     return `${profile.provider}:${profile.model} failed with ${classification.code}.${retry}${fallbackHint}`;
@@ -333,6 +337,11 @@ export class ModelService {
     const activeProvider = resolveProvider(this.env);
     return {
       activeProvider,
+      freellmapi: {
+        configured: this.authManager.hasProvider('freellmapi'),
+        model: this.env.FREELLMAPI_MODEL || DEFAULT_FREELLMAPI_MODEL,
+        baseUrl: this.env.FREELLMAPI_BASE_URL || DEFAULT_FREELLMAPI_BASE_URL,
+      },
       gemini: { configured: this.authManager.hasProvider('gemini'), model: this.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL },
       openai: {
         configured: this.authManager.hasProvider('openai'),
@@ -720,6 +729,10 @@ export class ModelService {
   async openAICompatibleChat({ profile, messages, tools = [], jsonMode = false, responseFormat = null, meta = {} }) {
     profile = this.prepareProfileForCall(profile, meta);
     const providerConfig = {
+      freellmapi: {
+        baseUrl: this.env.FREELLMAPI_BASE_URL || DEFAULT_FREELLMAPI_BASE_URL,
+        headerName: 'Authorization',
+      },
       openai: {
         baseUrl: this.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
         headerName: 'Authorization',
@@ -904,7 +917,7 @@ export class ModelService {
   }
 
   providerKind(profile) {
-    if (profile.provider === 'qwen' || profile.provider === 'deepseek' || profile.provider === 'openai' || profile.provider === 'nim') return 'openai-compatible';
+    if (profile.provider === 'freellmapi' || profile.provider === 'qwen' || profile.provider === 'deepseek' || profile.provider === 'openai' || profile.provider === 'nim') return 'openai-compatible';
     if (profile.provider === 'anthropic') return 'anthropic';
     return 'gemini';
   }
@@ -956,6 +969,7 @@ export class ModelService {
 
   providerSecretPreview(provider) {
     const key = {
+      freellmapi: this.authManager.getBearerToken('freellmapi'),
       gemini: this.authManager.getBearerToken('gemini'),
       openai: this.authManager.getBearerToken('openai'),
       qwen: this.authManager.getBearerToken('qwen'),

@@ -2,6 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TokenGovernor, callRoutedTextModel } from '../orchestrator/token-governor.js';
 
 const MANAGED_ENV_KEYS = [
+  'FREELLMAPI_KEYS',
+  'FREELLMAPI_API_KEY',
+  'FREELLMAPI_BASE_URL',
+  'FREELLMAPI_MODEL',
+  'SELINA_LLM_GATEWAY',
   'GROQ_KEYS',
   'GROQ_API_KEY',
   'SELINA_CODING_MODEL_PROVIDER',
@@ -98,6 +103,26 @@ describe('TokenGovernor', () => {
       key: 'deepseek-key',
       model: 'deepseek-coder-test',
       provider: 'deepseek'
+    });
+  });
+
+  it('routes all compute through FreeLLMAPI when the gateway is active', async () => {
+    process.env.SELINA_LLM_GATEWAY = 'freellmapi';
+    process.env.FREELLMAPI_API_KEY = 'freellmapi-key';
+    process.env.FREELLMAPI_BASE_URL = 'https://freellmapi-uqzq.onrender.com/v1';
+    process.env.FREELLMAPI_MODEL = 'auto';
+    const governor = new TokenGovernor();
+
+    const result = await governor.getCompute('high', 'planner', async (key, model, provider) => ({
+      key,
+      model,
+      provider
+    }));
+
+    expect(result).toEqual({
+      key: 'freellmapi-key',
+      model: 'auto',
+      provider: 'freellmapi'
     });
   });
 
