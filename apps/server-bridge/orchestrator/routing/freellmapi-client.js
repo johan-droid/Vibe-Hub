@@ -7,10 +7,13 @@ export async function callFreeLLMAPI({ capability, mode, messages, profile, meta
   }
 
   let chatUrl = baseUrl;
+
+  // Normalize URL to always end in /v1/chat/completions exactly once
   if (chatUrl.endsWith('/v1/chat/completions')) {
     // already correct
   } else if (chatUrl.endsWith('/chat/completions')) {
     // missing /v1 but has chat completions
+    chatUrl = chatUrl.replace(/\/chat\/completions$/, '/v1/chat/completions');
   } else if (chatUrl.endsWith('/v1')) {
     chatUrl += '/chat/completions';
   } else if (chatUrl.endsWith('/v1/')) {
@@ -23,8 +26,6 @@ export async function callFreeLLMAPI({ capability, mode, messages, profile, meta
   const capabilityUpper = (capability || mode || '').toUpperCase();
   const envModel = process.env.SELINA_FORCE_MODEL || process.env[`SELINA_${capabilityUpper}_MODEL`] || process.env.FREELLMAPI_MODEL || 'auto';
   const targetModel = envModel;
-
-  console.log(`[Selina] FreeLLMAPI gateway configured: ${baseUrl}`);
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), profile.timeoutMs);
@@ -71,7 +72,7 @@ export async function callFreeLLMAPI({ capability, mode, messages, profile, meta
       fallbackAttempts,
       status: response.status,
       durationMs,
-      mode: capability || mode,
+      capability: capability || mode,
       model: targetModel
     };
 

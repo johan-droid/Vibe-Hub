@@ -24,6 +24,61 @@ function isSecureCookie() {
   return process.env.NODE_ENV === 'production';
 }
 
+function normalizeOrigin(value) {
+  if (!value) return null;
+  try {
+    return new URL(String(value).trim()).origin;
+  } catch {
+    return null;
+  }
+}
+
+function configuredUiOrigins() {
+  return [process.env.UI_ORIGIN, process.env.UI_ALLOWED_ORIGINS, process.env.FRONTEND_ORIGINS]
+    .filter(Boolean)
+    .flatMap(value => String(value).split(','))
+    .map(normalizeOrigin)
+    .filter(Boolean);
+}
+
+function configuredApiOrigin() {
+  return normalizeOrigin(process.env.API_ORIGIN || process.env.PUBLIC_API_ORIGIN || process.env.RENDER_EXTERNAL_URL);
+}
+
+function requiresCrossSiteCookies() {
+  if (!isSecureCookie()) return false;
+  const apiOrigin = configuredApiOrigin();
+  const uiOrigins = configuredUiOrigins();
+  if (!apiOrigin || uiOrigins.length === 0) return true;
+  return uiOrigins.some(origin => origin !== apiOrigin);
+}
+
+function cookieSameSite() {
+  const override = String(process.env.AUTH_COOKIE_SAME_SITE || process.env.COOKIE_SAME_SITE || '').trim().toLowerCase();
+  if (['strict', 'lax', 'none'].includes(override)) return override;
+  return requiresCrossSiteCookies() ? 'none' : 'lax';
+}
+
+function authCookieOptions(maxAge) {
+  const secure = isSecureCookie();
+  const sameSite = cookieSameSite();
+  return {
+    httpOnly: true,
+    secure,
+    sameSite,
+    maxAge,
+    path: '/',
+  };
+}
+
+function clearCookieOptions() {
+  return {
+    path: '/',
+    secure: isSecureCookie(),
+    sameSite: cookieSameSite(),
+  };
+}
+
 if (!JWT_SECRET) {
   logger.error('Auth', 'FATAL: JWT_SECRET environment variable is not set.');
   process.exit(1);
@@ -157,54 +212,26 @@ export async function authenticateFromHeaders(headers = {}, explicitAccessToken 
 }
 
 /**
- * Set authentication cookies with security flags
+ * Set authentication cookies with security flags.
+ *
+ * Production split deployments such as Vercel UI -> Render API require
+ * SameSite=None; Secure for credentialed cross-origin requests. Same-origin
+ * deployments keep Lax by default. Override with AUTH_COOKIE_SAME_SITE when
+ * the deployment topology is known.
  */
 export function setAuthCookies(res, { accessToken, refreshToken, sessionToken, deviceId }) {
-  const secure = isSecureCookie();
-  // Use 'lax' for development to allow OAuth callback cookies
-  // In production with proper domain setup, 'strict' can be used
-  const sameSite = process.env.NODE_ENV === 'production' ? 'strict' : 'lax';
+  res.cookie(AUTH_COOKIES.access, accessToken, authCookieOptions(ACCESS_TOKEN_TTL_SECONDS * 1000));
 
-  // Access token (short-lived, sent automatically with API calls)
-  res.cookie(AUTH_COOKIES.access, accessToken, {
-    httpOnly: true,
-    secure,
-    sameSite,
-    maxAge: ACCESS_TOKEN_TTL_SECONDS * 1000,
-    path: '/',
-  });
-
-  // Session token (HTTP-only, for session validation)
   if (sessionToken) {
-    res.cookie(AUTH_COOKIES.session, sessionToken, {
-      httpOnly: true,
-      secure,
-      sameSite,
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-      path: '/',
-    });
+    res.cookie(AUTH_COOKIES.session, sessionToken, authCookieOptions(30 * 24 * 60 * 60 * 1000));
   }
 
-  // Refresh token (HTTP-only, for token rotation)
   if (refreshToken) {
-    res.cookie(AUTH_COOKIES.refresh, refreshToken, {
-      httpOnly: true,
-      secure,
-      sameSite,
-      maxAge: 90 * 24 * 60 * 60 * 1000, // 90 days
-      // This route is mounted under both /api/auth and /api/v6/auth.
-      path: '/',
-    });
+    res.cookie(AUTH_COOKIES.refresh, refreshToken, authCookieOptions(90 * 24 * 60 * 60 * 1000));
   }
 
   if (deviceId) {
-    res.cookie(AUTH_COOKIES.device, deviceId, {
-      httpOnly: true,
-      secure,
-      sameSite,
-      maxAge: 365 * 24 * 60 * 60 * 1000,
-      path: '/',
-    });
+    res.cookie(AUTH_COOKIES.device, deviceId, authCookieOptions(365 * 24 * 60 * 60 * 1000));
   }
 }
 
@@ -212,13 +239,11 @@ export function setAuthCookies(res, { accessToken, refreshToken, sessionToken, d
  * Clear all authentication cookies
  */
 export function clearAuthCookies(res) {
-  const secure = isSecureCookie();
-  // Use 'lax' for development to match setAuthCookies
-  const sameSite = process.env.NODE_ENV === 'production' ? 'strict' : 'lax';
-
-  res.clearCookie(AUTH_COOKIES.access, { path: '/', secure, sameSite });
-  res.clearCookie(AUTH_COOKIES.session, { path: '/', secure, sameSite });
-  res.clearCookie(AUTH_COOKIES.refresh, { path: '/', secure, sameSite });
+  const options = clearCookieOptions();
+  res.clearCookie(AUTH_COOKIES.access, options);
+  res.clearCookie(AUTH_COOKIES.session, options);
+  res.clearCookie(AUTH_COOKIES.refresh, options);
+  res.clearCookie(AUTH_COOKIES.device, options);
 }
 
 export function ensureDeviceCookie(req, res) {
@@ -226,13 +251,7 @@ export function ensureDeviceCookie(req, res) {
   if (existingDeviceId) return existingDeviceId;
 
   const deviceId = issueDeviceCookieValue();
-  res.cookie(AUTH_COOKIES.device, deviceId, {
-    httpOnly: true,
-    secure: isSecureCookie(),
-    sameSite: isSecureCookie() ? 'none' : 'lax',
-    maxAge: 365 * 24 * 60 * 60 * 1000,
-    path: '/',
-  });
+  res.cookie(AUTH_COOKIES.device, deviceId, authCookieOptions(365 * 24 * 60 * 60 * 1000));
   return deviceId;
 }
 

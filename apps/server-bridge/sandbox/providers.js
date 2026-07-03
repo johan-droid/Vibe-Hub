@@ -4,12 +4,37 @@ import SandboxExecutor, {
   cleanupSandboxWorkspace,
   createIsolatedSandboxWorkspace,
 } from './docker_executor.js';
+import {
+  DISABLED_SANDBOX_PROVIDER,
+  normalizeSandboxProviderName,
+  resolveDefaultSandboxProvider,
+} from './runtime-policy.js';
 
 export class SandboxProviderError extends Error {
   constructor(message, code = 'SANDBOX_PROVIDER_ERROR') {
     super(message);
     this.name = 'SandboxProviderError';
     this.code = code;
+  }
+}
+
+export class DisabledSandboxProvider {
+  constructor() {
+    this.name = DISABLED_SANDBOX_PROVIDER;
+  }
+
+  async executeScript() {
+    throw new SandboxProviderError(
+      'Sandbox execution is disabled for this runtime profile. Set SELINA_SANDBOX_PROVIDER to docker-local or e2b-vibekit to enable it.',
+      'SANDBOX_DISABLED'
+    );
+  }
+
+  async executeCommand() {
+    throw new SandboxProviderError(
+      'Sandbox command execution is disabled for this runtime profile. Set SELINA_SANDBOX_PROVIDER to docker-local or e2b-vibekit to enable it.',
+      'SANDBOX_DISABLED'
+    );
   }
 }
 
@@ -114,12 +139,13 @@ export class SandboxProviderRouter {
   constructor({
     env = process.env,
     providers = null,
-    defaultProvider = env.SELINA_SANDBOX_PROVIDER || 'docker-local',
+    defaultProvider = resolveDefaultSandboxProvider(env),
   } = {}) {
     this.defaultProvider = normalizeProviderName(defaultProvider);
     this.providers = new Map();
 
     const providerList = providers || [
+      new DisabledSandboxProvider(),
       new LocalDockerSandboxProvider(),
       new E2BVibeKitSandboxProvider({ env }),
     ];
@@ -147,11 +173,8 @@ export class SandboxProviderRouter {
   }
 }
 
-export function normalizeProviderName(providerName = 'docker-local') {
-  const normalized = String(providerName || 'docker-local').trim().toLowerCase();
-  if (['docker', 'local', 'local-docker'].includes(normalized)) return 'docker-local';
-  if (['e2b', 'vibekit', 'e2b-vibekit', 'vibex'].includes(normalized)) return 'e2b-vibekit';
-  return normalized;
+export function normalizeProviderName(providerName = DISABLED_SANDBOX_PROVIDER) {
+  return normalizeSandboxProviderName(providerName);
 }
 
 async function readCopiedFiles(sandboxRoot, copiedPaths = []) {

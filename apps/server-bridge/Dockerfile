@@ -8,15 +8,21 @@ COPY scripts ./scripts
 COPY apps/server-bridge/package.json ./apps/server-bridge/package.json
 COPY apps/user-interface/package.json ./apps/user-interface/package.json
 
-RUN npm ci --omit=dev --workspace=apps/server-bridge --include-workspace-root=false
+RUN npm ci --omit=dev --workspace=apps/server-bridge --include-workspace-root=false --legacy-peer-deps
 
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3001
 
+# Production Render/GHCR images should not contain a Docker daemon or Docker CLI.
+# The sandbox provider already fails closed when Docker is unavailable, and Render
+# does not expose a Docker socket anyway. Keeping the CLI out removes Trivy's
+# vulnerable Go-binary scan surface from the shipped server image.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates git docker.io tini \
+  && apt-get upgrade -y \
+  && apt-get install -y --no-install-recommends ca-certificates tini \
+  && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=deps /app/node_modules ./node_modules

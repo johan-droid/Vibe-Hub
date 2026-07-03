@@ -4,14 +4,30 @@ function isLoopbackHost(hostname) {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1';
 }
 
-function resolveApiBase() {
-  const configured = import.meta.env.VITE_API_BASE;
-  if (import.meta.env.PROD) return configured || `http://${window.location.hostname}:3001`;
+function normalizeConfiguredBase(value) {
+  if (!value) return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
 
-  if (!configured) return `http://${window.location.hostname}:3001`;
+function resolveApiBase() {
+  const configured = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL;
+  const normalizedConfigured = normalizeConfiguredBase(configured);
+
+  // Production must never guess an HTTP :3001 API beside the UI host. That breaks
+  // HTTPS deployments and Vercel/Render split deployments. If no API origin is
+  // configured, use same-origin so Render/static unified deployments still work.
+  if (import.meta.env.PROD) {
+    return normalizedConfigured || window.location.origin;
+  }
+
+  if (!normalizedConfigured) return `http://${window.location.hostname}:3001`;
 
   try {
-    const configuredUrl = new URL(configured);
+    const configuredUrl = new URL(normalizedConfigured);
     if (isLoopbackHost(configuredUrl.hostname) && isLoopbackHost(window.location.hostname)) {
       configuredUrl.hostname = window.location.hostname;
       return configuredUrl.origin;

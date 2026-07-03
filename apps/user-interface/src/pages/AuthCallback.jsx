@@ -16,6 +16,12 @@ const errorCopy = {
   oauth_config_error: 'OAuth configuration error. Please check the redirect URI matches Google Console settings.',
 };
 
+function timeoutReject(message, ms) {
+  return new Promise((_, reject) => {
+    window.setTimeout(() => reject(new Error(message)), ms);
+  });
+}
+
 /**
  * AuthCallback handles the OAuth redirect, relies on HttpOnly cookies, and restores profile state.
  */
@@ -23,9 +29,9 @@ export default function AuthCallback() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const setUser = useStore(s => s.setUser);
+  const fetchSettings = useStore(s => s.fetchSettings);
   const [status, setStatus] = useState('loading');
   const [message, setMessage] = useState('Securing your dashboard session...');
-  const [isProcessing, setIsProcessing] = useState(false);
   const processedCodeRef = useRef(null);
   const timeoutRef = useRef(null);
 
@@ -34,21 +40,44 @@ export default function AuthCallback() {
   useEffect(() => {
     let cancelled = false;
 
-    // Timeout guard to prevent hanging callback screens
-    timeoutRef.current = setTimeout(() => {
+    timeoutRef.current = window.setTimeout(() => {
       if (!cancelled) {
         setStatus('error');
         setMessage('Authentication is taking longer than expected. Please try signing in again.');
       }
-    }, 15000); // 15 second timeout
+    }, 20000);
+
+    async function resolveCookieSession() {
+      setMessage('Verifying authentication status...');
+      const session = await Promise.race([
+        api.resolveSession(),
+        timeoutReject('Status check timed out', 8000),
+      ]);
+
+      if (session?.authenticated && session.user) {
+        return session.user;
+      }
+
+      return null;
+    }
+
+    async function finishWithUser(user) {
+      if (cancelled) return;
+      setUser(user);
+      setStatus('success');
+      setMessage('Session verified. Opening your dashboard...');
+
+      fetchSettings?.().catch(err => {
+        console.error('[AuthCallback] Failed to fetch settings:', err);
+      });
+
+      window.setTimeout(() => {
+        if (!cancelled) navigate('/dashboard', { replace: true });
+      }, 200);
+    }
 
     async function completeAuth() {
-      // Prevent duplicate requests due to React StrictMode
       const handoffCode = searchParams.get('code');
-      if (processedCodeRef.current === handoffCode) {
-        return;
-      }
-      processedCodeRef.current = handoffCode;
 
       if (providerError) {
         api.clearAllTokens();
@@ -58,61 +87,45 @@ export default function AuthCallback() {
         return;
       }
 
-      // Legacy callbacks may still include a short-lived access token.
-      // It is accepted only in memory during migration; cookies are authoritative.
       const accessToken = searchParams.get('token');
-
-      if (accessToken) api.setAuthTokens({ accessToken });
+      if (accessToken) api.setAuthTokens({ accessToken }, { persist: false });
 
       try {
-        let exchangedUser = null;
-        if (handoffCode) {
+        let authenticatedUser = null;
+
+        if (handoffCode && processedCodeRef.current !== handoffCode) {
+          processedCodeRef.current = handoffCode;
           setMessage('Exchanging authentication code...');
-          const exchange = await Promise.race([
-            api.exchangeOAuthHandoff(handoffCode),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Authentication timed out')), 10000)
-            )
-          ]);
-          if (cancelled) return;
-          if (!exchange.authenticated || !exchange.user) {
-            throw new Error('Sign-in handoff expired. Please start sign-in again.');
+
+          try {
+            const exchange = await Promise.race([
+              api.exchangeOAuthHandoff(handoffCode),
+              timeoutReject('Authentication timed out', 10000),
+            ]);
+
+            if (exchange?.authenticated && exchange.user) {
+              authenticatedUser = exchange.user;
+            }
+          } catch (exchangeError) {
+            // The OAuth provider callback already creates HttpOnly cookies before
+            // redirecting to the UI. If the opaque handoff is stale/consumed by a
+            // duplicate render, recover from cookies instead of bouncing to login.
+            console.warn('[AuthCallback] Handoff exchange failed; falling back to cookie session.', exchangeError);
           }
-          exchangedUser = exchange.user;
-          setMessage('Authentication successful! Verifying session...');
         }
 
-        // Skip additional authStatus check if we already have user data
-        const finalUser = exchangedUser || null;
-        if (finalUser) {
-          setUser(finalUser);
-          setStatus('success');
-          setMessage('Session verified. Opening your dashboard...');
-          window.setTimeout(() => navigate('/dashboard', { replace: true }), 350);
-        } else {
-          // Fallback to authStatus check
-          setMessage('Verifying authentication status...');
-          const userData = await Promise.race([
-            api.resolveSession(),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Status check timed out')), 5000)
-            )
-          ]);
-          if (cancelled) return;
-
-          if (!userData.authenticated) {
-            throw new Error('No verified sign-in session was found. Please start sign-in again.');
-          }
-
-          setUser(userData.user);
-          setStatus('success');
-          setMessage('Session verified. Opening your dashboard...');
-          window.setTimeout(() => navigate('/dashboard', { replace: true }), 350);
+        if (!authenticatedUser) {
+          authenticatedUser = await resolveCookieSession();
         }
+
+        if (!authenticatedUser) {
+          throw new Error('No verified sign-in session was found. Please start sign-in again.');
+        }
+
+        await finishWithUser(authenticatedUser);
       } catch (err) {
         if (cancelled) return;
         console.error('Authentication error:', err);
-        api.clearAllTokens();
         setUser(null);
         setStatus('error');
         setMessage(err.message || errorCopy.profile_failed);
@@ -126,7 +139,7 @@ export default function AuthCallback() {
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [navigate, providerError, searchParams, setUser]);
+  }, [navigate, providerError, searchParams, setUser, fetchSettings]);
 
   const Icon = status === 'error' ? AlertTriangle : status === 'success' ? ShieldCheck : Cpu;
 
@@ -137,7 +150,7 @@ export default function AuthCallback() {
         <div className="absolute inset-0 opacity-[0.04] [background-image:linear-gradient(to_right,#fff_1px,transparent_1px),linear-gradient(to_bottom,#fff_1px,transparent_1px)] [background-size:48px_48px]" />
       </div>
 
-      <div className="relative w-full max-w-md rounded-[2rem] border border-outline-variant/40 bg-surface-container-low/85 p-8 text-center shadow-2xl shadow-black/40 backdrop-blur-2xl">
+      <div className={`relative w-full max-w-md rounded-[2rem] border border-outline-variant/40 bg-surface-container-low/85 p-8 text-center shadow-2xl shadow-black/40 backdrop-blur-2xl`}>
         <div className={`mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl border ${status === 'error' ? 'border-error/30 bg-error/10 text-error' : 'border-primary/30 bg-primary/10 text-primary'}`}>
           <Icon size={26} className={status === 'loading' ? 'animate-pulse' : ''} />
         </div>
@@ -146,7 +159,7 @@ export default function AuthCallback() {
         <p className="body-medium text-on-surface-variant leading-relaxed">{message}</p>
         {status === 'error' && (
           <div className="mt-8 flex flex-col gap-3">
-            <Button onClick={() => navigate('/', { replace: true })} size="lg" className="w-full">Return to sign in</Button>
+            <Button onClick={() => navigate('/login', { replace: true })} size="lg" className="w-full">Return to sign in</Button>
           </div>
         )}
       </div>

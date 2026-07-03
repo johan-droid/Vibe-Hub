@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "node ../../node_modules/vite/bin/vite.js",
-    "build": "node ../../node_modules/vite/bin/vite.js build",
+    "build": "npx vite build",
     "lint": "eslint .",
     "preview": "node ../../node_modules/vite/bin/vite.js preview",
     "test": "vitest run",
