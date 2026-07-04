@@ -1,6 +1,6 @@
+import { api } from '../services/api';
 import { useEffect, useRef, useCallback } from 'react';
 import { SwarmSocket } from '../services/socket.js';
-import { api } from '../services/api';
 import { VFSContainer } from '../vfs/container.js';
 import { useStore } from '../store/useStore';
 import { initializeVfsSocket } from '../store/useVfsStore';
@@ -180,7 +180,7 @@ export function useAgent() {
         const activeSessionId = useStore.getState().activeSessionId;
         if (activeSessionId) {
           try {
-            const { api } = await import('../services/api');
+
             await api.addChatMessage(activeSessionId, 'assistant', content, []);
           } catch (err) {
             console.error('Failed to save assistant message:', err);
@@ -368,7 +368,7 @@ export function useAgent() {
     const activeSessionId = useStore.getState().activeSessionId;
     if (activeSessionId) {
       try {
-        const { api } = await import('../services/api');
+
         await api.addChatMessage(activeSessionId, 'user', prompt, []);
       } catch (err) {
         console.error('Failed to save user message:', err);

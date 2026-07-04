@@ -1,3 +1,4 @@
+import { api } from '../services/api';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { idbStorage } from './idbStorage';
@@ -357,7 +358,7 @@ export const useStore = create(
 
           // Background sync to backend if not skipped
           if (!skipSync && state.user) {
-            import('../services/api').then(({ api }) => {
+            api.getJobs().then(res => {
               // Map settings groups to DB preference types
               const mapping = {
                 appearance: 'ui_theme',
@@ -389,7 +390,7 @@ export const useStore = create(
 
       fetchSettings: async () => {
         try {
-          const { api } = await import('../services/api');
+
           const { preferences } = await api.getPreferences();
           
           if (preferences) {

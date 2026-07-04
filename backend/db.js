@@ -1,5 +1,5 @@
 /**
- * @fileoverview apps/server-bridge/db.js
+ * @fileoverview backend/db.js
  * @module DatabaseConnection
  * @description Manages PostgreSQL database connections and pgvector configuration.
  * Implements connection pooling, SSL normalization, and provides utility functions

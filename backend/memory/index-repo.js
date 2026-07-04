@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
-import Database from 'better-sqlite3';
+import { createClient } from '@libsql/client';
 import { v4 as uuid } from 'uuid';
 import { embeddingsService } from './embeddings.js';
 import { ASTParser } from './ast-graph.js';
@@ -63,10 +63,8 @@ async function indexRepo() {
 
   const cachePath = path.resolve(process.cwd(), 'data', '.index-cache.db');
   await fs.mkdir(path.dirname(cachePath), { recursive: true });
-  const db = new Database(cachePath);
-  db.exec('CREATE TABLE IF NOT EXISTS file_hashes (filepath TEXT PRIMARY KEY, hash TEXT NOT NULL)');
-  const getHash = db.prepare('SELECT hash FROM file_hashes WHERE filepath = ?');
-  const setHash = db.prepare('INSERT INTO file_hashes (filepath, hash) VALUES (?, ?) ON CONFLICT(filepath) DO UPDATE SET hash = excluded.hash');
+  const db = createClient({ url: 'file:' + cachePath });
+  await db.execute('CREATE TABLE IF NOT EXISTS file_hashes (filepath TEXT PRIMARY KEY, hash TEXT NOT NULL)');
 
   const parser = new ASTParser();
 
@@ -75,7 +73,8 @@ async function indexRepo() {
     const content = await fs.readFile(file, 'utf8');
     const contentHash = crypto.createHash('sha256').update(content).digest('hex');
 
-    const row = getHash.get(file);
+    const { rows } = await db.execute({ sql: 'SELECT hash FROM file_hashes WHERE filepath = ?', args: [file] });
+    const row = rows[0];
     if (row && row.hash === contentHash) {
       console.log(`[Indexer] Skipping ${file} (unchanged)`);
       continue;
@@ -125,7 +124,7 @@ async function indexRepo() {
       }
     });
     
-    setHash.run(file, contentHash);
+    await db.execute({ sql: 'INSERT INTO file_hashes (filepath, hash) VALUES (?, ?) ON CONFLICT(filepath) DO UPDATE SET hash = excluded.hash', args: [file, contentHash] });
   }
   
   db.close();

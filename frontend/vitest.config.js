@@ -9,5 +9,15 @@ export default defineConfig({
     globals: true,
     include: ['src/**/*.{test,spec}.{js,jsx,ts,tsx}'],
     exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      thresholds: {
+        lines: 15,
+        functions: 15,
+        branches: 15,
+        statements: 15
+      }
+    }
   },
 });

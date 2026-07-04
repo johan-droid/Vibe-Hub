@@ -17,7 +17,7 @@
     "dev:server": "npm run dev --workspace=backend",
     "dev": "npx concurrently -n UI,BRAIN -c cyan,magenta \"npm run dev:ui\" \"npm run dev:server\"",
     "lint": "npm run lint --workspace=frontend",
-    "test": "npm run test --workspace=frontend && npm run test --workspace=backend",
+    "test": "npm run test:unit --workspace=frontend && npm run test --workspace=backend",
     "build": "npm run build --workspace=frontend",
     "build:ui": "npm run build --workspace=frontend",
     "start:server": "npm run start --workspace=backend",

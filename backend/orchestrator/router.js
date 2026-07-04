@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createActor } from 'xstate';
-import agentMachine from './state_machine.js';
+import agentMachine from './state-machine.js';
 import { selectSkillProfile } from './skill-graph.js';
 import { vfs } from '../vfs/container.js';
 import { insertAgentMemoryItem } from '../db.js';

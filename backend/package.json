@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
+    "@libsql/client": "^0.17.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@octokit/rest": "^22.0.1",
     "@opentelemetry/api": "^1.9.1",
@@ -27,7 +28,6 @@
     "@opentelemetry/semantic-conventions": "^1.41.1",
     "@socket.io/redis-adapter": "^8.3.0",
     "bcryptjs": "^2.4.3",
-    "better-sqlite3": "^11.1.2",
     "bullmq": "^5.76.5",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",

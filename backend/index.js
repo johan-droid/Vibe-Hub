@@ -1,5 +1,5 @@
 /**
- * @fileoverview apps/server-bridge/index.js
+ * @fileoverview backend/index.js
  * @module SelinaServerBridge
  * @description The primary entry point for the Selina core server bridge.
  * Initializes the Express server, configures core middleware (CORS, Helmet, Rate Limiting),

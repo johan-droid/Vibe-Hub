@@ -1,5 +1,5 @@
 /**
- * @fileoverview apps/server-bridge/mcp-server.js
+ * @fileoverview backend/mcp-server.js
  * @module SelinaMCPServer
  * @description Core implementation of the Model Context Protocol (MCP) server for Selina.
  * This module enables the AI swarm to dynamically query external systems, retrieve context,

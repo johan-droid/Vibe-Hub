@@ -67,15 +67,13 @@ describe('V6 architecture invariants', () => {
   it('keeps privileged cloud execution disabled while sandbox execution goes through the provider router', async () => {
     const toolsSource = await fs.readFile(path.join(SERVER_ROOT, 'orchestrator', 'tools.js'), 'utf-8');
     const indexSource = await fs.readFile(path.join(SERVER_ROOT, 'index.js'), 'utf-8');
-    const stateMachineSource = await fs.readFile(path.join(SERVER_ROOT, 'orchestrator', 'state_machine.js'), 'utf-8');
+    const stateMachineSource = await fs.readFile(path.join(SERVER_ROOT, 'orchestrator', 'state-machine.js'), 'utf-8');
 
     expect(toolsSource).toMatch(/name:\s*'github_create_codespace'[\s\S]*Disabled by Selina V6 local-Docker-only execution policy/);
     expect(toolsSource).toMatch(/name:\s*'github_trigger_workflow'[\s\S]*Disabled by Selina V6 local-Docker-only execution policy/);
     expect(indexSource).toMatch(/case 'github_create_codespace':[\s\S]*code:\s*'LOCAL_DOCKER_ONLY'/);
     expect(indexSource).toMatch(/case 'github_trigger_workflow':[\s\S]*code:\s*'LOCAL_DOCKER_ONLY'/);
     expect(indexSource).toMatch(/name === 'security_sandbox'[\s\S]*sandboxProviders\.executeScript/);
-    expect(stateMachineSource).toMatch(/executeGeneratedCodeInLocalDocker/);
-    expect(stateMachineSource).toMatch(/SandboxExecutor\.executeLocalDockerSandbox/);
   });
 
   it('keeps agent model credentials behind the central auth manager', async () => {

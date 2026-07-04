@@ -1,5 +1,5 @@
 /**
- * @fileoverview apps/server-bridge/auth/routes.js
+ * @fileoverview backend/auth/routes.js
  * @module AuthRoutes
  * @description SAAS-Grade authentication management routes for Selina.
  * Handles secure token lifecycle, session revocation, single/global logout,

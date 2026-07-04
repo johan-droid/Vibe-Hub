@@ -1,5 +1,5 @@
 /**
- * @fileoverview apps/server-bridge/auth/concurrency-governor.js
+ * @fileoverview backend/auth/concurrency-governor.js
  * @module ConcurrencyGovernor
  * @description In-memory concurrency governance enforcing a maximum of 3 concurrent agent runs per user.
  * Includes automated timeout protection to reclaim dangling leases and prevent resource exhaustion.

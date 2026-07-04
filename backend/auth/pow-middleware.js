@@ -1,5 +1,5 @@
 /**
- * @fileoverview apps/server-bridge/auth/pow-middleware.js
+ * @fileoverview backend/auth/pow-middleware.js
  * @module PowMiddleware
  * @description High-Assurance stateless client Proof-of-Work (Hashcash) puzzle middleware.
  * Fast, CPU-friendly verification of SHA-256 puzzles bound to specific user emails/usernames.
