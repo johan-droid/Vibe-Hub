@@ -16,7 +16,6 @@
     "dev:ui": "npm run dev --workspace=frontend",
     "dev:server": "npm run dev --workspace=backend",
     "dev": "npx concurrently -n UI,BRAIN -c cyan,magenta \"npm run dev:ui\" \"npm run dev:server\"",
-    "lint": "npm run lint --workspace=frontend",
     "test": "npm run test --workspace=frontend && npm run test --workspace=backend",
     "build": "npm run build --workspace=frontend",
     "build:ui": "npm run build --workspace=frontend",
@@ -29,7 +28,10 @@
     "docker:build": "npm run docker:build:server && npm run docker:build:ui"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "@eslint/js": "^9.39.4",
+    "concurrently": "^9.1.0",
+    "eslint": "^9.39.4",
+    "supertest": "^6.3.4"
   },
   "overrides": {
     "workbox-build": {
@@ -40,5 +42,8 @@
     "ip-address": "^10.2.0",
     "serialize-javascript": "^7.0.5",
     "hono": "4.12.18"
+  },
+  "dependencies": {
+    "monaco-editor": "^0.55.1"
   }
 }

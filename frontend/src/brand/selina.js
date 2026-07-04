@@ -1,5 +1,5 @@
 export const SELINA_BRAND = {
-  productName: 'Selina',
+  productName: 'Vibe Hub',
   agentName: 'Selina Core',
   agentCodename: 'selina-core',
   companyName: 'Selina Intelligence Labs',

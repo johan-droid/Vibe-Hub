@@ -1,7 +1,7 @@
 /**
  * @fileoverview apps/user-interface/src/App.jsx
- * @module SelinaFrontendApp
- * @description The root React component for the Selina User Interface.
+ * @module VibeHubFrontendApp
+ * @description The root React component for the Vibe Hub User Interface.
  * Configures client-side routing (React Router), state management integration (Zustand),
  * physics-based animations (Framer Motion), and core visual themes.
  */

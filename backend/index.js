@@ -1,7 +1,7 @@
 /**
  * @fileoverview apps/server-bridge/index.js
- * @module SelinaServerBridge
- * @description The primary entry point for the Selina core server bridge.
+ * @module VibeHubServerBridge
+ * @description The primary entry point for the Vibe Hub (Selina Core) server bridge.
  * Initializes the Express server, configures core middleware (CORS, Helmet, Rate Limiting),
  * sets up WebSockets for real-time orchestrator communication, and registers API routers.
  */

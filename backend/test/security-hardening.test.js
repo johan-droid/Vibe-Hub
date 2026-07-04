@@ -496,7 +496,7 @@ describe('tenant isolation, DLP, prompt confidentiality, and edge controls', () 
       ALLOW_PUBLIC_CONTROL_PLANE: 'false',
     })).toMatchObject({ required: true, provider: 'aws-waf' });
 
-    const repoRoot = path.resolve(process.cwd(), '..');
+    const repoRoot = process.cwd().endsWith('backend') ? path.resolve(process.cwd(), '..') : process.cwd();
     const renderYaml = await fs.readFile(path.join(repoRoot, 'render.yaml'), 'utf-8');
     expect(renderYaml).toContain('EDGE_PROTECTION_REQUIRED');
     expect(renderYaml).toContain('EDGE_PROVIDER');

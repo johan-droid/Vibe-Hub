@@ -110,14 +110,14 @@ describe('job queue orchestration', () => {
 
   it('builds lane-specific queue names and normalizes queue lanes', () => {
     expect(buildQueueNames('selina-code')).toEqual({
-      interactive: 'selina-code:interactive',
-      background: 'selina-code:background',
-      deadLetter: 'selina-code:dead-letter',
+      interactive: 'selina-code-interactive',
+      background: 'selina-code-background',
+      deadLetter: 'selina-code-dead-letter',
     });
     expect(normalizeQueueLane('background')).toBe('background');
     expect(normalizeQueueLane('anything-else')).toBe('interactive');
     expect(laneFromJobId('background:abc')).toBe('background');
-    expect(deadLetterJobId('interactive:abc')).toBe('dlq:interactive:abc');
+    expect(deadLetterJobId('interactive-abc')).toBe('dlq:interactive-abc');
   });
 
   it('enqueues interactive and background work into dedicated lanes with retry backoff jitter', async () => {
@@ -147,8 +147,8 @@ describe('job queue orchestration', () => {
       queueLane: 'background',
     });
 
-    const interactiveQueue = [...FakeQueue.instances.entries()].find(([name]) => name.endsWith(':interactive'))?.[1];
-    const backgroundQueue = [...FakeQueue.instances.entries()].find(([name]) => name.endsWith(':background'))?.[1];
+    const interactiveQueue = [...FakeQueue.instances.entries()].find(([name]) => name.endsWith('-interactive'))?.[1];
+    const backgroundQueue = [...FakeQueue.instances.entries()].find(([name]) => name.endsWith('-background'))?.[1];
     const interactiveJob = interactiveQueue.jobs.get(interactive.jobId);
     const backgroundJob = backgroundQueue.jobs.get(background.jobId);
 
@@ -170,15 +170,15 @@ describe('job queue orchestration', () => {
       brainFactory: () => ({ process: vi.fn(async () => ({ isHeavyLift: false })) }),
     });
 
-    const interactiveWorker = FakeWorker.instances.find(worker => worker.queueName.endsWith(':interactive'));
+    const interactiveWorker = FakeWorker.instances.find(worker => worker.queueName.endsWith('-interactive'));
     await interactiveWorker.handlers.get('failed')({
-      id: 'interactive:job-1',
+      id: 'interactive-job-1',
       data: { userId: 'u1', requestId: 'req-1' },
       opts: { attempts: 3 },
       attemptsMade: 3,
     }, new Error('llm unavailable'));
 
-    const status = await queue.getStatus('interactive:job-1', 'u1');
+    const status = await queue.getStatus('interactive-job-1', 'u1');
     expect(status.state).toBe('dead-lettered');
     expect(status.failedReason).toContain('llm unavailable');
     expect(status.queueLane).toBe('interactive');
