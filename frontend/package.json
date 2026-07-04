@@ -29,6 +29,7 @@
     "idb-keyval": "^6.2.2",
     "isomorphic-git": "^1.37.5",
     "lucide-react": "^0.400.0",
+    "monaco-editor": "^0.55.1",
     "react": "^19.2.5",
     "react-diff-viewer-continued": "^4.2.0",
     "react-dom": "^19.2.5",
