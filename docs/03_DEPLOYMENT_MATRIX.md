@@ -38,7 +38,7 @@ Deploying the frontend as static assets to an Edge network and the backend to a 
 *   **Critical Constraints:**
     *   `API_ORIGIN` and `UI_ORIGIN` must be exact matches of the deployed URLs.
     *   `AUTH_COOKIE_SAME_SITE=none` is **mandatory** because the frontend and backend live on different domains.
-    *   CORS must explicitly allow the `UI_ORIGIN`.
+    *   CORS must explicitly allow the frontend domain. Configure the backend allowlist using `UI_ALLOWED_ORIGINS` or `FRONTEND_ORIGINS` (alongside `UI_ORIGIN`). These origins must be exact matches to enable credentialed CORS (sending cookies across domains).
     *   OAuth redirect URIs must point to the backend domain.
 
 ## 4. Same-Origin Deployment Mode
