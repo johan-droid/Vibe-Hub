@@ -42,8 +42,5 @@
     "ip-address": "^10.2.0",
     "serialize-javascript": "^7.0.5",
     "hono": "4.12.18"
-  },
-  "dependencies": {
-    "monaco-editor": "^0.55.1"
   }
 }
