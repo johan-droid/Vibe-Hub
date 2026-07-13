@@ -160,6 +160,13 @@ function issueDeviceCookieValue() {
 }
 
 function normalizeUser(session) {
+  const tenantId = session.tenantId || session.tenant_id;
+  if (!tenantId) {
+    // Fail hard — silently falling back to userId breaks RLS tenant isolation.
+    const err = new Error('No tenantId resolved for session');
+    err.code = 'TENANT_MISSING';
+    throw err;
+  }
   return {
     id: session.userId,
     email: session.email,
@@ -168,7 +175,7 @@ function normalizeUser(session) {
     provider: session.provider,
     roles: Array.isArray(session.roles) ? session.roles : ['user'],
     permissions: Array.isArray(session.permissions) ? session.permissions : defaultLocalPermissions(),
-    tenantId: session.tenantId || session.tenant_id || session.userId,
+    tenantId,
   };
 }
 
@@ -269,10 +276,10 @@ export async function requireAuth(req, res, next) {
       setTraceUser(auth.user.id);
       return next();
     } catch (error) {
-      if (error instanceof TenantContextError) {
-        return res.status(error.code === 'TENANT_CONTEXT_FORBIDDEN' ? 403 : 400).json({
+      if (error instanceof TenantContextError || error.code === 'TENANT_MISSING') {
+        return res.status(403).json({
           error: error.message,
-          code: error.code,
+          code: error.code || 'TENANT_CONTEXT_FORBIDDEN',
           requestId: req.id,
         });
       }
@@ -298,10 +305,10 @@ export async function optionalAuth(req, res, next) {
       setTraceUser(auth.user.id);
       return next();
     } catch (error) {
-      if (error instanceof TenantContextError) {
-        return res.status(error.code === 'TENANT_CONTEXT_FORBIDDEN' ? 403 : 400).json({
+      if (error instanceof TenantContextError || error.code === 'TENANT_MISSING') {
+        return res.status(403).json({
           error: error.message,
-          code: error.code,
+          code: error.code || 'TENANT_CONTEXT_FORBIDDEN',
           requestId: req.id,
         });
       }
@@ -352,7 +359,11 @@ export async function handleRefreshToken(req, res) {
  */
 export function verifyToken(token) {
   try {
-    return jwt.verify(token, JWT_SECRET, { issuer: 'vibe-hub-auth' });
+    const decoded = jwt.verify(token, JWT_SECRET, { issuer: 'vibe-hub-auth' });
+    // Reject legacy tokens that have no type field — they were issued by the deprecated
+    // generateToken() function and bypass session-level revocation checks.
+    if (decoded.type !== 'access') return null;
+    return decoded;
   } catch {
     return null;
   }

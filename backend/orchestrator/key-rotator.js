@@ -1,3 +1,6 @@
+// DEPRECATED: Key rotation is now handled by OmniRoute gateway.
+// This file is kept for backward compatibility and test imports only.
+
 export class ProviderExhaustedError extends Error {
     constructor(provider) {
         super(`PROVIDER_EXHAUSTED: ${provider}`);

@@ -32,6 +32,12 @@ import {
 } from '../db.js';
 
 const JWT_SECRET = resolveJwtSecret();
+// FINGERPRINT_HMAC_KEY must be separate from JWT_SECRET.
+// Rotating JWT_SECRET would otherwise invalidate ALL active device fingerprints.
+const FINGERPRINT_HMAC_KEY = process.env.FINGERPRINT_HMAC_KEY || JWT_SECRET;
+if (!process.env.FINGERPRINT_HMAC_KEY) {
+  logger.warn('Auth', 'FINGERPRINT_HMAC_KEY not set — falling back to JWT_SECRET. Set a separate key in production.');
+}
 const SESSION_EXPIRY_DAYS = parseInt(process.env.SESSION_EXPIRY_DAYS || '30', 10);
 const REFRESH_TOKEN_EXPIRY_DAYS = parseInt(process.env.REFRESH_TOKEN_EXPIRY_DAYS || '90', 10);
 const MAX_CONCURRENT_SESSIONS = parseInt(process.env.MAX_CONCURRENT_SESSIONS || '10', 10);
@@ -192,7 +198,7 @@ function computeFingerprintVariant(req, { legacy = false, explicitDeviceId = nul
   const ipRange = bucketIpForFingerprint(ip, { legacy });
   const ua = req.headers['user-agent'] || '';
   const deviceId = readFingerprintDeviceId(req, { legacy, explicitDeviceId });
-  const hmacDeviceId = crypto.createHmac('sha256', JWT_SECRET).update(deviceId).digest('hex');
+  const hmacDeviceId = crypto.createHmac('sha256', FINGERPRINT_HMAC_KEY).update(deviceId).digest('hex');
   const rawFingerprint = `${ipRange}|${ua}|${hmacDeviceId}`;
   return crypto.createHash('sha256').update(rawFingerprint).digest('hex');
 }
@@ -532,6 +538,7 @@ export async function validateSession(sessionToken, req) {
  */
 export async function logoutSession(userId, sessionId, reason = 'user_logout') {
   await revokeUserSession(sessionId, userId, reason);
+  unregisterSessionCleanup(sessionId); // prevent callback leak
   
   await logAuthEvent({
     userId,
@@ -591,4 +598,19 @@ export async function cleanupExpiredSessions(dbPool) {
   
   await dbPool.query('DELETE FROM refresh_tokens WHERE is_revoked = true AND revoked_at < $1', [deleteCutoff]);
   await dbPool.query('DELETE FROM user_sessions WHERE is_active = false AND revoked_at < $1', [deleteCutoff]);
+}
+
+// ─── Background cleanup — runs every 6 hours ──────────────────────────────────
+import { pool } from '../db.js';
+
+const SESSION_CLEANUP_INTERVAL_MS = parseInt(process.env.SESSION_CLEANUP_INTERVAL_MS || String(6 * 60 * 60 * 1000), 10);
+if (process.env.NODE_ENV !== 'test') {
+  setInterval(async () => {
+    try {
+      await cleanupExpiredSessions(pool);
+      logger.info('Auth', 'Expired session cleanup completed');
+    } catch (err) {
+      logger.error('Auth', 'Session cleanup failed', { err: err.message });
+    }
+  }, SESSION_CLEANUP_INTERVAL_MS).unref();
 }
