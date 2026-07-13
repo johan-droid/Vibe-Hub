@@ -82,9 +82,9 @@ function parseWorkerOutput(modelOutput) {
     if (typeof modelOutput === 'object') return modelOutput;
     try {
         return JSON.parse(modelOutput);
-    } catch {
-        console.warn('[Orchestrator] Failed to parse worker output for ground truth context');
-        return {};
+    } catch (e) {
+        const preview = String(modelOutput).slice(0, 200);
+        throw new Error(`GroundTruthParseFailure: sync worker output was not valid JSON. Raw: ${preview}`);
     }
 }
 
@@ -103,6 +103,7 @@ function mergeGroundTruth(groundTruth, parsed) {
         Object.assign(groundTruth.files, parsed.files);
     }
     if (Array.isArray(parsed.exports)) {
-        groundTruth.exports.push(...parsed.exports);
+        const deduped = new Set([...groundTruth.exports, ...parsed.exports]);
+        groundTruth.exports = [...deduped];
     }
 }

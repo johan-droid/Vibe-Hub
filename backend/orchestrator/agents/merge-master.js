@@ -4,7 +4,8 @@ export async function synthesizeDiffs(workerOutputs, groundTruthContext = {}) {
   const governor = new TokenGovernor();
   const { systemPrompt, prompt } = buildMergeSynthesisPrompt(workerOutputs, groundTruthContext);
 
-  const masterPatch = await governor.getCompute('low', 'planner', (key, model, provider) => (
+  // MergeMaster reconciles parallel outputs — highest synthesis risk, use planner model
+  const masterPatch = await governor.getCompute('high', 'planner', (key, model, provider) => (
     callRoutedTextModel(key, model, systemPrompt, prompt, { provider, maxOutputTokens: 4096, jsonMode: true })
   ));
   return masterPatch;

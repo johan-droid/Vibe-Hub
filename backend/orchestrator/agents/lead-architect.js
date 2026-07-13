@@ -22,21 +22,25 @@ Output strict JSON in this format:
         callRoutedTextModel(key, model, systemPrompt, featureRequest, { provider, maxOutputTokens: 2048, jsonMode: true })
       ));
       return normalizePhasedPlan(JSON.parse(plannerOutput));
-    } catch {
+    } catch (err) {
+      // Log the failure — silent fallback previously masked LLM errors from monitoring
+      logger.error('LeadArchitect', `buildParallelMatrix failed: ${err.message}. Returning degraded 2-task plan.`);
       return normalizePhasedPlan({
         phases: [
           {
-            name: "sync",
-            tasks: [{ type: "DB", description: "Database schema and shared types" }]
+            name: 'sync',
+            tasks: [{ type: 'DB', description: 'Database schema and shared types' }],
           },
           {
-            name: "parallel",
+            name: 'parallel',
             tasks: [
-              { type: "API", description: "API endpoints implementation" },
-              { type: "UI", description: "User interface implementation" }
-            ]
-          }
-        ]
+              { type: 'API', description: 'API endpoints implementation' },
+              { type: 'UI',  description: 'User interface implementation' },
+            ],
+          },
+        ],
+        _degraded: true,
+        _degradedReason: err.message,
       });
     }
   }

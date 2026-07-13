@@ -118,6 +118,12 @@ export class BrainSystemOrchestrator {
       tokenBudget: budgetedCompressorInput.report,
     });
 
+    // Heavy-lift detection: if triage found > 5 target files, dispatch to high-feature route
+    // (previously done in TheBrain.process() via broken file regex — now done here with real data)
+    if (triage.target_files.length > 5) {
+      triage = { ...triage, complexity: 'high' };
+    }
+
     if (shouldUseHighFeatureRoute(triage, budgetRoute)) {
       return this.runHighFeatureRoute({
         userPrompt,

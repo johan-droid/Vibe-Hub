@@ -25,12 +25,14 @@ const QUEUE_LANES = Object.freeze({
   background: 'background',
 });
 
-function connection() {
-  return new IORedis(process.env.REDIS_URL, {
+function connection(label = 'queue') {
+  const client = new IORedis(process.env.REDIS_URL, {
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
     tls: process.env.REDIS_TLS === 'true' ? {} : undefined,
   });
+  client.on('error', (err) => logger.error(`Redis:${label}`, 'Connection error', { err: err.message }));
+  return client;
 }
 
 function idempotencyJobId(userId, idempotencyKey, lane = DEFAULT_LANE) {
@@ -54,11 +56,11 @@ export function createCodeQueue({
     return null;
   }
 
-  const queueConnection = redisFactory();
-  const interactiveWorkerConnection = redisFactory();
-  const backgroundWorkerConnection = redisFactory();
-  const dlqConnection = redisFactory();
-  const idempotencyRedis = redisFactory();
+  const queueConnection = redisFactory('queue');
+  const interactiveWorkerConnection = redisFactory('interactive-worker');
+  const backgroundWorkerConnection = redisFactory('background-worker');
+  const dlqConnection = redisFactory('dlq');
+  const idempotencyRedis = redisFactory('idempotency');
 
   const queueNames = buildQueueNames(QUEUE_NAME);
   const laneConfigs = buildLaneConfigs();

@@ -61,7 +61,7 @@ export async function callSelinaLLM({ mode, messages, taskPrompt, metadata = {} 
 
   quotaGuard.assertCanCallMode(capability);
 
-    if (process.env.SELINA_FREELLMAPI_PREFLIGHT === 'true' && ["'coding'", "'large_context'", "'reasoning'", "'smoke_test'"].includes(capability)) {
+    if (process.env.SELINA_FREELLMAPI_PREFLIGHT === 'true' && ['coding', 'large_context', 'reasoning', 'smoke_test'].includes(capability)) {
     try {
       const { getFreeLLMAPIStatusSnapshot } = await import('./freellmapi-admin-client.js');
       await getFreeLLMAPIStatusSnapshot();
